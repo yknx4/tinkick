@@ -104,6 +104,17 @@ direnv exec . env BUNDLE_GEMFILE=/private/tmp/tinkick-rails-8.0.Gemfile JSON_VER
   bundle exec ruby -Itest -e 'ARGV.replace(["--fail-fast", "--seed", "2078"]); IO.popen(["git", "diff", "--name-only", "ba2f3fe..9abb818", "--", "test"], &:read).lines.map(&:strip).grep(/_test\.rb\z/).each { |path| require_relative path }'
 ```
 
+At `420d78a`, Rails 8.0.5.1 / JSON 2 passed **89 tests and 431 assertions**
+for test files added or changed since `9abb818`: filterable declarations,
+conditional and legacy boosts, custom phrase spans/highlights, IANA fixed
+histograms, and case/accent declarations. The run took 124 seconds with no
+failures, errors, or skips:
+
+```sh
+direnv exec . env BUNDLE_GEMFILE=/private/tmp/tinkick-rails-8.0.Gemfile JSON_VERSION='< 3' \
+  bundle exec ruby -Itest -e 'ARGV.replace(["--fail-fast", "--seed", "2078"]); IO.popen(["git", "diff", "--name-only", "9abb818..420d78a", "--", "test"], &:read).lines.map(&:strip).grep(/_test\.rb\z/).each { |path| require_relative path }'
+```
+
 These are local results; remote CI was not run. The full Rails 8.0 suite has not
 been run. Verification applies to the cited checkpoint; subsequent feature
 commits need their own targeted checks and a final coverage gate.

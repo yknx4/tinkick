@@ -1172,6 +1172,12 @@ the observed offset range. Wide matching or bound ranges increase discovery
 work and log a warning. Apply selective date filters and avoid dense empty
 grids when they are unnecessary. No optional extension is needed.
 
+The [measured IANA fixed-interval plans](docs/iana-fixed-plans.md) include the
+SQL, binds, rollback-only Tolkien dataset and reproduction command. With 1,000
+matching records over one year, one warm sparse run took 8.628 ms; generating
+5,842 buckets took 24.062 ms. These establish the query shape and additional
+work, not production latency or throughput.
+
 Put `min_doc_count`, `order`, `keyed`, and `format` inside `date_histogram:`;
 only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
 avoid generating empty buckets. The default logs a warning for small intervals
