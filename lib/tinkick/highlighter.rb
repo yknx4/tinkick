@@ -17,14 +17,18 @@ module Tinkick
       fragments_many(texts, query, tag: tag, encoder: encoder).map(&:first)
     end
 
+    def whole_fields(texts, tag: "<em>", encoder: "default", fragment_size: 0, number_of_fragments: 5)
+      validate_options(encoder, fragment_size, number_of_fragments)
+      end_tag = tag.gsub(/\A<(\w+).+/, "</\\1>")
+      texts.map do |text|
+        next [] if text.nil? || text.empty?
+
+        ["#{tag}#{encoder == 'html' ? encode_html(text) : text}#{end_tag}"]
+      end
+    end
+
     def fragments_many(texts, query, tag: "<em>", encoder: "default", fragment_size: 0, number_of_fragments: 5)
-      raise ArgumentError, "encoder must be default or html" unless ["default", "html"].include?(encoder)
-      unless fragment_size.is_a?(Integer) && fragment_size >= 0
-        raise ArgumentError, "fragment_size must be a nonnegative integer"
-      end
-      unless number_of_fragments.is_a?(Integer) && number_of_fragments >= 0
-        raise ArgumentError, "number_of_fragments must be a nonnegative integer"
-      end
+      validate_options(encoder, fragment_size, number_of_fragments)
       return Array.new(texts.length) { [] } if texts.all?(&:nil?) || query.empty? || query == "*"
 
       # Mark spans separately so source HTML and caller tags retain distinct
@@ -50,6 +54,16 @@ module Tinkick
     end
 
     private
+
+    def validate_options(encoder, fragment_size, number_of_fragments)
+      raise ArgumentError, "encoder must be default or html" unless ["default", "html"].include?(encoder)
+      unless fragment_size.is_a?(Integer) && fragment_size >= 0
+        raise ArgumentError, "fragment_size must be a nonnegative integer"
+      end
+      unless number_of_fragments.is_a?(Integer) && number_of_fragments >= 0
+        raise ArgumentError, "number_of_fragments must be a nonnegative integer"
+      end
+    end
 
     def snippets(marked, opening, closing, size, maximum)
       graphemes, spans = fragment_parts(marked, opening, closing)

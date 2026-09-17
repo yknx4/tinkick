@@ -149,6 +149,20 @@ module Tinkick
       @fields.map(&:first).uniq
     end
 
+    def highlight_matches(name, texts:)
+      resolve_misspellings
+      matched = Array.new(texts.length) #: Array[String?]
+      return matched if @term == "*"
+
+      @fields.each do |field_name, mode|
+        next unless name == field_name && [:exact, :text_start, :text_middle, :text_end].include?(mode)
+
+        values = TextMatch.new(@model).highlight_matches(texts, @term, match: mode, misspellings: misspellings_for(name))
+        values.each_with_index { |value, index| matched[index] ||= value }
+      end
+      matched
+    end
+
     def highlight_query(name, texts:)
       resolve_misspellings
       return "" if @term == "*"
@@ -157,9 +171,7 @@ module Tinkick
         compiler = QueryText.new(connection)
         @fields.filter_map do |field_name, mode|
           next unless field_name == name
-          unless [:word, :phrase, :word_start, :word_middle, :word_end].include?(mode)
-            raise ArgumentError, "Highlighting SQL match modes still requires Tinkick adapter support"
-          end
+          next unless [:word, :phrase, :word_start, :word_middle, :word_end].include?(mode)
           field = SearchField.new(@model, name, match: mode)
           analysis = @model.tinkick_index_analysis(name, field)
           unless analysis == WordMatch::ANALYSIS_DEFAULTS

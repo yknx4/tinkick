@@ -24,7 +24,7 @@ module Tinkick
       end
       @settings = settings.except(:fields) #: highlight_settings
       @fields.each do |name, overrides|
-        SearchField.new(query.model, name)
+        SearchField.new(query.model, name, match: :exact)
         invalid = overrides.keys - [:tag, :encoder, :fragment_size, :number_of_fragments]
         raise ArgumentError, "Unknown highlight field options: #{invalid.join(', ')}" unless invalid.empty?
       end
@@ -42,11 +42,16 @@ module Tinkick
         highlighter = Highlighter.new(connection)
         @fields.each do |name, overrides|
           texts = rows.map { |row| field_value(row, name) }
+          settings = @settings.merge(overrides) #: highlight_settings
+          matching = @query.highlight_matches(name, texts: texts)
+          whole_fields = highlighter.whole_fields(matching, **settings)
           query = @query.highlight_query(name, texts: texts)
-          next if query.empty?
-
-          values = highlighter.fragments_many(texts, query, **@settings.merge(overrides))
-          values.each_with_index { |fragments, index| output.fetch(index)[name] = fragments unless fragments.empty? }
+          values = highlighter.fragments_many(texts, query, **settings)
+          values.each_with_index do |fragments, index|
+            complete = whole_fields.fetch(index)
+            fragments = complete unless complete.empty?
+            output.fetch(index)[name] = fragments unless fragments.empty?
+          end
         end
       end
       output
