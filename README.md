@@ -33,10 +33,17 @@ Throughout this guide:
 - [Querying](#querying)
 - [Results and metadata](#results-and-metadata)
 - [Filtering](#filtering)
+- [Matching and analysis](#matching-and-analysis)
+- [Boosting, conversions, and personalization](#boosting-conversions-and-personalization)
+- [Autocomplete and suggestions](#autocomplete-and-suggestions)
+- [Aggregations and facets](#aggregations-and-facets)
+- [Highlighting](#highlighting)
+- [Similar items, geospatial, and vector search](#similar-items-geospatial-and-vector-search)
 - [Pagination and large result sets](#pagination-and-large-result-sets)
 - [Models, scopes, and tenancy](#models-scopes-and-tenancy)
 - [Indexing and synchronization](#indexing-and-synchronization)
 - [Advanced SQL and debugging](#advanced-sql-and-debugging)
+- [Reference and unsupported options](#reference-and-unsupported-options)
 - [License](#license)
 
 ## Requirements and installation
@@ -363,6 +370,299 @@ These require the shown column types and appropriate indexes. PostgreSQL regex
 syntax is not Ruby regex syntax; translate and test patterns rather than passing
 arbitrary Ruby regex objects through. See [PostgreSQL pattern matching](https://www.postgresql.org/docs/current/functions-matching.html).
 
+## Matching and analysis
+
+### Whole words, operators, and phrases
+
+```ruby
+Product.search("red apple", misspellings: false)                 # Both words
+Product.search("red pear", operator: "or", misspellings: false) # Either word
+Product.search("red apple", match: :phrase)                     # Adjacent, ordered
+```
+
+With several fields, the current query requires all AND terms to match within
+one field. A word in `name` and another only in `description` do not together
+satisfy the query. `:phrase` applies no fuzzy edits. Phrase punctuation is escaped
+as literal user input; underscores do not become positional wildcards.
+
+### Misspellings
+
+Public searches default to distance one, prefix length zero, with adjacent
+transpositions enabled:
+
+```ruby
+Product.search("aplpe")
+Product.search("appl").misspellings(false)
+Product.search("aplpe", misspellings: { prefix_length: 2 })
+Product.search("appl", misspellings: { edit_distance: 0 })
+Product.search("aplpe", misspellings: { edit_distance: 2, transpositions: false })
+```
+
+`distance` is an alias for `edit_distance`. Native TIN edits handle insertion,
+deletion, and substitution; Tinkick adds exact adjacent swaps for distance one.
+The prefix protects the specified number of Unicode codepoints. Options must
+use nonnegative integer distances and prefixes.
+
+The default deliberately uses **uncapped native expansion**, rather than
+Searchkick's implicit three expansions. It may return additional valid typo
+matches. This choice favors TIN performance; numerical scores and tied ordering
+are also allowed to differ. Explicit controls must not be silently ignored.
+
+These controls are **not implemented and currently raise**:
+
+- `max_expansions`, including an explicitly requested value of three.
+- `below`, which needs an exact-first search and conditional fuzzy retry.
+- `fields` inside `misspellings`, which needs per-field fuzzy selection.
+- Transpositions with `edit_distance` greater than one. Use
+  `transpositions: false` for native larger-distance matching.
+
+Recipe for application-owned `below` behavior, with two queries when needed:
+
+```ruby
+results = Product.search(user_text, misspellings: false, limit: 20)
+if results.total_count < 5
+  results = Product.search(user_text, misspellings: true, limit: 20)
+end
+```
+
+Keep the same filters and fields on both calls. This recipe is not the missing
+fluent `below` option and does not reproduce Searchkick's retry expansion cap.
+Per-field typo rules can likewise use separately compiled native SQL predicates.
+There is not yet a verified public replacement for an explicit expansion cap;
+retain the old search path if that cap is required for match eligibility.
+
+Literal keycap emoji such as `*️⃣` and `#️⃣` are supported with
+`misspellings: false`. Nonzero-distance fuzzy keycap queries currently fail
+explicitly rather than lose their analyzed token. See the
+[TINQL fuzzy syntax](https://planetscale.com/docs/postgres/search/tinql) and
+[compiler integration tests](test/integration/query_text_test.rb).
+
+### Partial and exact field matching
+
+| Searchkick mode | Current Tinkick status | Recipe or implementation direction |
+| --- | --- | --- |
+| `:word` | Available | Disable misspellings for exact token matching. |
+| `:phrase` | Available | Ordered adjacent tokens. |
+| `:word_start`, `:word_middle`, `:word_end` | Not implemented | TINQL token wildcards: `app*`, `*ppl*`, `*ple`. |
+| `:text_start`, `:text_middle`, `:text_end` | Not implemented | SQL whole-field prefix or LIKE patterns, with application-specific indexes. |
+| Per-field `:exact` | Not implemented | SQL equality with an appropriate text type/collation. |
+| Mixed per-field match modes | Not implemented | Separate explicit SQL predicates with the intended boolean grouping. |
+
+A token wildcard is not a whole-field substring test. `citext` equality is not
+case-sensitive equality. For literal field substrings, an ActiveRecord recipe is:
+
+```ruby
+escaped = Product.sanitize_sql_like(user_text)
+Product.where("name LIKE ?", "%#{escaped}%")
+```
+
+This has SQL pattern-matching costs and returns ordinary ActiveRecord results.
+It does not enable `match: :text_middle` in Tinkick.
+
+### Case, accents, whitespace, and emoji
+
+The current compiler uses TIN's default Unicode analysis. Case and accents fold,
+so `JALAPEÑO` can match `jalapeno`; hyphens can split words, while underscores and
+apostrophes can remain within tokens. Emoji can be indexed as tokens. This does
+not provide Searchkick's emoji-to-name expansion: `🍰` is not automatically
+translated to `cake`. The `emoji` option is not implemented; an application can
+normalize both stored search text and query text with a chosen emoji dictionary.
+
+Searchkick's extra-whitespace/word-joining analyzers are not reproduced:
+`dishwasher` and `dish washer` need not have the same matches. Persist an
+application-normalized search column if that behavior is required.
+
+TIN provides case/accent preservation and tokenizer options, but Tinkick's
+`case_sensitive`, `special_characters`, and custom analyzer mappings are not yet
+implemented. Do not change index analysis independently and assume the compiler
+will follow it. Index/query analysis must agree; changed index tokenization
+requires rebuilding stored index entries through explicit operations.
+See [TIN index options](https://planetscale.com/docs/postgres/search/reference/indexes).
+
+### Stemming and language
+
+**Native difference:** TIN explicitly documents no stemming. Searchkick's English
+stemming, `language`, `stem`, Hunspell dictionaries, `stem_exclusion`, and
+`stemmer_override` therefore have no current Tinkick equivalent.
+Fuzzy matching a plural is not the same thing as stemming it.
+See the [TIN capability comparison](https://planetscale.com/docs/postgres/search).
+
+Recipe alternatives include application-maintained normalized text, or a separate
+PostgreSQL `tsvector`/`tsquery` search using an appropriate language configuration.
+That is a different analysis/ranking path, not a TIN compatibility switch.
+Language-specific Searchkick plugins for Chinese, Japanese, Korean, Polish,
+Ukrainian, or Vietnamese cannot be loaded into Tinkick. Choose and test the
+normalizer/tokenizer needed for the application's language. PostgreSQL documents
+[its own dictionaries and stemming pipeline](https://www.postgresql.org/docs/current/textsearch-intro.html).
+
+### Synonyms, exclusions, and bad matches
+
+Static, directional, multiword, and dynamic `search_synonyms`, synonym files,
+and `reload_synonyms` are not implemented. Possible application designs include
+normalized stored values and controlled query expansion from a synonym table.
+Keep multiword phrase meaning and one-way mappings explicit. No TIN-native
+impossibility is implied by the missing adapter.
+
+`exclude` and demotion through `boost_where` are also not implemented. A direct
+TINQL recipe can express an exclusion:
+
+```ruby
+Product.where("name ==> ?", 'butter AND NOT "peanut butter"')
+```
+
+This fixed TINQL example is an ActiveRecord query. For user-entered values, build
+and escape a query deliberately; SQL parameter binding does not make arbitrary
+text literal within the TINQL language.
+
+## Boosting, conversions, and personalization
+
+`fields("title^10")`, `boost_by`, `boost_where`, `boost_by_recency`,
+`boost_by_distance`, `indices_boost`, and `conversions`/`conversions_v2` are not
+implemented. Default scores come from TIN, without synthetic exact-versus-fuzzy
+boosts or a forced primary-key tie order.
+
+Recipe: rank a bounded SQL search with application-owned numeric weights:
+
+```ruby
+Product.where("name ==> ?", "apple")
+  .select("products.*, tin.score(products.ctid) + 0.1 * coalesce(orders_count, 0) AS rank")
+  .order(Arel.sql("rank DESC")).limit(20)
+```
+
+This is not Searchkick's boost formula and may require sorting all matches.
+Choose explicit handling for NULLs, negative values, units, and the magnitude of
+the text score. Recency needs a date-based expression; demotion needs a lower
+weight; personalized purchase history needs a join or persisted feature column.
+Profile the actual plan before using these recipes at scale.
+
+### Tracking and performant conversions
+
+`track`, Searchjoy integration, conversion-field selection, a separate conversion
+query term, and `stem_conversions` are not implemented. You can record query and
+conversion events in application tables, aggregate them with SQL, and maintain a
+numeric or JSONB feature column through your own job. Updating such a column
+needs no search-document reindex. Caching a derived feature can avoid computing
+association aggregates per result, but the aggregation, update schedule, and
+ranking formula remain application responsibilities.
+
+The gem creates no conversion cron jobs, queues, or analytics storage. Searchjoy
+and other analytics tools require their own integration and privacy choices;
+existing Searchkick hooks should not be assumed to run for Tinkick searches.
+
+## Autocomplete and suggestions
+
+The Searchkick `word_start` model option, `match: :word_start`, `suggest`, and
+`suggestions` result API are not implemented. TIN has token wildcard/fuzzy
+primitives; a UI adapter and suggestion-ranking policy remain separate work.
+
+Recipe for a fixed native prefix query, returning a bounded list of titles:
+
+```ruby
+Movie.where("title ==> ?", "jurassic AND pa*").limit(10).pluck(:title)
+```
+
+Expose such a query through a Rails JSON endpoint only after defining how user
+text becomes escaped TINQL. Debounce requests and cap returned rows. Alternatively,
+use the scalar `prefix` filter for a whole-column prefix, understanding that its
+semantics differ from token autocomplete. Do not load an entire table solely to
+populate an autocomplete widget.
+
+“Did you mean” needs candidate generation and phrase/ranking rules; returning fuzzy
+hits is not a compatible `suggestions` implementation. Autosuggest and client UI
+libraries can be integrated independently, but are not bundled or verified here.
+`load: false` does not provide the Searchkick external-document optimization.
+
+## Aggregations and facets
+
+`aggs`, `aggregations`, `smart_aggs`, per-aggregation options, and the aggregation
+response envelope are not implemented. PostgreSQL can perform aggregates directly.
+Recipe, returning a Ruby hash rather than Searchkick buckets:
+
+```ruby
+matches = Product.where("name ==> ?", "apple").where(in_stock: true)
+counts = matches.group(:category).count
+average_price = matches.average(:price)
+```
+
+Use the complete filtered SQL scope, not `Product.search(...).to_a`, for totals.
+These other upstream features need explicit SQL equivalents and result mapping:
+
+| Feature | Application SQL direction |
+| --- | --- |
+| Terms, limit, ordering, minimum count | `GROUP BY`, aggregate ordering, `LIMIT`, `HAVING count(*) >= ...` |
+| Range and date-range buckets | `CASE` or filtered aggregates with explicit interval boundaries |
+| Numeric histogram | A chosen bucket-width expression |
+| Date histogram | `date_trunc` with explicit timezone and interval semantics |
+| Average, min, max, sum | SQL aggregate functions |
+| Cardinality | `count(DISTINCT column)` with defined NULL behavior |
+| Nested aggregations | Multiple grouping levels or separate bounded queries |
+| Per-facet filters / smart facets | Separate scopes that intentionally retain or remove each facet's own filter |
+| Scripted aggregations | Reviewed SQL expressions; Elasticsearch/Painless scripts are excluded |
+
+Do not describe `smart_aggs` as simply grouping the final result page or applying
+all final filters unchanged. Its self-filter behavior needs a compatibility
+adapter. TIN documents restrictions for some aggregate/window query shapes;
+materialized CTEs can be required. Check the real plan and
+[SQL shape guidance](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
+
+## Highlighting
+
+TIN supports matched spans and custom tags. Tinkick has a tested **internal**
+full-field `Tinkick::Highlighter` helper, but `highlight`, `highlights`,
+`with_highlights`, per-field options, multiple snippets, and `fragment_size` are
+not integrated into public search results yet. A model `highlight:` declaration
+is not accepted.
+
+Recipe using SQL for fixed TINQL, returning model rows with an extra attribute:
+
+```ruby
+Product.where("name ==> ?", "apple")
+  .select("products.*, tin.highlight(name, '<em>', '</em>') AS highlighted_name")
+  .limit(20)
+```
+
+Native highlighting preserves document HTML. The internal helper supports
+`encoder: "html"` to escape source text separately from trusted highlight tags;
+its returned string is not marked HTML-safe. Do not mark untrusted native output
+`html_safe`. Snippet boundaries, overlapping spans, and source markup need their
+own presentation rules. See [TIN highlighting](https://planetscale.com/docs/postgres/search/highlighting).
+
+## Similar items, geospatial, and vector search
+
+### Similar items
+
+`record.similar` is not implemented. A recipe can select meaningful stored terms
+from a record and issue a normal search excluding its ID, or use embeddings for
+semantic similarity. Neither approach reproduces a more-like-this algorithm
+without defining term selection, thresholds, and ranking.
+
+### Locations and geo shapes
+
+`locations`, near/within filters, bounding boxes, polygons, `geo_shape`,
+intersects/within/disjoint relations, and distance boosts are not implemented.
+PostGIS is a possible separate PostgreSQL extension where the deployment
+supports it. Store correctly typed geometry/geography, add suitable indexes via
+Rails migrations, and use functions such as
+[`ST_DWithin`](https://postgis.net/docs/ST_DWithin.html) in application SQL.
+Coordinate reference systems and distance units are part of that design.
+A bounding latitude/longitude filter can be expressed with ordinary ranges but
+is not a substitute for accurate radius or polygon semantics.
+
+### KNN, semantic, and hybrid search
+
+`knn`, dimensions/distance configuration, HNSW `m`/`ef_construction`/`ef_search`,
+semantic embedding generation, `multi_search`, and `Reranking.rrf` are not Tinkick
+APIs yet. This is adapter work rather than evidence that PostgreSQL cannot serve
+vector search. PlanetScale documents [TIN combined with pgvector](https://planetscale.com/docs/postgres/search#hybrid-search-with-pgvector).
+
+Recipe architecture: add a vector column and index through migrations, generate
+embeddings outside the database, run a bounded pgvector nearest-neighbor query,
+and combine its IDs with a bounded lexical query. Use the same embedding model
+and dimensions for documents and queries. Cosine, Euclidean, inner-product
+operators and HNSW settings belong to [pgvector](https://github.com/pgvector/pgvector),
+not TINQL. RRF or model-based reranking requires explicit application code and
+returns an application-defined result list.
+
 ## Pagination and large result sets
 
 ### Page and offset compatibility
@@ -569,6 +869,51 @@ through the router. See [native functions](https://planetscale.com/docs/postgres
 Use `sql.active_record` notifications and your Rails logger for timing and query
 counts. Searchkick-specific Lograge `searchkick_runtime`, `opaque_id`, and profiling
 response hooks are not supplied.
+
+## Reference and unsupported options
+
+The current model declaration accepts `searchable`, `default_fields`, and `match`.
+The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
+`per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
+`countless`, `keyset`, and `after`. Use the detailed sections above for their limits.
+Unknown keywords or methods are not compatibility no-ops.
+
+The following reference maps less common upstream options to their current status:
+
+| Searchkick API or configuration | Status / replacement |
+| --- | --- |
+| `searchable`, `default_fields`, `match` | Available within the supported modes/types. |
+| `filterable` | Not accepted. Filter real scalar columns and add ordinary PostgreSQL indexes as needed. |
+| `unscope`, `inheritance`, query `type` | Not implemented as Searchkick options; define explicit model scopes and test the intended STI/tenant behavior. |
+| Global `model_options` | Not implemented; declare each model explicitly. |
+| `search_method_name` | Not implemented; `tinkick_search` is the explicit backend entry point. |
+| `index_name`, dynamic names, prefix/suffix | Excluded index identity API; use explicit database/schema/table tenancy. |
+| Custom `search_document_id` | Excluded document identity API; results use the model's single primary key. |
+| `mappings`, `merge_mappings`, `settings` | Excluded server configuration DSL; use migrations and native index options. |
+| `case_sensitive`, `special_characters`, language/stem options | Adapter mapping missing; see analysis limitations above. |
+| `search_synonyms`, synonym file/reload | Not implemented; application synonym storage/expansion is a recipe. |
+| `conversions`, `conversions_v2`, `stem_conversions` | Not implemented; maintain SQL features and an explicit ranking formula. |
+| `suggest`, `similar`, `emoji`, `exclude` | Not implemented; see the corresponding recipes. |
+| `locations`, `geo_shape`, `knn` | Not implemented; design explicit PostGIS/pgvector integration where available. |
+| `callbacks`, queues, job priorities/parent jobs | Excluded synchronization configuration. |
+| Import batch size, resume, partial/bulk reindex | Excluded document import API; update real data with application jobs/migrations. |
+| Routing, request parameters, opaque IDs | Excluded transport API; use SQL filters, database routing, and Rails instrumentation. |
+| `timeout`, `search_timeout`, `client_options` | Not implemented; configure database timeouts/pooling. |
+| `includes`, `model_includes`, `scope_results` | Compatible result-loading adapters not implemented. |
+| `select`, source filtering, `reselect`, `only`, `except` | Not implemented; use an explicit SQL projection recipe. |
+| `body`, `body_options`, query-mutating blocks | Excluded Elasticsearch DSL; use reviewed native SQL. |
+| `search_index`/`searchkick_index` inspection | Not implemented; use PostgreSQL catalogs and TIN helpers. |
+| Index refresh, clean/promote/store/remove, queue inspection | Excluded external-index lifecycle. |
+| `multi_search`, global search, `models`, model boosts | Not implemented; separate queries or explicit SQL combination. |
+| Scroll/deep-paging configuration | Excluded backend APIs; use bounded column cursors or SQL batches. |
+| BigDecimal serialization rules | No JSON document conversion: PostgreSQL column types govern stored precision. |
+| Mongoid | Unsupported integration; Tinkick requires ActiveRecord with PostgreSQL. |
+| Searchjoy, Autosuggest, Kaminari, will_paginate, Apartment | Not bundled or claimed fully compatible; verify each integration explicitly. |
+
+See [the compatibility inventory](docs/compatibility.md) for the wider API target,
+[TIN evidence](docs/tin-api.md) for verified native behavior, and
+[the implementation plan](docs/plan.md) for remaining work. “Not implemented” is
+not a promise of a release date and should not be relabeled a TIN limitation.
 
 ## License
 
