@@ -1,0 +1,22 @@
+module Tinkick
+  class SourceFilter
+    @includes: Array[String]
+    @excludes: Array[String]
+    @included: Array[Regexp]
+    @excluded: Array[Regexp]
+
+    def initialize: (source_fields | Hash[String | Symbol, source_fields] selection) -> void
+    def columns: (Hash[String, ActiveRecord::ConnectionAdapters::Column] definitions) -> Array[String]
+    def nested?: (Hash[String, ActiveRecord::ConnectionAdapters::Column] definitions) -> bool
+    def call: (Hash[String, result_value] attributes) -> Hash[String, result_value]
+
+    private
+
+    def patterns: (source_fields? value) -> Array[String]
+    def compile: (Array[String] patterns) -> Array[Regexp]
+    def matches?: (Array[Regexp] patterns, String path) -> bool
+    def descendant?: (String pattern, String path) -> bool
+    def filter_object: (Hash[String, result_value] values, String path) -> Hash[String, result_value]
+    def filter_value: (result_value value, String path) -> [ bool, result_value ]
+  end
+end

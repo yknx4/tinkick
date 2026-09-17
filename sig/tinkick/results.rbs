@@ -82,7 +82,6 @@ module Tinkick
     def scoped_record_pairs: (result_scope scope) -> Array[[ ActiveRecord::Base, Float ]]
 
     def source_rows: () -> Array[Hash[String, result_value]]
-    def source_patterns: (source_fields? value) -> Array[Regexp]
 
     def record_pairs: () -> Array[[ result_record, Float ]]
   end

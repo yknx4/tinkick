@@ -3,6 +3,7 @@
 require "forwardable"
 require_relative "hash_wrapper"
 require_relative "query"
+require_relative "source_filter"
 
 module Tinkick
   class Results
@@ -196,34 +197,17 @@ module Tinkick
 
     def source_rows
       selection = @select
-      columns = @query.model.column_names
-      case selection
-      when Hash
-        unless selection.keys.all? { |key| ["includes", "excludes"].include?(key.to_s) }
-          raise InvalidQueryError, "select accepts only includes and excludes source filters"
-        end
-        included = source_patterns(selection[:includes] || selection["includes"])
-        excluded = source_patterns(selection[:excludes] || selection["excludes"])
-        columns = columns.select { |column| included.empty? || included.any? { |pattern| pattern.match?(column) } }
-        columns = columns.reject { |column| excluded.any? { |pattern| pattern.match?(column) } }
-      when String, Symbol, Array
-        patterns = source_patterns(selection)
-        columns = columns.select { |column| patterns.any? { |pattern| pattern.match?(column) } }
-      else
-        return @query.rows if selection.nil? || selection == true || selection == false
-
+      return @query.rows if selection.nil? || selection == true || selection == false
+      unless selection.is_a?(String) || selection.is_a?(Symbol) || selection.is_a?(Array) || selection.is_a?(Hash)
         raise InvalidQueryError, "select accepts source field names or an includes/excludes map"
       end
-      @query.source_rows(columns)
-    end
-
-    def source_patterns(value)
-      values = value.is_a?(Array) ? value : (value.nil? ? [] : [value]) #: Array[String | Symbol]
-      values.map do |field|
-        unless field.is_a?(String) || field.is_a?(Symbol)
-          raise InvalidQueryError, "select source fields must be strings or symbols"
-        end
-        Regexp.new("\\A#{Regexp.escape(field.to_s).gsub('\\*', '.*')}\\z")
+      filter = SourceFilter.new(selection)
+      definitions = @query.model.columns_hash
+      if filter.nested?(definitions)
+        @query.model.logger&.warn("Tinkick: nested source selection reads each selected JSON column for the bounded result page, then prunes properties in Ruby. Large JSON values can increase transfer and memory costs; use dedicated stored or generated columns for frequent narrow projections.")
+      end
+      @query.source_rows(filter.columns(definitions)).map do |row|
+        filter.call(row).merge(row.slice(@query.model.primary_key.to_s, "_tinkick_score"))
       end
     end
 
