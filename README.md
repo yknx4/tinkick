@@ -437,10 +437,9 @@ reading their response does not introduce a count query. The supplied total is
 reported as given, including with countless pagination. `took` remains the page
 fetch timing described above, excluding separate count and aggregation queries.
 
-Suggestions and public highlight result methods remain implementation work.
-Aggregation metadata is also available through `aggs` and `aggregations`. Searchkick 6 removed
-`each_with_hit` and `with_details`; use `with_hit.each`; `with_highlights` remains
-implementation work.
+Suggestions remain implementation work. Aggregation metadata is also available
+through `aggs` and `aggregations`. Searchkick 6 removed `each_with_hit` and
+`with_details`; use `with_hit.each` and `with_highlights`.
 The portable response does not fabricate Elasticsearch index aliases, `_shards`,
 scroll IDs, or transport status. Use ActiveRecord instrumentation for timing and
 explicitly serialize the visible records for an HTTP response.
@@ -973,25 +972,51 @@ for scripted calculations. Check representative plans against TIN's
 
 ## Highlighting
 
-TIN supports matched spans and custom tags. Tinkick has a tested **internal**
-full-field `Tinkick::Highlighter` helper, but `highlight`, `highlights`,
-`with_highlights`, per-field options, multiple snippets, and `fragment_size` are
-not integrated into public search results yet. A model `highlight:` declaration
-is not accepted.
-
-Recipe using SQL for fixed TINQL, returning model rows with an extra attribute:
+Default-analysis word, phrase, and partial-word searches support highlighting:
 
 ```ruby
-Product.where("name ==> ?", "apple")
-  .select("products.*, tin.highlight(name, '<em>', '</em>') AS highlighted_name")
-  .limit(20)
+results = Product.search("rivendell", fields: [:name], highlight: true)
+results.highlights                  # [{name: "Visit <em>Rivendell</em>"}]
+results.with_highlights.each { |product, spans| puts spans[:name] }
+results.first.search_highlights
+
+results = Product.search("rivendell").highlight(
+  tag: "<strong class='match'>", encoder: "html",
+  fields: {name: {fragment_size: 100, number_of_fragments: 3}}
+)
+results.highlights(multiple: true)   # each field maps to an array of snippets
 ```
 
-Native highlighting preserves document HTML. The internal helper supports
-`encoder: "html"` to escape source text separately from trusted highlight tags;
-its returned string is not marked HTML-safe. Do not mark untrusted native output
-`html_safe`. Snippet boundaries, overlapping spans, and source markup need their
-own presentation rules. See [TIN highlighting](https://planetscale.com/docs/postgres/search/highlighting).
+Without a fragment size, the complete matched field is returned. Positive sizes
+produce up to five distinct snippets by default, preserving complete Unicode
+graphemes and matched spans; a long word or phrase may exceed the requested size.
+Per-field options override global options. `number_of_fragments: 0` returns the
+complete field. Context boundaries approximate Searchkick rather than reproducing
+Lucene's fragment ranking. A fields array also works, such as `fields: [:name]`.
+
+`highlights` follows the original hit page; `with_highlights` follows visible
+records after `scope_results`. Their default field values are the first snippet;
+`multiple: true` returns arrays. Hit metadata stores arrays under `"highlight"`.
+Raw results have `highlighted_name`-style keys, falling back to the selected
+original value when no span matches. Match-all queries have empty highlight maps.
+Existing model `search_highlights` methods are preserved for backend coexistence.
+
+Highlighting batches the bounded page in one native call per field and caches the
+result. It does not count matches or alter search ranking. Raw projections fetch
+only selected columns plus required highlight inputs; hidden inputs stay out of
+the source and raw result attributes. Large pages or long fields increase transfer
+and presentation work, so set a suitable page limit.
+
+Native highlighting preserves document HTML. `encoder: "html"` escapes source
+text separately from trusted highlight tags; returned strings are not marked
+HTML-safe. Do not mark untrusted native output `html_safe`.
+
+Custom index analysis, SQL whole-field modes, and refined fuzzy highlighting
+remain adapter work and raise actionable argument errors instead of returning
+incorrect spans. Explicit native highlighting applies default analysis even when
+an index uses different analysis; merely passing the index's query is insufficient.
+A model `highlight:` declaration is not yet accepted. See
+[TIN highlighting](https://planetscale.com/docs/postgres/search/highlighting).
 
 ## Similar items, geospatial, and vector search
 
