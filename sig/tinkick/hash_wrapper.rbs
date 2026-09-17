@@ -1,0 +1,19 @@
+module Tinkick
+  type result_value = nil | bool | String | Integer | Float | BigDecimal | Date | Time | Array[result_value] | Hash[String, result_value]
+
+  class HashWrapper
+    @attributes: Hash[String, result_value]
+
+    def initialize: (Hash[String, result_value] attributes) -> void
+    def []: (String | Symbol name) -> result_value
+    def to_h: () -> Hash[String, result_value]
+    def as_json: (?Hash[Symbol, Object]? options) -> Hash[String, result_value]
+    def to_json: (?JSON::State | Hash[Symbol, Object] | nil options) -> String
+    def inspect: () -> String
+
+    private
+
+    def method_missing: (Symbol name, *Object args) ?{ (*Object) -> Object } -> result_value
+    def respond_to_missing?: (Symbol name, ?bool include_private) -> bool
+  end
+end

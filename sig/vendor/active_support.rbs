@@ -1,0 +1,5 @@
+# Active Support extends Hash#to_json to accept encoder options as well as JSON::State.
+class Hash[unchecked out K, unchecked out V]
+  def to_json: (?JSON::State | Hash[Symbol, Object?] | nil options) -> String
+             | ...
+end
