@@ -1,12 +1,19 @@
 module Tinkick
   type aggregation_zoned_time = Time | ActiveSupport::TimeWithZone
 
+  type aggregation_date_format = [ Regexp, Array[[ String, bool ]] ]
+
   class AggregationDate
+    FORMAT_TOKENS: Hash[String, Array[String]]
+    ISO8601: Regexp
+
+    @formats: Array[String]
+    @custom_formats: Hash[String, aggregation_date_format]
     @now: Time
     @offset: Integer
     @zone: ActiveSupport::TimeZone?
 
-    def initialize: (?time_zone: String?, ?now: Time) -> void
+    def initialize: (?format: String?, ?time_zone: String?, ?now: Time) -> void
     def parse: (aggregation_range_bound value) -> Float?
     def format: (Float value) -> String
 
@@ -14,7 +21,9 @@ module Tinkick
 
     def local_time: (Time instant) -> aggregation_zoned_time
     def local_date: (Integer year, Integer month, Integer day, ?Integer hour, ?Integer minute, ?Integer | Rational second) -> aggregation_zoned_time
-    def parse_iso8601: (String value) -> aggregation_zoned_time
+    def compile_format: (String pattern) -> aggregation_date_format
+    def parse_anchor: (String value) -> aggregation_zoned_time
+    def parse_parts: (Hash[String, String?] parts) -> aggregation_zoned_time
     def calculate: (aggregation_zoned_time instant, String math) -> aggregation_zoned_time
     def round: (aggregation_zoned_time instant, String unit) -> aggregation_zoned_time
   end

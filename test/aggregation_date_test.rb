@@ -57,6 +57,83 @@ class AggregationDateTest < Minitest::Test
     assert_equal 1_767_225_600_001, dates.parse(1_767_225_600_001)
   end
 
+  def test_custom_numeric_date_formats_parse_render_and_support_date_math
+    dates = Tinkick::AggregationDate.new(format: "yyyy/MM/dd")
+
+    assert_equal Time.utc(2026, 2, 3).to_i * 1_000, dates.parse("2026/02/03")
+    assert_equal "2026/03/01", dates.format(dates.parse("2026/02/03||+1M/M"))
+    assert_equal "2026/02/03", dates.format(dates.parse(Time.utc(2026, 2, 3, 12)))
+    compact = Tinkick::AggregationDate.new(format: "uuuuMMdd")
+    assert_equal Time.utc(2026, 1, 2).to_i * 1_000, compact.parse(20260102)
+    assert_equal "20260102", compact.format(compact.parse(20260102))
+  end
+
+  def test_missing_custom_components_use_epoch_date_and_midnight_defaults
+    month = Tinkick::AggregationDate.new(format: "MM-yyyy", time_zone: "+01:30")
+    clock = Tinkick::AggregationDate.new(format: "HH:mm")
+
+    assert_equal Time.utc(2026, 1, 31, 22, 30).to_i * 1_000, month.parse("02-2026")
+    assert_equal Time.utc(1970, 1, 1, 13, 45).to_i * 1_000, clock.parse("13:45")
+    assert_equal Time.utc(2026).to_i * 1_000, Tinkick::AggregationDate.new(format: "yyyy").parse("2026")
+  end
+
+  def test_custom_clock_fractions_offsets_and_quoted_literals
+    dates = Tinkick::AggregationDate.new(format: "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", time_zone: "America/New_York")
+    expected = Time.utc(2026, 1, 2, 1, 34, Rational(5123, 1000))
+
+    assert_equal (expected.to_r * 1_000).to_f, dates.parse("2026-01-02T03:04:05.123+01:30")
+    assert_equal "2026-01-01T20:34:05.123-05:00", dates.format(dates.parse(expected))
+    quoted = Tinkick::AggregationDate.new(format: "yyyy 'year''s' MM '100%' dd '' HH:mm:ssXXX")
+    assert_equal "2026 year's 01 100% 02 ' 01:34:05Z", quoted.format(quoted.parse(expected))
+    assert_equal Time.utc(2026, 1, 2, 1, 34, 5).to_i * 1_000, quoted.parse("2026 year's 01 100% 02 ' 01:34:05Z")
+  end
+
+  def test_fraction_width_is_exact_and_output_truncates
+    { "S" => "1", "SS" => "12", "SSS" => "129" }.each do |token, fraction|
+      dates = Tinkick::AggregationDate.new(format: "yyyy-MM-dd HH:mm:ss.#{token}")
+
+      assert_equal "2026-01-02 03:04:05.#{fraction}", dates.format(dates.parse(Time.utc(2026, 1, 2, 3, 4, Rational(5129, 1000))))
+      assert_equal (Time.utc(2026, 1, 2, 3, 4, 5).to_r * 1_000 + Rational(fraction.to_i, 10**fraction.length) * 1_000).to_f,
+        dates.parse("2026-01-02 03:04:05.#{fraction}")
+      assert_raises(ArgumentError) { dates.parse("2026-01-02 03:04:05.#{fraction}0") }
+    end
+  end
+
+  def test_format_alternatives_try_in_order_and_print_with_the_first
+    dates = Tinkick::AggregationDate.new(format: "yyyy/MM/dd||epoch_millis||strict_date_optional_time")
+    epoch = Time.utc(2026, 1, 2).to_i * 1_000
+
+    ["2026/01/02", epoch, "2026-01-02T00:00:00Z"].each do |value|
+      assert_equal epoch, dates.parse(value)
+      assert_equal "2026/01/02", dates.format(dates.parse(value))
+    end
+    milliseconds = Tinkick::AggregationDate.new(format: "epoch_millis", time_zone: "+01:30")
+    assert_equal 2026, milliseconds.parse(2026.9)
+    assert_equal "2026", milliseconds.format(milliseconds.parse("2026"))
+  end
+
+  def test_default_strict_iso_and_epoch_string_formats
+    dates = Tinkick::AggregationDate.new
+
+    assert_equal dates.parse(2026), dates.parse("2026")
+    assert_equal Time.utc(2026, 2).to_i * 1_000, dates.parse("2026-02")
+    assert_equal 1_767_225_600_001, dates.parse("1767225600001")
+    assert_equal "2026-01-02T03:04:05.123Z", dates.format(dates.parse("2026-01-02T03:04:05,123Z"))
+    ["2026-2-03", "2026-02-3", "2026-002", "2026-01-02tail"].each do |value|
+      assert_raises(ArgumentError) { dates.parse(value) }
+    end
+  end
+
+  def test_invalid_formats_and_custom_dates_fail_clearly
+    ["", "yyyy||", "||yyyy", "yyyy#MM", "yyyy 'unfinished", "yy-MM-dd", "MMMM", "yyyy-MM-dd[HH]", "SSSS", 1].each do |pattern|
+      assert_raises(ArgumentError) { Tinkick::AggregationDate.new(format: pattern) }
+    end
+    dates = Tinkick::AggregationDate.new(format: "yyyy-MM-dd HH:mm:ss.SSSXXX")
+    ["2026-02-30 01:02:03.123Z", "2026-01-02 24:02:03.123Z", "2026-01-02 01:60:03.123Z", "2026-01-02 01:02:60.123Z", "2026-01-02 01:02:03.123+01:99", "2026-01-02 01:02:03.123+19:00", "2026-1-02 01:02:03.123Z", "2026-01-02 01:02:03.1Z", "2026-01-02 01:02:03.123Ztail"].each do |value|
+      assert_raises(ArgumentError) { dates.parse(value) }
+    end
+  end
+
   def test_invalid_dates_math_and_time_zones_raise_clear_errors
     ["Not/A_Zone", "+19:00", "+01:99", "Pacific Time (US & Canada)", 5].each do |zone|
       assert_raises(ArgumentError) { Tinkick::AggregationDate.new(time_zone: zone) }

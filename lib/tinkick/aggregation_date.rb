@@ -5,7 +5,24 @@ require "active_support/time"
 
 module Tinkick
   class AggregationDate
-    def initialize(time_zone: nil, now: Time.now)
+    FORMAT_TOKENS = {
+      "yyyy" => ["year", "[0-9]{4}", "%Y"], "uuuu" => ["year", "[0-9]{4}", "%Y"],
+      "MM" => ["month", "[0-9]{2}", "%m"], "dd" => ["day", "[0-9]{2}", "%d"],
+      "HH" => ["hour", "[0-9]{2}", "%H"], "mm" => ["minute", "[0-9]{2}", "%M"], "ss" => ["second", "[0-9]{2}", "%S"],
+      "S" => ["fraction", "[0-9]", "%1N"], "SS" => ["fraction", "[0-9]{2}", "%2N"], "SSS" => ["fraction", "[0-9]{3}", "%3N"],
+      "XXX" => ["offset", "(?:Z|[+-][0-9]{2}:[0-9]{2})", "%:z"],
+    }.freeze
+    ISO8601 = /\A(?<year>-?[0-9]{4})(?:-(?<month>[0-9]{2})(?:-(?<day>[0-9]{2}))?)?(?:T(?:(?<hour>[0-9]{2})(?::(?<minute>[0-9]{2})(?::(?<second>[0-9]{2})(?:[.,](?<fraction>[0-9]{1,9}))?)?)?(?<offset>Z|[+-][0-9]{2}(?::?[0-9]{2})?)?)?)?\z/
+
+    def initialize(format: nil, time_zone: nil, now: Time.now)
+      pattern = format || "strict_date_optional_time||epoch_millis"
+      raise ArgumentError, "format must be a nonempty string" unless pattern.is_a?(String) && !pattern.empty?
+
+      @formats = pattern.split("||", -1)
+      @custom_formats = {}
+      @formats.each do |name|
+        @custom_formats[name] = compile_format(name) unless ["strict_date_optional_time", "epoch_millis"].include?(name)
+      end
       @now = now
       @offset = 0
       @zone = nil
@@ -33,12 +50,8 @@ module Tinkick
         number = Float(value)
         raise ArgumentError, "Date range epoch bounds must be finite numbers" unless number.is_a?(Float) && number.finite?
 
-        # Date ranges parse numeric bounds through the default date formatter.
-        # It tries a four-digit year before epoch milliseconds.
-        integer = number.to_i
-        return integer.to_f unless /\A-?\d{4}\z/.match?(integer.to_s)
-
-        value = Date.new(integer, 1, 1)
+        # Date ranges truncate numeric bounds before applying their formatter.
+        value = number.to_i.to_s
       end
 
       instant = case value
@@ -52,7 +65,7 @@ module Tinkick
           anchor, math = value.split("||", 2)
           raise ArgumentError, "Date range bounds cannot be empty" unless anchor
 
-          parsed = parse_iso8601(anchor)
+          parsed = parse_anchor(anchor)
           math ? calculate(parsed, math) : parsed
         end
       else
@@ -63,7 +76,19 @@ module Tinkick
 
     def format(value)
       instant = local_time(Time.at(Rational(value.to_s) / 1_000))
-      instant.utc_offset.zero? ? instant.utc.iso8601(3) : instant.iso8601(3)
+      pattern = @formats.fetch(0)
+      case pattern
+      when "epoch_millis" then value.to_i.to_s
+      when "strict_date_optional_time" then instant.utc_offset.zero? ? instant.utc.iso8601(3) : instant.iso8601(3)
+      else
+        @custom_formats.fetch(pattern).last.map do |part, token|
+          if token
+            part == "XXX" && instant.utc_offset.zero? ? "Z" : instant.strftime(FORMAT_TOKENS.fetch(part).fetch(2))
+          else
+            part
+          end
+        end.join
+      end
     end
 
     private
@@ -78,23 +103,83 @@ module Tinkick
       zone ? zone.local(year, month, day, hour, minute, second) : Time.new(year, month, day, hour, minute, second, @offset)
     end
 
-    def parse_iso8601(value)
-      parts = Date._iso8601(value)
-      year = parts[:year]
-      raise ArgumentError, "Invalid ISO8601 date range bound: #{value.inspect}" unless year
+    def compile_format(pattern)
+      # @type var parts: Array[[String, bool]]
+      parts = []
+      source = +""
+      remaining = pattern
+      until remaining.empty?
+        if remaining.start_with?("''")
+          part = "'"
+          remaining = remaining.delete_prefix("''")
+          token = false
+        elsif remaining.start_with?("'")
+          quoted = /\A'((?:[^']|'')*)'/.match(remaining)
+          raise ArgumentError, "Unclosed quote in date format" unless quoted
 
-      month = parts.fetch(:mon, 1)
-      day = parts.fetch(:mday, 1)
+          part = quoted[1].to_s.gsub("''", "'")
+          remaining = quoted.post_match
+          token = false
+        else
+          match = /\A(?:([A-Za-z])\1*|[^A-Za-z'\[\]{}#]+)/.match(remaining)
+          raise ArgumentError, "Unsupported date format syntax: #{remaining.inspect}" unless match
+
+          part = match[0].to_s
+          remaining = match.post_match
+          token = /\A[A-Za-z]/.match?(part)
+        end
+        parts << [part, token]
+        if token
+          definition = FORMAT_TOKENS[part]
+          raise ArgumentError, "Unsupported date format token: #{part.inspect}" unless definition
+
+          source << "(?<#{definition[0]}>#{definition[1]})"
+        else
+          source << Regexp.escape(part)
+        end
+      end
+      raise ArgumentError, "Date format must contain a supported date or time token" unless parts.any?(&:last)
+
+      [Regexp.new("\\A#{source}\\z"), parts]
+    end
+
+    def parse_anchor(value)
+      @formats.each do |pattern|
+        if pattern == "epoch_millis"
+          next unless /\A-?[0-9]+(?:\.[0-9]+)?\z/.match?(value)
+
+          return local_time(Time.at(Rational(value) / 1_000))
+        end
+        expression = pattern == "strict_date_optional_time" ? ISO8601 : @custom_formats.fetch(pattern).first
+        match = expression.match(value)
+        return parse_parts(match.named_captures) if match
+      rescue ArgumentError
+        # A later configured format can still parse this value.
+      end
+      raise ArgumentError, "Invalid date range bound #{value.inspect} for format #{@formats.join("||").inspect}"
+    end
+
+    def parse_parts(parts)
+      year = (parts["year"] || "1970").to_i
+      month = (parts["month"] || "1").to_i
+      day = (parts["day"] || "1").to_i
       Date.new(year, month, day)
-      hour = parts.fetch(:hour, 0)
-      minute = parts.fetch(:min, 0)
-      second = parts.fetch(:sec, 0).to_r + parts.fetch(:sec_fraction, 0).to_r
+      hour = (parts["hour"] || "0").to_i
+      minute = (parts["minute"] || "0").to_i
+      second = (parts["second"] || "0").to_i + Rational("0.#{parts["fraction"] || "0"}")
       unless (0..23).cover?(hour) && (0..59).cover?(minute) && second >= 0 && second < 60
-        raise ArgumentError, "Invalid ISO8601 clock time: #{value.inspect}"
+        raise ArgumentError, "Invalid date range clock time"
       end
 
-      offset = parts[:offset]
-      offset ? local_time(Time.new(year, month, day, hour, minute, second, offset)) : local_date(year, month, day, hour, minute, second)
+      offset = parts["offset"]
+      return local_date(year, month, day, hour, minute, second) unless offset
+
+      hours = offset[1, 2].to_i
+      minutes = offset.delete(":")[3, 2].to_i
+      seconds = hours * 3_600 + minutes * 60
+      raise ArgumentError, "Invalid date range offset" if minutes > 59 || seconds > 18 * 3_600
+
+      local_time(Time.new(year, month, day, hour, minute, second, offset.start_with?("-") ? -seconds : seconds))
     end
 
     def calculate(instant, math)
