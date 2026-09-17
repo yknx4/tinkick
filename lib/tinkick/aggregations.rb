@@ -84,7 +84,7 @@ module Tinkick
     private
 
     def date_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format, :offset]
+      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format, :offset, :extended_bounds]
       raise ArgumentError, "Unknown date histogram options: #{unknown.join(", ")}" unless unknown.empty?
       unless [:calendar_interval, :fixed_interval].count { |kind| options.key?(kind) } == 1
         raise ArgumentError, "Date histogram requires exactly one calendar_interval or fixed_interval"
@@ -93,8 +93,10 @@ module Tinkick
       adjustment = "#{bucket_offset} milliseconds"
 
       unit = nil
+      interval_milliseconds = 1
       if options.key?(:fixed_interval)
-        step = "#{fixed_interval_milliseconds(options.fetch(:fixed_interval))} milliseconds"
+        interval_milliseconds = fixed_interval_milliseconds(options.fetch(:fixed_interval))
+        step = "#{interval_milliseconds} milliseconds"
       else
         interval = options[:calendar_interval].to_s
         aliases = { "1s" => "second", "1m" => "minute", "1h" => "hour", "1d" => "day", "1w" => "week", "1M" => "month", "1q" => "quarter", "1y" => "year", "months" => "month", "years" => "year" }
@@ -110,11 +112,22 @@ module Tinkick
       if options.key?(:format) && !options[:format].is_a?(String)
         raise ArgumentError, "date_histogram format must be a string"
       end
-      formatter = AggregationDate.new(time_zone: options[:time_zone], format: options[:format])
+      formatter = AggregationDate.new(time_zone: options[:time_zone], format: options[:format], now: @now)
       offset = formatter.fixed_offset
       if offset.nil? && !["day", "week", "month", "quarter", "year"].include?(unit)
         raise ArgumentError, "IANA time_zone currently requires a day, week, month, quarter, or year calendar_interval"
       end
+      extended = options.fetch(:extended_bounds, {})
+      unless extended.is_a?(Hash) && (extended.keys - [:min, :max]).empty?
+        raise ArgumentError, "Date histogram extended bounds must be a hash containing only min and max"
+      end
+      lower = formatter.histogram_bound(extended[:min])
+      upper = formatter.histogram_bound(extended[:max])
+      raise ArgumentError, "Date histogram extended bounds min cannot exceed max" if lower && upper && lower > upper
+
+      # Bounds round without the aggregation offset, which is added to final keys.
+      lower_date = formatter.histogram_boundary(lower, unit: unit, interval: interval_milliseconds) if lower
+      upper_date = formatter.histogram_boundary(upper, unit: unit, interval: interval_milliseconds) if upper
 
       shift = "#{offset || 0} seconds"
 
@@ -139,9 +152,9 @@ module Tinkick
         .group(Arel.sql("_tinkick_date"))
         .select(Arel.sql("_tinkick_date, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count"))
       query = if minimum.zero?
-        @model.logger&.warn("Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the matching date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
+        @model.logger&.warn("Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
         bounds = @model.unscoped.from("tinkick_date_counts")
-          .select(Arel.sql("MIN(_tinkick_date) AS lower, MAX(_tinkick_date) AS upper, ?::interval AS step", step))
+          .select(Arel.sql("LEAST(MIN(_tinkick_date), ?::timestamp) AS lower, GREATEST(MAX(_tinkick_date), ?::timestamp) AS upper, ?::interval AS step", lower_date, upper_date, step))
         @model.unscoped.with(tinkick_date_counts: counts)
           .from(bounds, :tinkick_bounds)
           .joins("CROSS JOIN LATERAL generate_series(lower, upper, step) AS tinkick_series(_tinkick_date)")

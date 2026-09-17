@@ -17,6 +17,8 @@ module Tinkick
     def fixed_offset: () -> Integer?
     def midnight_key: (Integer local_milliseconds) -> Integer
     def parse: (aggregation_range_bound value) -> Float?
+    def histogram_bound: (aggregation_range_bound value) -> Integer?
+    def histogram_boundary: (Integer milliseconds, unit: String?, interval: Integer) -> Time
     def format: (Float value) -> String
 
     private

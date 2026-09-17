@@ -107,6 +107,45 @@ module Tinkick
       (instant.to_r * 1_000).to_f
     end
 
+    def histogram_bound(value)
+      return if value.nil?
+
+      milliseconds = if value.is_a?(Numeric)
+        number = Float(value)
+        unless number.is_a?(Float) && number.finite?
+          raise ArgumentError, "Numeric bounds must be integral epoch milliseconds"
+        end
+        integer = Integer(value)
+        raise ArgumentError, "Numeric bounds must be integral epoch milliseconds" unless value == integer
+
+        integer
+      else
+        parse(value)&.floor
+      end
+      unless milliseconds && milliseconds.between?(-(2**63), 2**63 - 1)
+        raise ArgumentError, "Bounds must fit in a signed 64-bit millisecond integer"
+      end
+
+      milliseconds
+    end
+
+    def histogram_boundary(milliseconds, unit:, interval:)
+      instant = local_time(Time.at(Rational(milliseconds, 1_000))).to_time
+      # The SQL bucket grid uses local wall-clock timestamps. Resolve IANA
+      # midnight gaps/overlaps only when turning returned buckets into UTC keys.
+      seconds = instant.sec + Rational(instant.nsec, 1_000_000_000)
+      local = Time.utc(instant.year, instant.month, instant.day, instant.hour, instant.min, seconds)
+      if unit == "quarter"
+        Time.utc(local.year, (local.month - 1) / 3 * 3 + 1)
+      elsif unit
+        code = { "year" => "y", "month" => "M", "week" => "w", "day" => "d", "hour" => "h", "minute" => "m", "second" => "s" }.fetch(unit)
+        round(local, code).to_time
+      else
+        rounded = (local.to_r * 1_000 / interval).floor * interval
+        Time.at(Rational(rounded, 1_000)).utc
+      end
+    end
+
     def format(value)
       instant = local_time(Time.at(Rational(value.to_s) / 1_000))
       pattern = @formats.fetch(0)
