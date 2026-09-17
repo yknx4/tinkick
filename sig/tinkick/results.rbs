@@ -13,6 +13,8 @@ module Tinkick
 
   type missing_record = { id: String, model: singleton(ActiveRecord::Base) }
 
+  type search_hit = { "_id" => String, "_index" => String, "_score" => Float, ?"_source" => Hash[String, result_value] }
+
   class Results
     include Enumerable[result_record]
     extend Forwardable
@@ -28,6 +30,9 @@ module Tinkick
     @record_pairs: Array[[ result_record, Float ]]?
     @missing_records: Array[missing_record]
     @source_rows: Array[Hash[String, result_value]]?
+    @source_filter: SourceFilter?
+    @hits: Array[search_hit]?
+    @hit_pairs: Array[[ result_record, search_hit ]]
 
     attr_reader current_page: Integer
     attr_reader padding: Integer
@@ -58,6 +63,9 @@ module Tinkick
     def misspellings?: () -> bool
     def took: () -> Integer
     def error: () -> nil
+    def hits: () -> Array[search_hit]
+    def with_hit: () -> Enumerator[[ result_record, search_hit ], Array[[ result_record, search_hit ]]]
+                | () { (result_record, search_hit) -> void } -> Array[[ result_record, search_hit ]]
     def total_count: () -> Integer
     alias total_entries total_count
     def per_page: () -> Integer
@@ -89,6 +97,7 @@ module Tinkick
 
     def source_rows: () -> Array[Hash[String, result_value]]
     def read_source_rows: () -> Array[Hash[String, result_value]]
+    def source_filter: () -> SourceFilter
 
     def record_pairs: () -> Array[[ result_record, Float ]]
   end

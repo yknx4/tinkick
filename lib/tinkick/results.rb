@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "forwardable"
+require "active_support/core_ext/object/deep_dup"
 require_relative "hash_wrapper"
 require_relative "query"
 require_relative "source_filter"
@@ -27,6 +28,7 @@ module Tinkick
       @scope_results = scope_results
       @select = select
       @missing_records = []
+      @hit_pairs = []
       unless load
         @query.model.logger&.warn("Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
       end
@@ -80,6 +82,36 @@ module Tinkick
     def error
       load_page
       nil
+    end
+
+    def hits
+      @hits ||= begin
+        rows = if @load
+          @scope_results ? @query.rows : @query.records.map(&:attributes)
+        else
+          source_rows
+        end #: Array[Hash[String, result_value]]
+        include_source = @select != [] && (!@load || @select)
+        filter = source_filter if include_source && @select && @select != true
+        rows.map do |row|
+          score = row.fetch("_tinkick_score") #: Float | BigDecimal
+          hit = { "_id" => row.fetch(@query.model.primary_key.to_s).to_s,
+                  "_index" => @query.model.table_name, "_score" => score.to_f } #: search_hit
+          if include_source
+            source = row.except("_tinkick_score")
+            selected = filter ? filter.call(source) : source
+            hit["_source"] = selected.deep_dup
+          end
+          hit
+        end
+      end
+    end
+
+    def with_hit
+      return enum_for(:with_hit) unless block_given?
+
+      record_pairs
+      @hit_pairs.each { |record, hit| yield record, hit }
     end
 
     def total_count
@@ -225,10 +257,7 @@ module Tinkick
     def read_source_rows
       selection = @select
       return @query.rows if selection.nil? || selection == true || selection == false
-      unless selection.is_a?(String) || selection.is_a?(Symbol) || selection.is_a?(Array) || selection.is_a?(Hash)
-        raise InvalidQueryError, "select accepts source field names or an includes/excludes map"
-      end
-      filter = SourceFilter.new(selection)
+      filter = source_filter
       definitions = @query.model.columns_hash
       if filter.nested?(definitions)
         @query.model.logger&.warn("Tinkick: nested source selection reads each selected JSON column for the bounded result page, then prunes properties in Ruby. Large JSON values can increase transfer and memory costs; use dedicated stored or generated columns for frequent narrow projections.")
@@ -238,8 +267,23 @@ module Tinkick
       end
     end
 
+    def source_filter
+      @source_filter ||= begin
+        selection = @select
+        unless selection.is_a?(String) || selection.is_a?(Symbol) || selection.is_a?(Array) || selection.is_a?(Hash)
+          raise InvalidQueryError, "select accepts source field names or an includes/excludes map"
+        end
+        SourceFilter.new(selection)
+      end
+    end
+
     def record_pairs
-      @record_pairs ||= if @load
+      cached = @record_pairs
+      return cached if cached
+
+      indexed = hits.to_h { |hit| [hit.fetch("_id"), hit] }
+      # @type var pairs: Array[[result_record, Float]]
+      pairs = if @load
         scope = @scope_results
         if scope
           scoped_record_pairs(scope)
@@ -253,6 +297,10 @@ module Tinkick
           [HashWrapper.new(row.except("_tinkick_score")), score.to_f]
         end
       end
+      @hit_pairs = pairs.map do |record, _score|
+        [record, indexed.fetch(record[@query.model.primary_key.to_s].to_s)]
+      end
+      @record_pairs = pairs
     end
   end
 end

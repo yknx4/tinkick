@@ -113,6 +113,9 @@ module Tinkick
     def misspellings?: () -> bool
     def took: () -> Integer
     def error: () -> nil
+    def hits: () -> Array[search_hit]
+    def with_hit: () -> Enumerator[[ result_record, search_hit ], Array[[ result_record, search_hit ]]]
+                | () { (result_record, search_hit) -> void } -> Array[[ result_record, search_hit ]]
     def total_count: () -> Integer
     def current_page: () -> Integer
     def limit_value: () -> Integer
