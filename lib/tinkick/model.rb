@@ -32,7 +32,11 @@ module Tinkick
       raise Error, "search must be called on model, not relation" if current_scope
 
       schema = tinkick_schema
-      fields ||= options[:default_fields] || options[:searchable] || schema[:data_fields].select { |field| [:text, :citext].include?(schema[:columns].fetch(field).type) }
+      fields ||= options[:default_fields] || options[:searchable] || schema[:data_fields].select do |field|
+        column = schema[:columns].fetch(field)
+        array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+        !array && [:text, :citext].include?(column.type)
+      end
       match ||= options[:match]
       tinkick_validate_fields(schema, (options[:searchable] || []) + fields, match)
 
