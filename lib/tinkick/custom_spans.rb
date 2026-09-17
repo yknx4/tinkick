@@ -43,7 +43,97 @@ module Tinkick
       spans.map { |values| merge_spans(values) }
     end
 
+    def locate_phrase(texts, term:, analysis:)
+      spans = Array.new(texts.length) { [] } #: Array[Array[[Integer, Integer]]]
+      return spans if term.empty? || term == "*" || texts.all?(&:nil?)
+
+      analysis = configuration(analysis)
+      if analysis.fetch("tokenizer") == "unicode" && ["long_tokens", "max_token_bytes", "graphemes"].any? do |name|
+        analysis.fetch(name) != WordMatch::ANALYSIS_DEFAULTS.fetch(name)
+      end
+        raise ArgumentError, "Custom phrase position reconstruction for changed Unicode removal policies is not implemented yet"
+      end
+      @connection.logger&.warn("Tinkick: custom-analysis phrase highlighting reconstructs token positions from additional page-text analysis queries. Work grows with page text and matching phrase witnesses.")
+      groups, streams = phrase_occurrences([term, *texts], analysis)
+      query = streams.fetch(0)
+      return spans if query.empty?
+
+      witnesses = [] #: Array[[Integer, Integer, Integer, Integer, Integer]]
+      streams.drop(1).each_with_index do |stream, position|
+        phrase_witnesses(stream, query).each do |first, last|
+          witnesses << [position, first.fetch(2), first.fetch(3), last.fetch(2), last.fetch(3)]
+        end
+      end
+      return spans if witnesses.empty?
+
+      indexes = witnesses.flat_map { |_position, first, _ordinal, last, _last_ordinal| [first, last] }.uniq
+      # @type var mapped: Hash[Integer, Array[[Integer, Integer]]]
+      mapped = indexes.zip(phrase_group_spans(indexes.map { |index| groups.fetch(index) }, analysis)).to_h
+      witnesses.each do |position, first, ordinal, last, last_ordinal|
+        start = groups.fetch(first).first.fetch(1) + mapped.fetch(first).fetch(ordinal).first
+        finish = groups.fetch(last).first.fetch(1) + mapped.fetch(last).fetch(last_ordinal).last
+        spans.fetch(position) << [start, finish]
+      end
+      spans.map { |values| merge_spans(values) }
+    end
+
     private
+
+    def phrase_occurrences(texts, analysis)
+      candidates = source_runs(texts)
+      analyzed = analyze_many([*texts, *candidates.map { |candidate| candidate.fetch(3) }], analysis)
+      streams = Array.new(texts.length) { [] } #: Array[Array[[String, Integer, Integer, Integer]]]
+      positions = Array.new(texts.length, 0)
+      groups = candidates.each_with_index.map do |candidate, index|
+        words = analyzed.fetch(texts.length + index)
+        position = candidate.first
+        words.each_with_index do |word, ordinal|
+          streams.fetch(position) << [word, positions.fetch(position), index, ordinal]
+          positions[position] += 1
+        end
+        if words.empty? && analysis.fetch("tokenizer") == "whitespace" && analysis.fetch("position_gaps") == "preserve"
+          positions[position] += 1
+        end
+        [candidate, words] #: [candidate, Array[String]]
+      end
+      unless streams.map { |stream| stream.map(&:first) } == analyzed.take(texts.length)
+        raise ArgumentError, "Phrase source groups do not reconstruct the full native TIN token stream"
+      end
+      [groups, streams]
+    end
+
+    def phrase_witnesses(stream, query)
+      positions = stream.to_h { |word| [word.fetch(1), word] }
+      first = query.fetch(0)
+      stream.filter_map do |word|
+        next unless word.first == first.first
+
+        offset = word.fetch(1) - first.fetch(1)
+        next unless query.all? { |part| positions[part.fetch(1) + offset]&.first == part.first }
+
+        [word, positions.fetch(query.last.fetch(1) + offset)] #: [[String, Integer, Integer, Integer], [String, Integer, Integer, Integer]]
+      end
+    end
+
+    def phrase_group_spans(groups, analysis)
+      surface_analysis = analysis.merge("tokenizer" => "whitespace", "long_tokens" => "split", "max_token_bytes" => "2692", "graphemes" => "retain")
+      surfaces = analyze_many(groups.map { |candidate, _words| candidate.fetch(3) }, surface_analysis)
+      spans = Array.new(groups.length) { [] } #: Array[Array[[Integer, Integer]]]
+      complex = [] #: Array[Integer]
+      groups.each_with_index do |(candidate, words), index|
+        if words.length == 1 && words == surfaces.fetch(index)
+          spans[index] = [[0, candidate.fetch(3).length]]
+        else
+          complex << index
+        end
+      end
+      unless complex.empty?
+        @connection.logger&.warn("Tinkick: phrase source mapping analyzes grapheme prefixes inside matching whitespace runs. Long runs can require quadratic tokenization work; inspect EXPLAIN ANALYZE for large phrase highlights.")
+        mapped = group_spans(complex.map { |index| groups.fetch(index) }, analysis)
+        complex.each_with_index { |index, ordinal| spans[index] = mapped.fetch(ordinal) }
+      end
+      spans
+    end
 
     def configuration(analysis)
       defaults = WordMatch::ANALYSIS_DEFAULTS
@@ -159,22 +249,28 @@ module Tinkick
       end
       return if selected.empty?
 
-      inputs = selected.flat_map { |candidate, _words| [candidate.fetch(3), *candidate.fetch(3).grapheme_clusters] }.uniq
+      group_spans(selected, analysis).each_with_index do |mapped, index|
+        (position, start, _finish, _text, _token), words = selected.fetch(index)
+        mapped.each_with_index do |(first, last), ordinal|
+          spans.fetch(position) << [start + first, start + last] if tokens.include?(words.fetch(ordinal))
+        end
+      end
+    end
+
+    def group_spans(groups, analysis)
+      inputs = groups.flat_map { |candidate, _words| [candidate.fetch(3), *candidate.fetch(3).grapheme_clusters] }.uniq
       surface_analysis = analysis.merge("tokenizer" => "whitespace", "long_tokens" => "split", "max_token_bytes" => "2692", "graphemes" => "retain")
       normalized = analyze_many(inputs, surface_analysis).map(&:join)
       surfaces = inputs.zip(normalized).to_h
-      boundaries = selected.map { |candidate, _words| cumulative_lengths(candidate.fetch(3).grapheme_clusters) }
-      prefixes = prefix_counts(selected, boundaries, analysis)
-      selected.each_with_index do |((position, start, _finish, text, _token), words), index|
+      boundaries = groups.map { |candidate, _words| cumulative_lengths(candidate.fetch(3).grapheme_clusters) }
+      prefixes = prefix_counts(groups, boundaries, analysis)
+      groups.each_with_index.map do |((_position, _start, _finish, text, _token), words), index|
         normalized_parts = text.grapheme_clusters.map { |part| surfaces.fetch(part) }
         surface = surfaces.fetch(text)
         unless normalized_parts.join == surface
           raise ArgumentError, "Native grapheme normalization does not reconstruct the source surface"
         end
-        mapped = policy_token_spans(words, boundaries.fetch(index), cumulative_lengths(normalized_parts), surface, prefixes.fetch(index))
-        mapped.each_with_index do |(first, last), ordinal|
-          spans.fetch(position) << [start + first, start + last] if tokens.include?(words.fetch(ordinal))
-        end
+        policy_token_spans(words, boundaries.fetch(index), cumulative_lengths(normalized_parts), surface, prefixes.fetch(index))
       end
     end
 
