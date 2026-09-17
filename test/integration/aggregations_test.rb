@@ -8,6 +8,10 @@ class ScopedAggregationProduct < ActiveRecord::Base
   default_scope { where(id: 10_001..10_012) }
 end
 
+class AggregationDateValue < ActiveRecord::Base
+  self.table_name = "tinkick_test_cursor_values"
+end
+
 class AggregationsTest < TinkickIntegrationTest
   setup do
     categories = ["amber", "amber", "amber", "blue", "blue", "copper", "copper", "violet", "amber", "blue", "copper", "violet"]
@@ -237,7 +241,56 @@ class AggregationsTest < TinkickIntegrationTest
     assert_equal [{ "key" => "10004.5-10006.0", "from" => 10_004.5, "to" => 10_006.0, "doc_count" => 1 }], aggregate(id: { ranges: [{ from: "10004.5", to: 10_006 }] }).fetch("id").fetch("buckets")
   end
 
+  def test_date_ranges_use_utc_bounds_and_preserve_inclusive_exclusive_boundaries
+    create_date_values
+    scope = AggregationDateValue.where("name ==> ?", "chronicle").limit(1)
+    result = Tinkick::Aggregations.new(AggregationDateValue, scope).call(
+      recorded_at: { date_ranges: [{ to: Time.utc(2026, 1, 2) }, { from: "2026-01-02T01:00:00+01:00", to: Time.utc(2026, 1, 3).to_i * 1_000 }, { from: Date.new(2026, 1, 3) }] },
+    ).fetch("recorded_at")
+
+    assert_equal [
+      { "key" => "*-2026-01-02T00:00:00.000Z", "to" => 1_767_312_000_000.0, "to_as_string" => "2026-01-02T00:00:00.000Z", "doc_count" => 1 },
+      { "key" => "2026-01-02T00:00:00.000Z-2026-01-03T00:00:00.000Z", "from" => 1_767_312_000_000.0, "from_as_string" => "2026-01-02T00:00:00.000Z", "to" => 1_767_398_400_000.0, "to_as_string" => "2026-01-03T00:00:00.000Z", "doc_count" => 2 },
+      { "key" => "2026-01-03T00:00:00.000Z-*", "from" => 1_767_398_400_000.0, "from_as_string" => "2026-01-03T00:00:00.000Z", "doc_count" => 1 },
+    ], result.fetch("buckets")
+    refute scope.loaded?
+  end
+
+  def test_date_column_ranges_support_keyed_empty_buckets_and_filters
+    create_date_values
+    evaluator = Tinkick::Aggregations.new(AggregationDateValue, AggregationDateValue.where("name ==> ?", "chronicle"))
+    result = evaluator.call(days: { field: :recorded_on, keyed: true, date_ranges: [{ key: "january", from: "2026-01-01", to: "2026-02-01" }, { key: "february", from: Date.new(2026, 2, 1) }], where: { price: { lt: 3 } } }).fetch("days")
+
+    assert_equal 3, result.fetch("buckets").fetch("january").fetch("doc_count")
+    assert_equal 0, result.fetch("buckets").fetch("february").fetch("doc_count")
+    assert_equal "2026-01-01T00:00:00.000Z", result.fetch("buckets").fetch("january").fetch("from_as_string")
+    assert_equal 3, result.fetch("doc_count")
+  end
+
+  def test_date_ranges_validate_dates_fields_and_conflicting_kinds
+    create_date_values
+    evaluator = Tinkick::Aggregations.new(AggregationDateValue, AggregationDateValue.all)
+
+    assert_raises(ArgumentError) { evaluator.call(recorded_at: { date_ranges: [{ from: "2026-02-30" }] }) }
+    assert_raises(ArgumentError) { evaluator.call(recorded_at: { date_ranges: [{ from: "2000-01-01'); DROP TABLE x; --" }] }) }
+    assert_raises(Tinkick::InvalidQueryError) { evaluator.call(price: { date_ranges: [{ from: Date.new(2026) }] }) }
+    assert_raises(ArgumentError) { evaluator.call(recorded_at: { date_ranges: [{}], ranges: [{}] }) }
+    assert_raises(ArgumentError) { evaluator.call(recorded_at: { date_ranges: [{}], min: {} }) }
+    result = evaluator.call(recorded_at: { date_ranges: [{ from: "2026-01-02T00:00:00.001", to: Time.utc(2026, 1, 3) }] }).fetch("recorded_at").fetch("buckets").fetch(0)
+    assert_equal 1, result.fetch("doc_count")
+    assert_equal "2026-01-02T00:00:00.001Z", result.fetch("from_as_string")
+    assert_equal 0, Tinkick::Aggregations.new(AggregationDateValue, AggregationDateValue.none)
+      .call(recorded_at: { date_ranges: [{}] }).fetch("recorded_at").fetch("buckets").fetch(0).fetch("doc_count")
+  end
+
   private
+
+  def create_date_values
+    [Time.utc(2026, 1, 1, 23, 59, 59), Time.utc(2026, 1, 2), Time.utc(2026, 1, 2, 12), Time.utc(2026, 1, 3)].each_with_index do |instant, index|
+      AggregationDateValue.create!(name: "Chronicle event", code: format("00000000-0000-0000-0000-%012d", index), recorded_at: instant, recorded_on: instant.to_date, price: index)
+    end
+    AggregationDateValue.create!(name: "Unrelated archive", code: "00000000-0000-0000-0000-000000000010", recorded_at: Time.utc(2026, 1, 2), recorded_on: Date.new(2026, 1, 2), price: 0)
+  end
 
   def aggregate(spec)
     Tinkick::Aggregations.new(SearchProduct, @scope).call(spec)

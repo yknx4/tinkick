@@ -27,16 +27,19 @@ module Tinkick
 
         # @type var metric_names: Array[aggregation_metric_name]
         metric_names = [:avg, :cardinality, :max, :min, :sum]
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :keyed, *metric_names]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :keyed, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
         metrics = metric_names.select { |metric| options.key?(metric) }
         raise ArgumentError, "Each aggregation must select only one metric" if metrics.length > 1
-        raise ArgumentError, "Ranges cannot be combined with a metric" if options.key?(:ranges) && !metrics.empty?
-        raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && !options.key?(:ranges)
+        range_kinds = [:ranges, :date_ranges].select { |kind| options.key?(kind) }
+        raise ArgumentError, "Each aggregation must select only one range kind or metric" if range_kinds.length + metrics.length > 1
+        raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
 
-        result = if options.key?(:ranges)
-          numeric_ranges((options[:field] || name).to_s, options.fetch(:ranges), options)
+        result = if options.key?(:date_ranges)
+          range_aggregation((options[:field] || name).to_s, options.fetch(:date_ranges), options, dates: true)
+        elsif options.key?(:ranges)
+          range_aggregation((options[:field] || name).to_s, options.fetch(:ranges), options)
         elsif metrics.empty?
           terms((options[:field] || name).to_s, options)
         else
@@ -117,7 +120,7 @@ module Tinkick
       result
     end
 
-    def numeric_ranges(field, ranges, options)
+    def range_aggregation(field, ranges, options, dates: false)
       raise ArgumentError, "ranges must be a nonempty array" unless ranges.is_a?(Array) && !ranges.empty?
       raise ArgumentError, "keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
 
@@ -125,22 +128,27 @@ module Tinkick
         unless range.is_a?(Hash) && (range.keys - [:from, :to, :key]).empty?
           raise ArgumentError, "Each range must contain only from, to, or key"
         end
-        lower = numeric_bound(range[:from])
-        upper = numeric_bound(range[:to])
+        lower = dates ? date_bound(range[:from]) : numeric_bound(range[:from])
+        upper = dates ? date_bound(range[:to]) : numeric_bound(range[:to])
+        lower_text = dates && lower ? date_string(lower) : lower&.to_s
+        upper_text = dates && upper ? date_string(upper) : upper&.to_s
         key = range[:key]
         raise ArgumentError, "Range key must be a string" unless key.nil? || key.is_a?(String)
 
         # @type var entry: aggregation_range_bucket
-        entry = { "key" => key || "#{lower || "*"}-#{upper || "*"}", "doc_count" => 0 }
+        entry = { "key" => key || "#{lower_text || "*"}-#{upper_text || "*"}", "doc_count" => 0 }
         entry["from"] = lower if lower
         entry["to"] = upper if upper
+        entry["from_as_string"] = lower_text if dates && lower_text
+        entry["to_as_string"] = upper_text if dates && upper_text
         entry
       end.sort_by { |entry| [entry.fetch("from", -Float::INFINITY), entry.fetch("to", Float::INFINITY)] }
       conditions = options[:where]
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
       values = values_relation(scope, field)
-      unless [:integer, :decimal, :float].include?(@model.columns_hash.fetch(field).type)
-        raise InvalidQueryError, "ranges requires a numeric aggregation column"
+      types = dates ? [:date, :datetime, :timestamp] : [:integer, :decimal, :float]
+      unless types.include?(@model.columns_hash.fetch(field).type)
+        raise InvalidQueryError, "#{dates ? "date_ranges" : "ranges"} requires a #{dates ? "date or datetime" : "numeric"} aggregation column"
       end
 
       # @type var binds: Array[Float]
@@ -151,7 +159,8 @@ module Tinkick
           value = entry[bound]
           next unless value.is_a?(Float)
 
-          predicates << "_tinkick_value::double precision #{operator} ?"
+          expression = dates ? "(EXTRACT(EPOCH FROM _tinkick_value) * 1000)" : "_tinkick_value::double precision"
+          predicates << "#{expression} #{operator} ?"
           binds << value
         end
         "COUNT(DISTINCT _tinkick_document_id) FILTER (WHERE #{predicates.join(" AND ")}) AS _tinkick_range_#{index}"
@@ -168,6 +177,10 @@ module Tinkick
           upper = entry["to"]
           keyed_bucket["from"] = lower if lower
           keyed_bucket["to"] = upper if upper
+          lower_text = entry["from_as_string"]
+          upper_text = entry["to_as_string"]
+          keyed_bucket["from_as_string"] = lower_text if lower_text
+          keyed_bucket["to_as_string"] = upper_text if upper_text
           [entry.fetch("key"), keyed_bucket]
         end
       else
@@ -188,6 +201,32 @@ module Tinkick
       number
     rescue TypeError
       raise ArgumentError, "Range bounds must be finite numbers"
+    end
+
+    def date_bound(value)
+      return if value.nil?
+      return numeric_bound(value) if value.is_a?(Numeric)
+
+      instant = case value
+      when Time then value
+      when DateTime then value.to_time
+      when Date then Time.utc(value.year, value.month, value.day)
+      when String
+        parsed_date = Date.iso8601(value)
+        if /\A\d{4}-\d{2}-\d{2}\z/.match?(value)
+          Time.utc(parsed_date.year, parsed_date.month, parsed_date.day)
+        else
+          suffix = /(?:Z|[+-]\d{2}(?::?\d{2})?)\z/i.match?(value) ? "" : "Z"
+          Time.iso8601(value + suffix)
+        end
+      else
+        raise ArgumentError, "Date range bounds must be Date, Time, ISO8601 strings, or epoch milliseconds"
+      end
+      (instant.to_r * 1_000).to_f
+    end
+
+    def date_string(value)
+      Time.at(Rational(value.to_s) / 1_000).utc.iso8601(3)
     end
 
     def values_relation(scope, field, unique: true)

@@ -5,9 +5,11 @@ module Tinkick
 
   type aggregation_metric_options = { ?field: String | Symbol }
 
-  type aggregation_range_options = { ?from: Numeric | String | nil, ?to: Numeric | String | nil, ?key: String }
+  type aggregation_range_bound = Numeric | String | Date | Time | nil
 
-  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?keyed: bool, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
+  type aggregation_range_options = { ?from: aggregation_range_bound, ?to: aggregation_range_bound, ?key: String }
+
+  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?keyed: bool, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
 
   type aggregation_spec = Array[String | Symbol] | Hash[String | Symbol, aggregation_options]
 
@@ -17,9 +19,9 @@ module Tinkick
 
   type aggregation_metric = { "value" => Numeric?, ?"doc_count" => Integer }
 
-  type aggregation_range_bucket = { "key" => String, "doc_count" => Integer, ?"from" => Float, ?"to" => Float }
+  type aggregation_range_bucket = { "key" => String, "doc_count" => Integer, ?"from" => Float, ?"to" => Float, ?"from_as_string" => String, ?"to_as_string" => String }
 
-  type aggregation_keyed_range_bucket = { "doc_count" => Integer, ?"from" => Float, ?"to" => Float }
+  type aggregation_keyed_range_bucket = { "doc_count" => Integer, ?"from" => Float, ?"to" => Float, ?"from_as_string" => String, ?"to_as_string" => String }
 
   type aggregation_ranges = { "buckets" => Array[aggregation_range_bucket] | Hash[String, aggregation_keyed_range_bucket], ?"doc_count" => Integer }
 
@@ -40,9 +42,13 @@ module Tinkick
 
     def calculate_metric: (aggregation_metric_name metric, String field, filter_conditions? conditions) -> aggregation_metric
 
-    def numeric_ranges: (String field, Array[aggregation_range_options] ranges, aggregation_options options) -> aggregation_ranges
+    def range_aggregation: (String field, Array[aggregation_range_options] ranges, aggregation_options options, ?dates: bool) -> aggregation_ranges
 
-    def numeric_bound: (Numeric | String | nil value) -> Float?
+    def numeric_bound: (aggregation_range_bound value) -> Float?
+
+    def date_bound: (aggregation_range_bound value) -> Float?
+
+    def date_string: (Float value) -> String
 
     def values_relation: (ActiveRecord::Relation scope, String field, ?unique: bool) -> ActiveRecord::Relation
 
