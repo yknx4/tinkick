@@ -1,0 +1,63 @@
+<%
+require "faker"
+previous_random = Faker::Config.random
+begin
+  Faker::Config.random = Random.new(271828)
+  categories = %w[fantasy travel food technical]
+  details = [
+    "The notes describe the local history and explain how the work changed over time.",
+    "Readers compare several practical choices before recording the outcome in a journal.",
+    "A second chapter includes careful observations gathered during the previous season.",
+    "The final section lists supplies and answers questions from new visitors.",
+  ]
+  documents = Array.new(256) do |index|
+    name = Faker::Fantasy::Tolkien.character
+    location = Faker::Fantasy::Tolkien.location
+    poem = Faker::Fantasy::Tolkien.poem
+    category = categories.fetch(index % categories.length)
+    title, body = case category
+    when "fantasy"
+      ["Chronicles of #{name}", "#{name} collects old stories from #{location}. A historian discusses the poem #{poem} and compares regional traditions, family records, and surviving maps."]
+    when "travel"
+      ["A visitor guide to #{location}", "#{name} plans a walking holiday near #{location}. The itinerary covers train tickets, quiet guesthouses, museum opening hours, and weather. An evening reading features #{poem}."]
+    when "food"
+      ["Recipes from #{location}", "#{name} prepares seasonal vegetables, lentil soup, bread, and apple tart in a small kitchen at #{location}. The menu pairs warm tea with a reading of #{poem}."]
+    else
+      ["#{name} reviews a database handbook", "An engineer named #{name} explains database backups, transaction isolation, network retries, and storage capacity. The workshop at #{location} uses #{poem} as an example document for a text parser."]
+    end
+    body = ([body] + details.first(index % 5)).join(" ")
+    { key: "background_#{index}", id: index + 1, title: title, body: body, category: category }
+  end
+ensure
+  Faker::Config.random = previous_random
+end
+
+high_frequency = "Miners carry a mithril lantern through the tunnels. Each mithril lantern marks a safe turning point. Keep the mithril lantern close beside the ladder. A spare mithril lantern waits near the entrance."
+low_frequency = "Miners carry a mithril lantern through the tunnels. Each wooden basket marks a safe turning point. Keep the wooden basket close beside the ladder. A spare wooden basket waits near the entrance."
+short_document = "A mithril lantern guides miners home."
+unrelated_prose = "The expedition records weather conditions and reviews ordinary travel arrangements. Porters arrange meal schedules, repair worn boots, check the river crossing, and prepare comfortable rooms for returning guests."
+controls = {
+  frequency_high: ["A miner's lighting handbook", high_frequency],
+  frequency_low: ["A miner's equipment handbook", low_frequency],
+  length_short: ["A concise lighting note", short_document],
+  length_long: ["An expedition journal with a lighting note", ([short_document] + Array.new(10, unrelated_prose)).join(" ")],
+  phrase_ordered: ["The northern watch", "Gondolin sentries guard the northern gate after sunset."],
+  phrase_reversed: ["Appointments to the northern watch", "The sentries Gondolin appoints protect the northern gate after sunset."],
+  phrase_gap: ["Experienced northern guards", "Gondolin veteran sentries guard the northern gate after sunset."],
+  and_same_field: ["The northern mines", "Moria archivists catalogue the Balrog accounts."],
+  and_split_fields: ["Moria expedition", "Archivists catalogue the Balrog accounts."],
+  and_partial: ["Moria water survey", "Moria surveyors catalogue underground wells."],
+  unrelated_curated: ["A cafe menu", "Cooks compare lantern shaped pastries with roasted orchard fruit."],
+  typo_exact: ["A mountain workshop", "Gondolin mapmakers restore a mithril astrolabe before departure."],
+}
+controls.each_with_index do |(key, (title, body)), index|
+  documents << { key: key, id: 1001 + index, title: title, body: body, category: "control" }
+end
+%>
+<% documents.each do |document| %>
+<%= document[:key] %>:
+  id: <%= document[:id] %>
+  title: <%= document[:title].to_json %>
+  body: <%= document[:body].to_json %>
+  category: <%= document[:category].to_json %>
+<% end %>
