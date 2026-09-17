@@ -846,6 +846,13 @@ Product.search("coffee", boost_by: {
 Product.search("coffee").boost_by(:orders_count).boost_by(rating: {factor: 0.5})
 ```
 
+The legacy `boost: :orders_count` keyword and `.boost(:orders_count)` use the
+same default numeric formula. Repeated `.boost` calls replace that single field.
+When combined with `boost_by`, the alias replaces the same field's default sum
+contribution but preserves an explicitly configured `boost_mode: "multiply"`
+contribution. `boost: false` or `nil` disables the alias. Prefer `boost_by` for
+new code so the factor and modifier are explicit.
+
 The default contribution is `ln(2 + factor * value)`. Default contributions are
 summed, then multiply the base relevance score. Fields with
 `boost_mode: "multiply"` default to modifier `"none"`; their contributions are
