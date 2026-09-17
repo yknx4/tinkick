@@ -82,7 +82,7 @@ module Tinkick
     private
 
     def date_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed]
+      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone]
       raise ArgumentError, "Unknown date histogram options: #{unknown.join(", ")}" unless unknown.empty?
       unless [:calendar_interval, :fixed_interval].count { |kind| options.key?(kind) } == 1
         raise ArgumentError, "Date histogram requires exactly one calendar_interval or fixed_interval"
@@ -103,6 +103,11 @@ module Tinkick
       minimum = options.fetch(:min_doc_count, 0)
       raise ArgumentError, "Date histogram min_doc_count must be a nonnegative integer" unless minimum.is_a?(Integer) && minimum >= 0
       raise ArgumentError, "Date histogram keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
+      formatter = AggregationDate.new(time_zone: options[:time_zone])
+      offset = formatter.fixed_offset
+      raise ArgumentError, "date_histogram time_zone currently requires UTC or a fixed offset" if offset.nil?
+
+      shift = "#{offset} seconds"
 
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
       values = values_relation(scope, field)
@@ -112,9 +117,9 @@ module Tinkick
       end
       value = column.sql_type.include?("with time zone") ? "_tinkick_value AT TIME ZONE 'UTC'" : "_tinkick_value::timestamp"
       rounding = if unit
-        Arel.sql("date_trunc(?, #{value}) AS _tinkick_date, _tinkick_document_id", unit)
+        Arel.sql("date_trunc(?, (#{value}) + ?::interval) AS _tinkick_date, _tinkick_document_id", unit, shift)
       else
-        Arel.sql("date_bin(?::interval, #{value}, TIMESTAMP '1970-01-01') AS _tinkick_date, _tinkick_document_id", step)
+        Arel.sql("date_bin(?::interval, (#{value}) + ?::interval, TIMESTAMP '1970-01-01') AS _tinkick_date, _tinkick_document_id", step, shift)
       end
       dates = @model.unscoped.from(values, :tinkick_values)
         .where(Arel.sql("_tinkick_value IS NOT NULL"))
@@ -130,16 +135,15 @@ module Tinkick
           .from(bounds, :tinkick_bounds)
           .joins("CROSS JOIN LATERAL generate_series(lower, upper, step) AS tinkick_series(_tinkick_date)")
           .joins("LEFT JOIN tinkick_date_counts USING (_tinkick_date)")
-          .select(Arel.sql("(EXTRACT(EPOCH FROM _tinkick_date) * 1000)::bigint AS _tinkick_key, COALESCE(_tinkick_count, 0) AS _tinkick_count"))
+          .select(Arel.sql("(EXTRACT(EPOCH FROM _tinkick_date - ?::interval) * 1000)::bigint AS _tinkick_key, COALESCE(_tinkick_count, 0) AS _tinkick_count", shift))
       else
         @model.unscoped.from(counts, :tinkick_date_counts)
           .where(Arel.sql("_tinkick_count >= ?", minimum))
-          .select(Arel.sql("(EXTRACT(EPOCH FROM _tinkick_date) * 1000)::bigint AS _tinkick_key, _tinkick_count"))
+          .select(Arel.sql("(EXTRACT(EPOCH FROM _tinkick_date - ?::interval) * 1000)::bigint AS _tinkick_key, _tinkick_count", shift))
       end
       query = query.order(Arel.sql(order_sql(options.fetch(:order, { _key: :asc }))))
       # @type var rows: Array[{ "_tinkick_key" => Integer, "_tinkick_count" => Integer }]
       rows = @model.with_connection { |connection| connection.select_all(query).to_a }
-      formatter = AggregationDate.new
       buckets = rows.map do |row|
         key = row.fetch("_tinkick_key")
         { "key" => key, "key_as_string" => formatter.format(key.to_f), "doc_count" => row.fetch("_tinkick_count") }
