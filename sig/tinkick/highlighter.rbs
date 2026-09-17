@@ -7,9 +7,12 @@ module Tinkick
     def highlight_many: (Array[String?] texts, String query, ?tag: String, ?encoder: String) -> Array[String?]
     def whole_fields: (Array[String?] texts, ?tag: String, ?encoder: String, ?fragment_size: Integer, ?number_of_fragments: Integer) -> Array[Array[String]]
     def fragments_many: (Array[String?] texts, String query, ?tag: String, ?encoder: String, ?fragment_size: Integer, ?number_of_fragments: Integer) -> Array[Array[String]]
+    def fragments_from_spans: (Array[String?] texts, Array[Array[[ Integer, Integer ]]] spans, ?tag: String, ?encoder: String, ?fragment_size: Integer, ?number_of_fragments: Integer) -> Array[Array[String]]
 
     private
 
+    def markers: (Array[String?] texts) -> [ String, String ]
+    def render_marked: (Array[String?] texts, String opening, String closing, tag: String, encoder: String, fragment_size: Integer, number_of_fragments: Integer) -> Array[Array[String]]
     def validate_options: (String encoder, Integer fragment_size, Integer number_of_fragments) -> void
 
     def snippets: (String marked, String opening, String closing, Integer size, Integer maximum) -> Array[String]

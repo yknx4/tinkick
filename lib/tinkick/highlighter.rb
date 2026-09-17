@@ -31,14 +31,42 @@ module Tinkick
       validate_options(encoder, fragment_size, number_of_fragments)
       return Array.new(texts.length) { [] } if texts.all?(&:nil?) || query.empty? || query == "*"
 
+      opening, closing = markers(texts)
+      render_marked(mark_many(texts, query, opening, closing), opening, closing,
+        tag: tag, encoder: encoder, fragment_size: fragment_size, number_of_fragments: number_of_fragments)
+    end
+
+    def fragments_from_spans(texts, spans, tag: "<em>", encoder: "default", fragment_size: 0, number_of_fragments: 5)
+      validate_options(encoder, fragment_size, number_of_fragments)
+      opening, closing = markers(texts)
+      # @type var marked: Array[String?]
+      marked = texts.each_with_index.map do |text, index|
+        next unless text
+
+        value = text.dup
+        spans.fetch(index).reverse_each do |first, last|
+          value.insert(last, closing)
+          value.insert(first, opening)
+        end
+        value
+      end
+      render_marked(marked, opening, closing,
+        tag: tag, encoder: encoder, fragment_size: fragment_size, number_of_fragments: number_of_fragments)
+    end
+
+    private
+
+    def markers(texts)
       # Mark spans separately so source HTML and caller tags retain distinct
       # encoding, and TIN does not expand placeholders inside caller tags.
       marker = "\u0001tinkick"
       marker += "x" while texts.any? { |text| text&.include?(marker) }
-      opening = "#{marker}start\u0002"
-      closing = "#{marker}end\u0002"
+      ["#{marker}start\u0002", "#{marker}end\u0002"]
+    end
+
+    def render_marked(texts, opening, closing, tag:, encoder:, fragment_size:, number_of_fragments:)
       end_tag = tag.gsub(/\A<(\w+).+/, "</\\1>")
-      mark_many(texts, query, opening, closing).map do |marked|
+      texts.map do |marked|
         next [] unless marked&.include?(opening)
 
         fragments = if fragment_size.zero? || number_of_fragments.zero?
@@ -52,8 +80,6 @@ module Tinkick
         end
       end
     end
-
-    private
 
     def validate_options(encoder, fragment_size, number_of_fragments)
       raise ArgumentError, "encoder must be default or html" unless ["default", "html"].include?(encoder)
