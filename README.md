@@ -593,6 +593,14 @@ candidate query and can differ from Searchkick. Normal distance-one search and
 gem loading do not require this helper. A missing helper raises migration
 guidance only when the corresponding feature is used.
 
+Tokens containing literal TINQL delimiters use escaped token patterns for short
+one-edit searches. Longer analyzed tokens, or larger nontransposition distances,
+use indexed TIN candidates followed by bounded SQL verification and a cost
+warning. This path requires `tinkick.edit_distance`; install the optional
+functions migration or generate its `--upgrade` migration for an existing
+installation. The decision uses analyzed Unicode length, since case folding can
+expand a token. Ordinary native queries keep their existing fast path.
+
 Use `below` to enable fuzzy matching only when the exact filtered search has
 fewer than the requested number of matches:
 
