@@ -65,6 +65,48 @@ types nor type errors should be suppressed as a workaround.
 
 ## Verified environment
 
+Native-backend cleanup checkpoint (2026-09-17, through `f394548`): Ruby 4.0.1 /
+Rails 8.1.3.1 exercised **835 tests / 4,925 assertions** in 1,319 seconds, with
+**97.97% line coverage** (2,466 / 2,517 executable lines). The run included the
+Rails HTTP application, varied relevance corpus, and fixed 10,000-record stress
+dataset. It reported zero assertion failures and one error: an old recursive
+JSON filter test still supplied a Ruby `Regexp`, which the native-only API now
+rejects. This was not a green full-suite command.
+
+Commit `f394548` changes that test input to a PostgreSQL pattern string. Its
+entire seven-test file then passed **7 tests / 36 assertions**, with no failures,
+errors, or skips. No library change was needed. The full suite was not repeated
+after this test-only correction. Reproduction commands:
+
+```sh
+direnv exec . bundle exec rake coverage TESTOPTS='--seed=2082'
+direnv exec . bundle exec ruby -Itest test/integration/recursive_json_filter_test.rb --fail-fast --seed 2082
+direnv exec . bundle exec rake rbs:format rbs:quality steep
+direnv exec . bundle exec rubocop
+```
+
+RBS formatting and validation passed; Steep checked 48 library files without
+type errors, and RuboCop checked 151 Ruby files without offenses. The corrected
+JSON test also passed its own RuboCop autofix and normal checks. Coverage reports
+are in ignored `coverage/`. These are local results; remote CI was not run.
+
+The focused Rails 8.0.5.1 / JSON 2 run passed **77 tests / 384 assertions**, with
+no failures, errors, or skips, in 119 seconds. It covers native fuzzy matching,
+date buckets, highlighting boundaries, PostgreSQL regex and recursive JSON
+filters, the Rails HTTP app and relevance corpus, standard date parsing, and
+generated installation migrations. This is a targeted matrix check, not the
+entire Rails 8.0 suite:
+
+```sh
+direnv exec . env BUNDLE_GEMFILE=/private/tmp/tinkick-rails-8.0.Gemfile JSON_VERSION='< 3' bundle exec ruby -Itest -e 'ARGV.replace(["--fail-fast", "--seed", "2082"]); %w[integration/native_fuzzy_test integration/native_date_histograms_test integration/native_highlight_boundary_test integration/native_fuzzy_highlight_test integration/raw_regexp_filter_test integration/regexp_filter_test integration/recursive_json_filter_test rails_app_test relevance_test aggregation_date_test generators/install_generator_test].each { |name| require_relative "test/#{name}" }'
+```
+
+The checkpoint results and commands below describe their named commits. The
+native-backend cleanup subsequently removed custom regex, fuzzy-distance,
+highlight-span, and date-parsing emulation, including their tests. Historical
+commands that name those tests require the cited checkout; they are not current
+verification claims.
+
 Recent-query checkpoint at `1b4967d` (2026-09-17): Ruby 4.0.1 / Rails
 8.0.5.1 with JSON 2 passed **99 tests / 445 assertions**, no failures, errors,
 or skips, in 119 seconds. This covers recency scoring, custom primary keys,
