@@ -18,7 +18,7 @@ module Tinkick
 
     def partial: (String word, Symbol match) -> String
 
-    def fuzzy_partial: (String word, Symbol match, Integer distance, Integer prefix, bool transpositions) -> String
+    def fuzzy_pattern: (String word, Symbol match, Integer distance, Integer prefix, bool transpositions) -> String
 
     def fuzzy: (String word, Integer distance, Integer prefix, bool transpositions) -> String
 

@@ -23,7 +23,7 @@ module Tinkick
       if [:word_start, :word_middle, :word_end].include?(match)
         queries = if settings && settings.first.positive?
           distance, prefix, transpositions = settings
-          words.map { |word| fuzzy_partial(word, match, distance, prefix, transpositions) }
+          words.map { |word| fuzzy_pattern(word, match, distance, prefix, transpositions) }
         else
           words.map { |word| partial(word, match) }
         end
@@ -38,11 +38,13 @@ module Tinkick
       distance, prefix, transpositions = settings
       return exact if distance.zero?
 
-      if words.any? { |word| ["*", "#"].include?(word) }
-        raise ArgumentError, "Fuzzy keycap matching is not supported yet; use misspellings: false"
-      end
-
-      words.map { |word| fuzzy(word, distance, prefix, transpositions) }.join(separator)
+      words.map do |word|
+        if ["*", "#"].include?(word)
+          fuzzy_pattern(word, :word, distance, prefix, transpositions)
+        else
+          fuzzy(word, distance, prefix, transpositions)
+        end
+      end.join(separator)
     end
 
     private
@@ -87,9 +89,9 @@ module Tinkick
       "#{prefix}#{escaped}#{suffix}"
     end
 
-    def fuzzy_partial(word, match, distance, prefix, transpositions)
+    def fuzzy_pattern(word, match, distance, prefix, transpositions)
       unless distance == 1
-        raise ArgumentError, "Partial-word misspellings currently support edit_distance: 0 or 1"
+        raise ArgumentError, "This fuzzy match mode currently supports edit_distance: 0 or 1"
       end
 
       characters = word.chars.map { |character| Regexp.escape(character) }
@@ -118,8 +120,8 @@ module Tinkick
       patterns = alternatives.select { |candidate| candidate.length.between?(1, 50) }.map(&:join).uniq
       return "" if patterns.empty?
 
-      leading = match == :word_start ? "" : ".*"
-      trailing = match == :word_end ? "" : ".*"
+      leading = [:word_middle, :word_end].include?(match) ? ".*" : ""
+      trailing = [:word_start, :word_middle].include?(match) ? ".*" : ""
       "MATCHES #{leading}(#{patterns.join('|')})#{trailing}"
     end
 

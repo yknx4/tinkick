@@ -310,17 +310,31 @@ class QueryTextTest < TinkickIntegrationTest
     assert_empty(names("red appl", match: :phrase, misspellings: { transpositions: false }))
   end
 
-  def test_fuzzy_keycaps_require_a_source_preserving_translation
-    ["*️⃣", "#️⃣"].each do |term|
-      [true, { transpositions: false }].each do |options|
-        error = assert_raises(ArgumentError) do
-          compile(term, misspellings: options)
-        end
+  def test_fuzzy_keycaps_match_literal_dictionary_terms_within_the_edit_distance
+    tinkick_test_products(:red_apple).update!(name: "*️⃣")
+    tinkick_test_products(:green_pear).update!(name: "#️⃣")
 
-        assert_includes(error.message, "keycap")
-        assert_includes(error.message, "misspellings: false")
-      end
+    [true, { transpositions: false }].each do |options|
+      assert_equal(["#️⃣", "*️⃣"], names("*️⃣", misspellings: options).sort)
+      assert_equal(["#️⃣", "*️⃣"], names("#️⃣", misspellings: options).sort)
     end
+  end
+
+  def test_fuzzy_keycaps_honor_prefix_and_zero_distance_controls
+    tinkick_test_products(:red_apple).update!(name: "*️⃣")
+    tinkick_test_products(:green_pear).update!(name: "#️⃣")
+
+    assert_equal(["*️⃣"], names("*️⃣", misspellings: { prefix_length: 1 }))
+    assert_equal(["#️⃣"], names("#️⃣", misspellings: { edit_distance: 0 }))
+  end
+
+  def test_fuzzy_keycaps_cannot_expand_into_unrelated_long_dictionary_terms
+    tinkick_test_products(:red_apple).update!(name: "*️⃣ fruit")
+
+    assert_equal(["*️⃣ fruit"], names("*️⃣", misspellings: true))
+    assert_equal(["*️⃣ fruit"], names("*️⃣ friut", misspellings: true))
+    assert_empty(names("*️⃣ pear", misspellings: true))
+    assert_equal(["*️⃣ fruit", "Green Pear"], names("*️⃣ pear", operator: "or", misspellings: true).sort)
   end
 
   def test_empty_and_match_all_preserve_their_meaning_with_misspellings
