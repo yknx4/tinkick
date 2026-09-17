@@ -21,6 +21,7 @@ module Tinkick
 
     def number: (numeric_boost_number value) -> Float
     def numeric_field: (String name) -> String
+    def json_numeric_field: (String root, Array[String] path) -> String
     def modified: (String value, String modifier) -> String
     def group: (Array[[ String, String ]] functions, String operation) -> String
   end

@@ -48,7 +48,7 @@ module Tinkick
       return base_score if empty?
 
       unless @warned
-        @model.logger&.warn("Tinkick: numeric boost_by scoring evaluates numeric fields for matching rows and can sort results instead of using native TIN top-k. Numeric arrays also inspect values per row. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets.")
+        @model.logger&.warn("Tinkick: numeric boost_by scoring evaluates numeric fields for matching rows and can sort results instead of using native TIN top-k. Numeric arrays and JSONB paths also inspect values per row. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets.")
         @warned = true
       end
       "((#{base_score})::double precision * #{group(@sums, '+')} * #{group(@multipliers, '*')})"
@@ -67,9 +67,22 @@ module Tinkick
     end
 
     def numeric_field(name)
-      column = @model.columns_hash[name]
+      path = name.split(".", -1)
+      root = path.shift.to_s
+      column = @model.columns_hash[root]
       unless column
-        raise MissingFieldError, "#{@model.name} has no column #{name.inspect}; add a numeric column with a Rails migration before using boost_by"
+        raise MissingFieldError, "#{@model.name} has no column #{root.inspect}; add a numeric column with a Rails migration before using boost_by"
+      end
+      array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+      unless path.empty?
+        unless column.type == :jsonb && !array
+          raise InvalidQueryError, "#{@model.name}.#{root} must be a nonarray JSONB column for dotted boost_by paths"
+        end
+        if path.any? { |key| key.empty? || key.include?("\0") }
+          raise ArgumentError, "JSON boost_by paths require nonempty keys without null bytes"
+        end
+
+        return json_numeric_field(root, path)
       end
       unless [:integer, :float, :decimal].include?(column.type)
         raise ArgumentError, "boost_by field #{name.inspect} must be a numeric PostgreSQL column or numeric array"
@@ -77,10 +90,42 @@ module Tinkick
 
       @model.with_connection do |connection|
         field = "#{connection.quote_table_name(@model.table_name)}.#{connection.quote_column_name(name)}"
-        if column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+        if array
           field = "(SELECT MIN(tinkick_boost_value) FROM unnest(#{field}) AS tinkick_boost_values(tinkick_boost_value))"
         end
         "(#{field})::numeric"
+      end
+    end
+
+    def json_numeric_field(root, path)
+      @model.with_connection do |connection|
+        field = "#{connection.quote_table_name(@model.table_name)}.#{connection.quote_column_name(root)}"
+        keys = path.map { |key| connection.quote(key) }.join(", ")
+        value = "NULLIF(value #>> '{}', '')::double precision"
+        # Arrays retain their path depth; objects advance through only the requested key.
+        <<~SQL.squish
+          (WITH RECURSIVE tinkick_boost_json(value, depth) AS (
+            SELECT #{field}, 0
+            UNION ALL
+            SELECT element.value,
+              parent.depth + CASE WHEN jsonb_typeof(parent.value) = 'array' THEN 0 ELSE 1 END
+            FROM tinkick_boost_json AS parent
+            CROSS JOIN LATERAL jsonb_array_elements(
+              CASE WHEN jsonb_typeof(parent.value) = 'array' THEN parent.value
+                WHEN parent.depth < #{path.length} AND jsonb_typeof(parent.value) = 'object'
+                  THEN jsonb_build_array(parent.value -> (ARRAY[#{keys}]::text[])[parent.depth + 1])
+                ELSE '[]'::jsonb END
+            ) AS element(value)
+            WHERE parent.depth < #{path.length} OR jsonb_typeof(parent.value) = 'array'
+          )
+          SELECT MIN(CASE
+            WHEN #{value} IS NULL THEN NULL
+            WHEN #{value} > '-Infinity'::double precision AND #{value} < 'Infinity'::double precision
+              THEN (#{value})::numeric
+            ELSE ('boost_by JSONB value must be finite: ' || value::text)::numeric
+          END)
+          FROM tinkick_boost_json WHERE depth = #{path.length} AND jsonb_typeof(value) <> 'array')
+        SQL
       end
     end
 
