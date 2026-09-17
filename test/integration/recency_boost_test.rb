@@ -51,11 +51,11 @@ class RecencyBoostTest < TinkickIntegrationTest
     assert_in_delta 0.5, scores(recorded_on: { origin: Date.new(2026, 9, 18), scale: "1d" }).fetch(row.id), 0.000001
   end
 
-  def test_date_values_and_origins_use_millisecond_precision_before_epoch
+  def test_date_values_and_origins_keep_fractional_milliseconds_before_epoch
     row = cursor("Milliseconds", at: Time.at(Rational(-1, 10_000)).utc)
     values = scores(recorded_at: { origin: 0, scale: "1ms" })
 
-    assert_in_delta 0.5, values.fetch(row.id), 0.000001
+    assert_in_delta 0.5**0.01, values.fetch(row.id), 0.000001
     assert_in_delta 1, scores(recorded_at: { origin: -0.1, scale: "1ms" }).fetch(row.id), 0.000001
   end
 
@@ -74,9 +74,9 @@ class RecencyBoostTest < TinkickIntegrationTest
     end
   end
 
-  def test_date_scales_accept_integer_time_units_and_truncate_submilliseconds
+  def test_date_scales_accept_postgresql_time_units
     row = cursor("One millisecond", at: NOW - Rational(1, 1_000))
-    ["1ms", "1000micros", "1000000nanos"].each do |scale|
+    ["1ms", "1000 microseconds", "0.001 seconds"].each do |scale|
       assert_in_delta 0.5, scores(recorded_at: { scale: scale }).fetch(row.id), 0.000001
     end
     row.update!(recorded_at: NOW - 86_400)
@@ -145,13 +145,13 @@ class RecencyBoostTest < TinkickIntegrationTest
   end
 
   def test_scales_offsets_decay_and_weights_are_validated_without_coercing_invalid_values
-    [0, 86_400_000, "86400000", "0d", "-1d", "1w", "1M", "1.5d", "1micros"].each do |scale|
+    [0, 86_400_000, "0d", "-1d"].each do |scale|
       assert_raises(ArgumentError) { compiler(recorded_at: { scale: scale }) }
     end
     [-1, 0, 1, 2, Float::NAN, Float::INFINITY, "hostile'"].each do |decay|
       assert_raises(ArgumentError) { compiler(recorded_at: { scale: "1d", decay: decay }) }
     end
-    [-1, -0.0, Float::NAN, true, "not a number"].each do |factor|
+    [-1, Float::NAN, Float::INFINITY, true, "not a number"].each do |factor|
       assert_raises(ArgumentError) { compiler(recorded_at: { scale: "1d", factor: factor }) }
     end
     assert_raises(ArgumentError) { compiler(recorded_at: { scale: "1d", offset: "-1ms" }) }

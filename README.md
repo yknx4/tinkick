@@ -980,14 +980,21 @@ values contribute the full factor. Date and numeric arrays use the nearest
 non-NULL value; empty/all-NULL arrays are missing. Repeated fluent calls merge
 fields and replace earlier options for the same field.
 
-Date scales and offsets use integer `nanos`, `micros`, `ms`, `s`, `m`, `h` or `d`
-units. Submillisecond durations truncate to milliseconds; the resulting scale
-must be positive. Bare nonzero numeric date durations, fractional durations,
-weeks and months are rejected, following the Elasticsearch time-value parser.
-Origins accept dates, times, ISO8601 strings and epoch milliseconds. Compute
-relative origins in the application, for example `1.day.ago`; Elasticsearch date
-math strings raise `Tinkick::NotImplementedError`. Date scoring uses millisecond precision. Numeric columns also accept
-these functions with explicit numeric `origin` and `scale`. JSONB recency paths
+Date scales and offsets use [PostgreSQL interval strings](https://www.postgresql.org/docs/18/datatype-datetime.html#DATATYPE-INTERVAL-INPUT),
+such as `"7d"`, `"1.5 days"`, `"2 weeks"`, or `"1500 microseconds"`. The scale
+must be positive and the offset nonnegative. Bare nonzero numeric date durations
+are rejected; include a unit. PostgreSQL `EXTRACT(EPOCH FROM interval)` supplies
+the duration, so months use its fixed 30-day conversion rather than calendar
+arithmetic. Each distinct interval string is parsed in one SQL query per scoring
+compiler and reused across fields. Invalid strings raise a native database error.
+
+Origins accept dates, times, ISO8601 strings and epoch milliseconds, preserving
+fractional milliseconds. Compute relative origins in the application, for example
+`1.day.ago`; Elasticsearch date math strings raise `Tinkick::NotImplementedError`.
+Factors must be finite and nonnegative and have no Float32 cap. Negligible distant
+scores become zero to avoid PostgreSQL floating-point exponential underflow.
+Numeric columns also accept these functions with explicit numeric `origin` and
+`scale`. JSONB recency paths
 still require a date/numeric type contract; use a typed stored or generated
 column in the meantime.
 
