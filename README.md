@@ -811,7 +811,9 @@ Product.search("coffee", fields: ["name^20000", :description])
 Measure this path with `EXPLAIN (ANALYZE, BUFFERS)` on representative data: a
 large-weight query over the 268-document test corpus used a TIN scan followed by
 aggregation, a join, and a final sort, without native top-k. That small fixture
-plan is evidence of the query shape, not a production latency estimate.
+plan is evidence of the query shape, not a production latency estimate. The
+[native and SQL weight plans](docs/query-plans.md#native-and-sql-field-weights)
+include captured SQL/binds and a reproducible collector.
 
 `boost_by`, `boost_where`, `boost_by_recency`, `boost_by_distance`, `indices_boost`,
 and `conversions`/`conversions_v2` remain adapter work.

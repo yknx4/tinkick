@@ -235,6 +235,32 @@ visibility after an update. The collector requires this exact corpus size and
 uses a read-only transaction. Run it before another fixture class replaces the
 corpus. This is a deterministic regression stress test, not a load generator.
 
+## Native and SQL field weights
+
+The [field-weight capture](benchmarks/2026-09-17-field-weight-plans.json) compares
+`body^1` with `body^20000` over the same 268-document relevance corpus. Both
+searches returned document IDs 1001 and 1003; countless pagination requested a
+third row to detect the next page.
+
+| Field weight | Database execution ms | Observed plan |
+| --- | ---: | --- |
+| Native `body^1` | 0.421 | TIN Text Search Scan with Top K 3; no Sort |
+| SQL `body^20000` | 0.369 | TIN scans four matches, groups scores by primary key, joins records, then sorts and limits |
+
+These single warm executions demonstrate the loss of native top-k for the SQL
+weight. Four matching rows are too few to establish relative speed. The warning
+concerns growth with the matched set, not a claim that this fixture is slower.
+Neither capture includes client latency or a concurrency/load test.
+
+```sh
+direnv exec . bundle exec ruby -Itest test/relevance_test.rb --fail-fast
+direnv exec . bundle exec ruby script/explain_field_weights.rb
+```
+
+The [collector](../script/explain_field_weights.rb) checks `tinkick_test` and the
+268-row corpus, captures actual query binds and version metadata, and performs
+no writes or migrations. Run it before the stress test replaces the corpus.
+
 ## Reproduce
 
 Load the designated test fixtures through their normal tests, then run the
