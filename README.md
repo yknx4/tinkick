@@ -1135,9 +1135,24 @@ Native highlighting preserves document HTML. `encoder: "html"` escapes source
 text separately from trusted highlight tags; returned strings are not marked
 HTML-safe. Do not mark untrusted native output `html_safe`.
 
-Custom index analysis remains adapter work and raises an argument error instead of returning
-incorrect spans. Explicit native highlighting applies default analysis even when
-an index uses different analysis; merely passing the index's query is insufficient.
+Custom case/accent settings and whitespace tokenization are supported for word
+and partial-word highlights. Tinkick checks eligible tokens using the field's
+actual index analysis, verifies their source spans, and shares the normal tag,
+HTML encoding, snippet, and caching behavior. Each field retains its own policy:
+a case-preserving name field does not highlight lowercase variants merely because
+a case-folding description field matched.
+
+This path logs its extra page-text analysis work; costs grow with the page's text
+and eligible tokens. Exact custom highlighting needs only TIN. Fuzzy highlighting
+checks its SQL edit-distance helper or extension only when that feature is used;
+see [installation](#getting-started). Default-analysis fields keep
+the native highlighting path. Explicit native highlighting applies default
+analysis even when an index uses different analysis; merely passing the index's
+query is insufficient.
+
+Custom-analysis phrases and changed token-length/grapheme policies still require
+additional span mapping and currently raise an argument error. They are adapter
+work, not an unsupported-TIN claim.
 A model `highlight:` declaration is not yet accepted. See
 [TIN highlighting](https://planetscale.com/docs/postgres/search/highlighting).
 
