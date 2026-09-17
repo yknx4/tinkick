@@ -11,10 +11,16 @@ module Tinkick
     private
 
     def configuration: (Hash[String, String] analysis) -> Hash[String, String]
-    def analyze_many: (Array[String?] texts, Hash[String, String] analysis, ?check_long: bool) -> Array[Array[String]]
+    def analyze_many: (Array[String?] texts, Hash[String, String] analysis) -> Array[Array[String]]
+    def analysis_rows: (Array[String?] texts, Hash[String, String] analysis, ?check_long: bool) -> Array[Array[Array[String]]]
     def tokenizer_options: (Hash[String, String] analysis) -> String
     def subdivide_spans: (Array[[ candidate, Array[String] ]] mixed, Hash[String, String] analysis, Array[Array[span]] spans) -> void
     def whitespace_spans: (Array[String?] texts, Array[String] tokens, Hash[String, String] analysis, Array[Array[String]] page_tokens, Array[Array[span]] spans) -> void
+    def source_runs: (Array[String?] texts) -> Array[candidate]
+    def policy_spans: (Array[String?] texts, Array[String] tokens, Hash[String, String] analysis, Array[Array[String]] page_tokens, Array[Array[span]] spans) -> void
+    def cumulative_lengths: (Array[String] parts) -> Array[Integer]
+    def prefix_counts: (Array[[ candidate, Array[String] ]] groups, Array[Array[Integer]] boundaries, Hash[String, String] analysis) -> Array[Array[[ Integer, Integer ]]]
+    def policy_token_spans: (Array[String] words, Array[Integer] boundaries, Array[Integer] normalized_boundaries, String surface, Array[[ Integer, Integer ]] prefixes) -> Array[span]
     def native_candidates: (Array[String?] texts, Array[String] tokens) -> Array[candidate]
     def marked_spans: (String marked, String opening, String closing) -> Array[[ Integer, Integer, String ]]
     def merge_spans: (Array[span] spans) -> Array[span]

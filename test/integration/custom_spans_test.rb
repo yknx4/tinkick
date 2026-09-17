@@ -126,23 +126,15 @@ class CustomSpansTest < Minitest::Test
     end
   end
 
-  def test_custom_split_and_truncate_wait_for_precise_long_token_mapping
+  def test_custom_split_and_truncate_map_stored_prefixes_precisely
     ["split", "truncate"].each do |policy|
-      error = assert_raises(ArgumentError) do
-        locate(["abcdefghij"], ["abcd"], tokenizer: "whitespace", max_token_bytes: "4", long_tokens: policy)
-      end
-
-      assert_match(/source.span|mapping/i, error.message)
-      refute_match(/not supported by TIN/i, error.message)
+      assert_equal [[[0, 4]]], locate(["abcdefghij"], ["abcd"], tokenizer: "whitespace",
+        max_token_bytes: "4", long_tokens: policy)
     end
   end
 
   def test_default_split_policy_does_not_mark_an_entire_long_source_token
-    error = assert_raises(ArgumentError) do
-      locate(["a" * 300], ["a" * 256], case_folding: "preserve")
-    end
-
-    assert_match(/source.span|mapping/i, error.message)
+    assert_equal [[[0, 256]]], locate(["a" * 300], ["a" * 256], case_folding: "preserve")
   end
 
   def test_candidate_and_verification_work_is_batched_and_uses_only_page_text
