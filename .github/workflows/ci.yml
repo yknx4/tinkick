@@ -19,10 +19,16 @@ jobs:
       fail-fast: true
       max-parallel: 1
       matrix:
-        ruby: ["4.0"]
-        rails: ["~> 8.0.0", "~> 8.1.0"]
+        include:
+          - ruby: "4.0"
+            rails: "~> 8.0.0"
+            json: "< 3"
+          - ruby: "4.0"
+            rails: "~> 8.1.0"
+            json: ">= 3"
     env:
       RAILS_VERSION: ${{ matrix.rails }}
+      JSON_VERSION: ${{ matrix.json }}
       PGHOST: ${{ secrets.PGHOST }}
       PGPORT: ${{ secrets.PGPORT || '5432' }}
       PGUSER: ${{ secrets.PGUSER }}
