@@ -64,6 +64,7 @@ Run commands through the project environment:
 
 ```sh
 direnv exec . bundle install
+direnv exec . bundle exec rbs collection install
 direnv exec . bundle exec rubocop -A Gemfile tinkick.gemspec Rakefile Steepfile lib test
 direnv exec . bundle exec rake rbs:format rbs:quality
 direnv exec . bundle exec rake
@@ -76,8 +77,10 @@ is generated locally and ignored so the library's dependency ranges can be
 tested across Rails versions.
 
 CI runs the equivalent Bundler commands directly because it has no local
-`.envrc` or secrets. Real TIN behavior will need a dedicated test database and
-its own integration gate; passing this scaffold's checks proves no search parity.
+`.envrc`. The real-TIN integration harness uses the dedicated `tinkick_test`
+database and fixture transactions. See [development and verification](docs/development.md)
+for CI secrets, database isolation, and the distinction between harness checks
+and Searchkick compatibility coverage.
 
 ## License
 

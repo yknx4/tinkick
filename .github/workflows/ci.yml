@@ -7,22 +7,34 @@ on:
 permissions:
   contents: read
 
+# All integration jobs share the dedicated test database.
+concurrency:
+  group: tinkick-test-database
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
+      max-parallel: 1
       matrix:
         ruby: ["4.0"]
         rails: ["~> 8.0.0", "~> 8.1.0"]
     env:
       RAILS_VERSION: ${{ matrix.rails }}
+      PGHOST: ${{ secrets.PGHOST }}
+      PGPORT: ${{ secrets.PGPORT || '5432' }}
+      PGUSER: ${{ secrets.PGUSER }}
+      PGPASSWORD: ${{ secrets.PGPASSWORD }}
+      PGSSLMODE: ${{ secrets.PGSSLMODE || 'require' }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ruby/setup-ruby@984c0c890880bbf811283d6f09c4607c62d210a4 # v1
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+      - run: bundle exec rbs collection install
       - run: bundle exec rake rbs:format
       - run: git diff --exit-code -- sig
       - run: bundle exec rake
