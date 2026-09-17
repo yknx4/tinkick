@@ -83,8 +83,10 @@ module Tinkick
       @tinkick_options || (superclass.respond_to?(:tinkick_options) ? superclass.public_send(:tinkick_options) : nil)
     end
 
-    def tinkick_search(term = "*", fields: nil, misspellings: true, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: nil, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, exclude: nil, select: nil, highlight: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil)
+    def tinkick_search(term = "*", fields: nil, misspellings: true, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: nil, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, exclude: nil, select: nil, highlight: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil, conversions_v1: Relation::NO_DEFAULT_VALUE)
       # @type self: singleton(ActiveRecord::Base)
+      # @type var conversions_v1: conversion_fields | Relation::DefaultValue
+      conversions = conversions_v1 unless conversions_v1.is_a?(Relation::DefaultValue)
       options = tinkick_options
       raise Error, "Declare tinkick on #{name} before calling tinkick_search" unless options
       raise Error, "search must be called on model, not relation" if current_scope
@@ -103,7 +105,7 @@ module Tinkick
         where: where, order: order, limit: limit, offset: offset, page: page,
         per_page: per_page, padding: padding, match: match,
         operator: operator, load: load, total_entries: total_entries,
-        countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results, exclude: exclude, select: select, highlight: highlight, boost_by: boost_by, boost_where: boost_where, boost: boost, boost_by_recency: boost_by_recency)
+        countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results, exclude: exclude, select: select, highlight: highlight, boost_by: boost_by, boost_where: boost_where, boost: boost, boost_by_recency: boost_by_recency, conversions: conversions, conversions_v2: conversions_v2, conversions_term: conversions_term)
     end
 
     def tinkick_expand_fields(fields, match:)

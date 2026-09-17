@@ -7,18 +7,20 @@ require_relative "keyset"
 require_relative "search_field"
 require_relative "aggregations"
 require_relative "boost_by"
+require_relative "conversion_scores"
 require "active_support/notifications"
 
 module Tinkick
   class Query
     attr_reader :model, :limit, :after, :took
 
-    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil)
+    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
       @boost_by = BoostBy.new(model, boost_by, boost_where: boost_where, boost: boost, boost_by_recency: boost_by_recency)
       @term = term.to_s
+      @conversions = normalize_conversions(conversions, conversions_v2, conversions_term)
       @fields = model.tinkick_expand_fields(fields, match: match).map do |field|
         if field.is_a?(Hash)
           raise ArgumentError, "Each field hash must contain one field and match mode" unless field.length == 1
@@ -194,6 +196,46 @@ module Tinkick
     end
 
     private
+
+    def normalize_conversions(legacy, modern, term)
+      return [] if @term == "*"
+
+      declaration = @model.tinkick_options
+      legacy_fields = declaration ? declaration[:conversions] : [] #: Array[String]
+      modern_fields = declaration ? declaration[:conversions_v2] : [] #: Array[String]
+      case_sensitive = declaration && declaration[:case_sensitive] == true
+      term = (term || @term).to_s
+
+      fields = legacy.nil? ? legacy_fields : (legacy ? Array(legacy) : []) #: Array[String | Symbol]
+      unless fields.all? { |field| field.is_a?(String) || field.is_a?(Symbol) }
+        raise ArgumentError, "conversions must name JSONB columns with a string, symbol, or array; false disables it"
+      end
+      scores = [ConversionScores.new(@model, fields: fields.map(&:to_s).uniq, term: term, case_sensitive: !!case_sensitive)]
+      modern = legacy_fields.empty? if modern.nil?
+      return scores if modern == false
+
+      options = case modern
+      when true then {}
+      when String, Symbol then { field: modern }
+      when Hash then modern
+      else raise ArgumentError, "conversions_v2 must be true, false, a field name, or an options hash"
+      end #: conversion_options
+      unknown = options.keys - [:field, :term, :factor]
+      raise ArgumentError, "Unknown conversions_v2 options: #{unknown.join(', ')}" unless unknown.empty?
+
+      field = options[:field]
+      selected = if field.nil? || field == true
+        modern_fields
+      elsif field.is_a?(String) || field.is_a?(Symbol)
+        [field.to_s]
+      else
+        raise ArgumentError, "conversions_v2 field must be a column name, true, or nil"
+      end
+      selected_term = (options[:term] || term).to_s
+
+      scores << ConversionScores.new(@model, fields: selected, term: selected_term,
+        factor: options[:factor] || 1, case_sensitive: !!case_sensitive)
+    end
 
     def measure_page
       instrument(:search) do
@@ -502,7 +544,8 @@ module Tinkick
     end
 
     def score_sql
-      @boost_by.score_sql(@scoring)
+      score = @conversions.reduce(@scoring) { |base, conversions| conversions.score_sql(base) }
+      @boost_by.score_sql(score)
     end
 
     def validate_column(field)

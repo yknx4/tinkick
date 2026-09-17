@@ -9,12 +9,19 @@ module Tinkick
 
   type query_order = String | Symbol | Hash[String | Symbol, String | Symbol] | Array[query_order]
 
+  type conversion_term = String | Symbol | Integer | Float | bool | nil
+
+  type conversion_options = { ?field: String | Symbol | true | nil, ?term: conversion_term, ?factor: conversion_factor | false | nil }
+
+  type conversion_v2 = bool | String | Symbol | conversion_options | nil
+
   class Query
     @model: singleton(ActiveRecord::Base)
     @term: String
     @fields: Array[[ String, Symbol, Float? ]]
     @weighted_scoring: bool
     @boost_by: BoostBy
+    @conversions: Array[ConversionScores]
     @where: filter_conditions
     @aggregation_spec: aggregation_spec?
     @smart_aggs: bool
@@ -46,7 +53,7 @@ module Tinkick
     attr_reader after: String?
     attr_reader took: Integer?
 
-    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: search_fields, ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String | nil, ?operator: String | Symbol, ?match: Symbol, ?misspellings: QueryText::misspellings, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?exclude: exclusion_phrases, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost, ?boost_by_recency: recency_boost_spec) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: search_fields, ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String | nil, ?operator: String | Symbol, ?match: Symbol, ?misspellings: QueryText::misspellings, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?exclude: exclusion_phrases, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost, ?boost_by_recency: recency_boost_spec, ?conversions: conversion_fields, ?conversions_v2: conversion_v2, ?conversions_term: conversion_term) -> void
 
     def records: () -> Array[ActiveRecord::Base]
 
@@ -70,6 +77,8 @@ module Tinkick
     def next_cursor: () -> String?
 
     private
+
+    def normalize_conversions: (conversion_fields legacy, conversion_v2 modern, conversion_term term) -> Array[ConversionScores]
 
     def measure_page: [T] () { () -> T } -> T
     def instrument: [T] (:search | :count | :aggregations operation) { () -> T } -> T
