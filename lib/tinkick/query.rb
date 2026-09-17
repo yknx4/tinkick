@@ -2,6 +2,7 @@
 
 require_relative "filter"
 require_relative "query_text"
+require_relative "text_match"
 require_relative "keyset"
 
 module Tinkick
@@ -100,7 +101,8 @@ module Tinkick
         @fields.each do |field, mode|
           column = @model.columns_hash[field]
           validate_column(field)
-          text_types = mode == :exact ? [:text, :citext, :string] : [:text, :citext]
+          sql_match = [:exact, :text_start, :text_middle, :text_end].include?(mode)
+          text_types = sql_match ? [:text, :citext, :string] : [:text, :citext]
           array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
           unless column && !array && text_types.include?(column.type)
             raise InvalidQueryError, "#{@model.name}.#{field} must be a text or citext column with a TIN index"
@@ -116,6 +118,8 @@ module Tinkick
         @fields.each do |field, mode|
           if mode == :exact
             exact << ["#{quoted_column(field)}::text COLLATE \"C\" = ?", [@term]]
+          elsif [:text_start, :text_middle, :text_end].include?(mode)
+            exact << TextMatch.new(@model).predicate(quoted_column(field), @term, match: mode, misspellings: @misspellings)
           else
             compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: @misspellings)
             native << ["#{quoted_column(field)} ==> ?", [compiled]] unless compiled.empty?

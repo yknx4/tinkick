@@ -128,12 +128,13 @@ module Tinkick
         unless column
           raise MissingFieldError, "#{name} has no column #{field.inspect}; add a persisted or generated column with a Rails migration"
         end
-        text_types = mode == :exact ? [:text, :citext, :string] : [:text, :citext]
+        sql_match = [:exact, :text_start, :text_middle, :text_end].include?(mode)
+        text_types = sql_match ? [:text, :citext, :string] : [:text, :citext]
         array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
         unless !array && text_types.include?(column.type)
           raise InvalidQueryError, "#{name}.#{field} must be a text or citext column with a TIN index"
         end
-        unless mode == :exact || schema[:index_fields].include?(field)
+        unless sql_match || schema[:index_fields].include?(field)
           raise Error, "#{name}.#{field} requires a valid, nonpartial TIN index on the column; add a Rails migration with add_index #{table_name.inspect}, #{field.inspect}, using: :tin"
         end
       end
