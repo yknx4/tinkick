@@ -2,6 +2,7 @@
 
 require "json"
 require_relative "regex_pattern"
+require_relative "raw_regex"
 
 module Tinkick
   class Filter
@@ -117,7 +118,7 @@ module Tinkick
           end
           missing = json_equality(column, path, nil)
           [operand ? negate(missing) : missing]
-        when :like, :ilike, :prefix
+        when :like, :ilike, :prefix, :regexp
           [json_text_predicate(column, path, operator, operand)]
         when :gt, :gte, :lt, :lte
           comparison = { gt: ">", gte: ">=", lt: "<", lte: "<=" }.fetch(operator)
@@ -215,7 +216,7 @@ module Tinkick
             operand.map { |entry| equality(column, entry, array_type: array_type, enum_values: enum_values) }
           when :exists
             [existence(column, operand, array_type: array_type, enum_values: enum_values)]
-          when :like, :ilike, :prefix
+          when :like, :ilike, :prefix, :regexp
             [element_predicate(column, text_predicate(element, operator, operand, enum_values: enum_values), array_type)]
           when :not, :_not
             [negate(equality(column, operand, array_type: array_type, enum_values: enum_values))]
@@ -289,6 +290,7 @@ module Tinkick
         return ["(#{column})::text COLLATE \"C\" ~ ?", [RegexPattern.new(value).compile]]
       end
       raise TypeError, "#{operator} requires a string" unless value.is_a?(String)
+      return RawRegex.new(@model).predicate(column, value) if operator == :regexp
 
       if operator == :prefix
         ["#{column} ^@ ?", [value]]
