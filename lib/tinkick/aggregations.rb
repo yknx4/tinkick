@@ -105,9 +105,11 @@ module Tinkick
       raise ArgumentError, "Date histogram keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
       formatter = AggregationDate.new(time_zone: options[:time_zone])
       offset = formatter.fixed_offset
-      raise ArgumentError, "date_histogram time_zone currently requires UTC or a fixed offset" if offset.nil?
+      if offset.nil? && !["day", "week", "month", "quarter", "year"].include?(unit)
+        raise ArgumentError, "IANA time_zone currently requires a day, week, month, quarter, or year calendar_interval"
+      end
 
-      shift = "#{offset} seconds"
+      shift = "#{offset || 0} seconds"
 
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
       values = values_relation(scope, field)
@@ -116,7 +118,9 @@ module Tinkick
         raise InvalidQueryError, "date_histogram requires a date or datetime aggregation column"
       end
       value = column.sql_type.include?("with time zone") ? "_tinkick_value AT TIME ZONE 'UTC'" : "_tinkick_value::timestamp"
-      rounding = if unit
+      rounding = if offset.nil?
+        Arel.sql("date_trunc(?, (#{value}) AT TIME ZONE 'UTC' AT TIME ZONE ?) AS _tinkick_date, _tinkick_document_id", unit, options[:time_zone].to_s)
+      elsif unit
         Arel.sql("date_trunc(?, (#{value}) + ?::interval) AS _tinkick_date, _tinkick_document_id", unit, shift)
       else
         Arel.sql("date_bin(?::interval, (#{value}) + ?::interval, TIMESTAMP '1970-01-01') AS _tinkick_date, _tinkick_document_id", step, shift)
@@ -146,7 +150,15 @@ module Tinkick
       rows = @model.with_connection { |connection| connection.select_all(query).to_a }
       buckets = rows.map do |row|
         key = row.fetch("_tinkick_key")
+        key = formatter.midnight_key(key) if offset.nil?
         { "key" => key, "key_as_string" => formatter.format(key.to_f), "doc_count" => row.fetch("_tinkick_count") }
+      end
+      if offset.nil?
+        # A skipped local date can generate an empty bucket with the next day's
+        # UTC key. Keep the populated bucket and preserve the SQL count ordering.
+        populated = buckets.reject { |bucket| bucket.fetch("doc_count").zero? }.to_h { |bucket| [bucket.fetch("key"), true] }
+        buckets = buckets.reject { |bucket| bucket.fetch("doc_count").zero? && populated.key?(bucket.fetch("key")) }
+          .uniq { |bucket| bucket.fetch("key") }
       end
       # @type var result: aggregation_date_histogram
       result = { "buckets" => options[:keyed] ? buckets.to_h { |bucket| [bucket.fetch("key_as_string"), bucket] } : buckets }

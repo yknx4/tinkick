@@ -15,6 +15,7 @@ module Tinkick
 
     def initialize: (?format: String?, ?time_zone: String | Integer | Float | nil, ?now: Time) -> void
     def fixed_offset: () -> Integer?
+    def midnight_key: (Integer local_milliseconds) -> Integer
     def parse: (aggregation_range_bound value) -> Float?
     def format: (Float value) -> String
 

@@ -59,6 +59,24 @@ module Tinkick
       @offset unless @zone
     end
 
+    def midnight_key(local_milliseconds)
+      zone = @zone
+      return local_milliseconds - @offset * 1_000 unless zone
+
+      local = Time.at(Rational(local_milliseconds, 1_000)).utc
+      timezone = zone.tzinfo #: TZInfo::Timezone
+      period = timezone.periods_for_local(local).max_by(&:observed_utc_offset)
+      return local_milliseconds - period.observed_utc_offset * 1_000 if period
+
+      # Rails advances across a gap; the resulting period starts at its first
+      # valid instant, even when the gap is shorter than an hour or a whole day.
+      shifted = zone.local(local.year, local.month, local.day)
+      transition = timezone.period_for_utc(shifted.utc).start_transition
+      raise ArgumentError, "Cannot resolve calendar midnight in #{timezone.identifier}" unless transition
+
+      transition.timestamp_value * 1_000
+    end
+
     def parse(value)
       return if value.nil?
       if value.is_a?(Numeric)
