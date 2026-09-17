@@ -5,6 +5,8 @@ require_relative "query_text"
 
 module Tinkick
   class Query
+    attr_reader :model, :limit
+
     def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: 0, operator: "and", match: :word, misspellings: false)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
@@ -23,6 +25,10 @@ module Tinkick
 
     def records
       @records ||= record_scope.to_a
+    end
+
+    def rows
+      @rows ||= @model.with_connection { |connection| connection.select_all(record_scope).to_a }
     end
 
     def total_count

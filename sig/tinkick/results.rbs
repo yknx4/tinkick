@@ -1,0 +1,57 @@
+module Tinkick
+  type result_record = ActiveRecord::Base | HashWrapper
+
+  class Results
+    include Enumerable[result_record]
+    extend Forwardable
+
+    @query: Query
+    @total_entries: Integer?
+    @load: bool
+    @results: Array[result_record]?
+    @record_pairs: Array[[ result_record, Float ]]?
+
+    attr_reader current_page: Integer
+    attr_reader padding: Integer
+
+    def initialize: (Query query, ?page: Integer, ?padding: Integer, ?total_entries: Integer?, ?load: bool) -> void
+
+    def each: () -> Enumerator[result_record, Array[result_record]]
+            | () { (result_record) -> void } -> Array[result_record]
+
+    def any?: () -> bool
+            | (Object pattern) -> bool
+            | () { (result_record) -> boolish } -> bool
+
+    def empty?: () -> bool
+    def size: () -> Integer
+    alias length size
+    def []: (Integer index) -> result_record?
+          | (Integer start, Integer length) -> Array[result_record]?
+          | (Range[Integer?] range) -> Array[result_record]?
+    alias slice []
+    def to_ary: () -> Array[result_record]
+    def total_count: () -> Integer
+    alias total_entries total_count
+    def per_page: () -> Integer
+    alias limit_value per_page
+    def total_pages: () -> Integer
+    alias num_pages total_pages
+    def offset_value: () -> Integer
+    alias offset offset_value
+    def previous_page: () -> Integer?
+    alias prev_page previous_page
+    def next_page: () -> Integer?
+    def first_page?: () -> bool
+    def last_page?: () -> bool
+    def out_of_range?: () -> bool
+    def with_score: () -> Enumerator[[ result_record, Float ], Array[[ result_record, Float ]]]
+                  | () { (result_record, Float) -> void } -> Array[[ result_record, Float ]]
+
+    private
+
+    def results: () -> Array[result_record]
+
+    def record_pairs: () -> Array[[ result_record, Float ]]
+  end
+end
