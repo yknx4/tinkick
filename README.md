@@ -855,10 +855,22 @@ Product.search("apple", where: { store_id: store.id })
 ```
 
 `store.products.search(...)` and `Product.where(...).search(...)` are rejected.
-`includes`, `model_includes`, and `scope_results` are not implemented on Tinkick
-relations. For eager loading, construct a bounded ActiveRecord search scope and
-use its normal association loading; do not preload every matching row merely to
-paginate it.
+`includes` and `model_includes` preload real ActiveRecord associations only for
+the visible model results. Nested associations are supported. The extra probe
+row used by countless/keyset pagination is not preloaded.
+
+```ruby
+Product.search("coffee", includes: [:store, {reviews: :author}], limit: 20)
+Product.search("coffee").includes(:store).includes(reviews: :author)
+Product.search("coffee", model_includes: {Product => [:store]})
+```
+
+`.includes` appends associations; `.model_includes` merges per-model mappings.
+Their bang forms mutate only an unloaded relation. `model_includes` entries for
+other model classes are ignored by a single-model search. Generic and applicable
+model-specific associations are combined. `load: false`, count-only access, and
+empty result pages do not preload associations. `scope_results` remains adapter
+implementation work.
 
 ### Multiple models and multi-search
 
@@ -1145,7 +1157,8 @@ remote CI run has completed.
 The current model declaration accepts `searchable`, `default_fields`, `match`, and `stem: false`.
 The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
 `per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
-`countless`, `keyset`, and `after`. Use the detailed sections above for their limits.
+`countless`, `keyset`, `after`, `aggs`, `smart_aggs`, `includes`, and
+`model_includes`. Use the detailed sections above for their limits.
 Unknown keywords or methods are not compatibility no-ops.
 Features proven unsupported by TIN raise `Tinkick::NotImplementedError` with an
 explanation naming the backend limitation. Unfinished Tinkick adapters must not
@@ -1172,7 +1185,8 @@ The following reference maps less common upstream options to their current statu
 | Import batch size, resume, partial/bulk reindex | Excluded document import API; update real data with application jobs/migrations. |
 | Routing, request parameters, opaque IDs | Excluded transport API; use SQL filters, database routing, and Rails instrumentation. |
 | `timeout`, `search_timeout`, `client_options` | Not implemented; configure database timeouts/pooling. |
-| `includes`, `model_includes`, `scope_results` | Compatible result-loading adapters not implemented. |
+| `includes`, `model_includes` | Available; preload only visible model results. |
+| `scope_results` | Result-loading callback adapter remains implementation work. |
 | `select`, source filtering, `reselect`, `only`, `except` | Not implemented; use an explicit SQL projection recipe. |
 | `body`, `body_options`, query-mutating blocks | Excluded Elasticsearch DSL; use reviewed native SQL. |
 | `search_index`/`searchkick_index` inspection | Not implemented; use PostgreSQL catalogs and TIN helpers. |
