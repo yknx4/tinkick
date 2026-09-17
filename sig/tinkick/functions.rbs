@@ -1,7 +1,0 @@
-module Tinkick
-  module Functions
-    def self.require!: (singleton(ActiveRecord::Base) model) -> String
-
-    def self.require_edit_distance!: (singleton(ActiveRecord::Base) model) -> String
-  end
-end
