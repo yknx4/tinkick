@@ -318,9 +318,6 @@ module Tinkick
       if @fields.length > 1 && score != "1.0" && !@mixed_matching
         @model.logger&.warn("Tinkick: ranking across multiple fields uses full scoring to preserve matching rows and can sort matches instead of using TIN's native top-k path. Consider a stored or generated combined text column with one TIN index when ranking performance matters.")
       end
-      if (keyset? || !@order.nil?) && score != "1.0"
-        @model.logger&.warn("Tinkick: lexical search with column order can sort matching rows instead of using TIN's relevance top-k path. Use stable indexed columns for keyset pagination and check the query plan for your workload.")
-      end
       order = @order
       ordering = if keyset?
         after = @after
@@ -329,26 +326,36 @@ module Tinkick
       else
         order.nil? ? ["_tinkick_score DESC"] : order_clauses(order)
       end
+      if ordering != ["_tinkick_score DESC"] && score != "1.0"
+        @model.logger&.warn("Tinkick: lexical search with column order or ascending relevance can sort matching rows instead of using TIN's relevance top-k path. Use stable indexed columns for keyset pagination and check the query plan for your workload.")
+      end
 
       relation.reselect(Arel.sql("#{quoted_table}.*"), Arel.sql("#{score} AS _tinkick_score"))
         .reorder(Arel.sql(ordering.join(", ")))
         .limit(countless? ? @limit + 1 : @limit).offset(@offset.zero? ? nil : @offset)
     end
 
-    def order_clauses(value)
+    def order_clauses(value, array: false)
       case value
       when Array
-        value.flat_map { |entry| order_clauses(entry) }
+        value.flat_map { |entry| order_clauses(entry, array: true) }
       when Hash
         value.map do |field, direction|
           direction = direction.to_s.downcase
           raise ArgumentError, "order direction must be asc or desc" unless ["asc", "desc"].include?(direction)
 
-          "#{quoted_column(field.to_s)} #{direction.upcase}"
+          "#{order_expression(field.to_s)} #{direction.upcase}"
         end
       else
-        ["#{quoted_column(value.to_s)} ASC"]
+        # Searchkick turns a scalar order into an explicit ascending sort;
+        # bare _score entries in sort arrays inherit Elasticsearch's descending default.
+        direction = array && value.to_s == "_score" ? "DESC" : "ASC"
+        ["#{order_expression(value.to_s)} #{direction}"]
       end
+    end
+
+    def order_expression(field)
+      field == "_score" ? "_tinkick_score" : quoted_column(field)
     end
 
     def score_sql

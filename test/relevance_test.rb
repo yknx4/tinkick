@@ -86,6 +86,69 @@ class RelevanceTest < ActionDispatch::IntegrationTest
     assert_empty search("astrolbae")
   end
 
+  def test_explicit_descending_score_order_keeps_countless_top_k
+    output = StringIO.new
+    previous_logger = SearchDocument.logger
+    SearchDocument.logger = Logger.new(output)
+    statements = []
+    callback = ->(*arguments) { statements << arguments.last if arguments.last[:name] == "SearchDocument Load" }
+    page = search("mithril lantern", order: { _score: :desc }, limit: 2, countless: true)
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      assert_equal [:frequency_high, :length_short].map { |key| document(key).id }.sort, page.map(&:id).sort
+      assert page.has_next_page?
+    end
+    statement = statements.find { |value| value[:sql].include?("_tinkick_score") }
+    refute_nil statement
+    plan = SearchDocument.connection.select_value(
+      "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}", "Tinkick Score Order Explain", statement.fetch(:binds)
+    )
+    assert_includes plan, '"Top K": "3"'
+    refute_match(/"Node Type": "Sort"/, plan)
+    refute_includes output.string, "column order"
+  ensure
+    SearchDocument.logger = previous_logger
+  end
+
+  def test_array_score_sort_defaults_to_descending_but_scalar_sort_to_ascending
+    descending = search("mithril lantern", order: [:_score]).with_score.to_a
+    ascending = search("mithril lantern", order: :_score).with_score.to_a
+    assert_equal 4, descending.length
+    assert_equal descending.map { |record, _score| record.id }.sort, ascending.map { |record, _score| record.id }.sort
+    assert_equal descending.map(&:last).sort.reverse, descending.map(&:last)
+    assert_equal ascending.map(&:last).sort, ascending.map(&:last)
+    assert_equal document(:length_long).id, ascending.first.first.id
+  end
+
+  def test_score_can_be_combined_with_column_tiebreakers
+    original = document(:frequency_high)
+    SearchDocument.create!(title: original.title, body: original.body, category: original.category)
+    pairs = search("mithril lantern", order: [{ _score: :desc }, { id: :desc }]).with_score.to_a
+    expected = pairs.sort_by { |record, score| [-score, -record.id] }
+    assert_equal 5, pairs.length
+    assert_equal expected.map { |record, _score| record.id }, pairs.map { |record, _score| record.id }
+  end
+
+  def test_score_order_does_not_make_score_cursors_stable
+    error = assert_raises(Tinkick::InvalidQueryError) do
+      search("mithril lantern", order: { _score: :desc }, keyset: true, limit: 2).to_a
+    end
+    assert_match(/column/, error.message)
+  end
+
+  def test_ascending_and_compound_relevance_order_warn_about_sort_cost
+    output = StringIO.new
+    previous_logger = SearchDocument.logger
+    SearchDocument.logger = Logger.new(output)
+    search("mithril lantern", order: { _score: :asc }).to_a
+    assert_includes output.string, "sort matching rows"
+    output.truncate(0)
+    output.rewind
+    search("mithril lantern", order: [{ _score: :desc }, :id]).to_a
+    assert_includes output.string, "sort matching rows"
+  ensure
+    SearchDocument.logger = previous_logger
+  end
+
   private
 
   def document(key)

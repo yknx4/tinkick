@@ -78,7 +78,9 @@ module Tinkick
 
     def record_scope: () -> ActiveRecord::Relation
 
-    def order_clauses: (query_order value) -> Array[String]
+    def order_clauses: (query_order value, ?array: bool) -> Array[String]
+
+    def order_expression: (String field) -> String
 
     def score_sql: () -> String
 
