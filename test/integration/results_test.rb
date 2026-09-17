@@ -118,7 +118,7 @@ class ResultsTest < TinkickIntegrationTest
     assert_instance_of Enumerator, search.with_score
     pairs = search.with_score.to_a
     assert_equal ["Red Apple"], pairs.map { |record, _score| record.name }
-    assert pairs.all? { |_record, score| score.is_a?(Float) && score.positive? }
+    assert pairs.all? { |_record, score| score.is_a?(Float) && score >= 0 }
 
     yielded = []
     search.with_score { |record, score| yielded << [record, score] }
@@ -158,7 +158,7 @@ class ResultsTest < TinkickIntegrationTest
     search = Tinkick::Results.new(query, load: false)
 
     assert_equal ["Red Apple"], search.map(&:name)
-    assert_operator search.with_score.first.last, :>, 0
+    assert_operator search.with_score.first.last, :>=, 0
     assert_equal 1, search.total_count
   end
 

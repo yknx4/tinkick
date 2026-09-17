@@ -39,25 +39,29 @@ class QueryTest < TinkickIntegrationTest
     assert_equal(1, search.total_count)
   end
 
-  def test_full_scoring_ranks_common_terms
+  def test_uses_native_scoring_for_common_terms
     tinkick_test_products(:red_apple).update!(name: "Apple apple")
     tinkick_test_products(:green_pear).update!(name: "Apple pear")
-    records = query("apple").records
+    records = nil
+    statements = capture_queries { records = query("apple").records }
 
-    assert_equal(["Apple apple", "Apple pear"], records.map(&:name))
-    assert_operator(records.first["_tinkick_score"], :>, records.last["_tinkick_score"])
-    assert_operator(records.last["_tinkick_score"], :>, 0)
+    assert_equal(["Apple apple", "Apple pear"], records.map(&:name).sort)
+    scores = records.map { |record| record["_tinkick_score"] }
+    assert_equal(scores.sort.reverse, scores)
+    assert(scores.all? { |score| score >= 0 })
+    assert(statements.any? { |entry| entry[:sql].include?("tin.score(") })
+    refute(statements.any? { |entry| entry[:sql].include?("tin.full_score(") })
     refute(records.first.attributes.key?("ctid"))
   end
 
-  def test_score_ties_use_the_primary_key_for_stable_pages
+  def test_explicit_order_can_stabilize_tied_pages
     tinkick_test_products(:red_apple).update!(name: "Apple")
     tinkick_test_products(:green_pear).update!(name: "Apple")
     expected = SearchProduct.order(:id).ids
 
-    assert_equal(expected, query("apple").records.map(&:id))
-    assert_equal([expected.first], query("apple", limit: 1).records.map(&:id))
-    assert_equal([expected.last], query("apple", limit: 1, offset: 1).records.map(&:id))
+    assert_equal(expected, query("apple", order: :id).records.map(&:id))
+    assert_equal([expected.first], query("apple", order: :id, limit: 1).records.map(&:id))
+    assert_equal([expected.last], query("apple", order: :id, limit: 1, offset: 1).records.map(&:id))
   end
 
   def test_match_all_uses_sql_without_tin_scoring
@@ -68,6 +72,7 @@ class QueryTest < TinkickIntegrationTest
     end
 
     refute(statements.any? { |statement| statement[:sql].include?("tin.full_score") })
+    refute(statements.any? { |statement| statement[:sql].include?("tin.score") })
     refute(statements.any? { |statement| statement[:sql].include?("tin.tokenize") })
     assert_equal([1.0, 1.0], search.records.map { |record| record["_tinkick_score"] })
   end
@@ -135,8 +140,11 @@ class QueryTest < TinkickIntegrationTest
     scans = nodes.select { |node| node["Custom Plan Provider"] == "Text Search Scan" }
 
     assert_equal(["index_tinkick_test_products_on_name"], scans.map { |node| node["Index"] })
+    assert_equal("1", scans.first["Top K"])
+    assert_equal("dense-term elision", scans.first["Scoring"])
     assert_equal("Limit", nodes.first["Node Type"])
-    assert_includes(statement[:sql], "tin.full_score")
+    assert_includes(statement[:sql], "tin.score")
+    refute(nodes.any? { |node| node["Node Type"] == "Sort" })
   end
 
   def test_invalid_fields_and_sort_identifiers_fail
@@ -145,6 +153,27 @@ class QueryTest < TinkickIntegrationTest
     assert_raises(Tinkick::InvalidQueryError) { query("apple", fields: [:id]).records }
     assert_raises(ArgumentError) { query("*", order: { name: "desc; SELECT 1" }).records }
     assert_raises(ArgumentError) { query("apple", fields: []).records }
+  end
+
+  def test_offset_pagination_warns_when_the_ranked_page_is_fetched
+    original_logger = SearchProduct.logger
+    output = StringIO.new
+    SearchProduct.logger = Logger.new(output)
+    search = query("apple", offset: 1)
+
+    search.total_count
+    refute_includes(output.string, "Tinkick:")
+    search.records
+    assert_includes(output.string, "offset pagination")
+    assert_includes(output.string, "top-k")
+
+    output.truncate(0)
+    output.rewind
+    search.records
+    query("apple").records
+    refute_includes(output.string, "Tinkick:")
+  ensure
+    SearchProduct.logger = original_logger
   end
 
   private

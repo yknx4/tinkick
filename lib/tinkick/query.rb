@@ -66,16 +66,17 @@ module Tinkick
       primary_key = @model.primary_key
       raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
 
-      # Full scoring retains common terms, like Searchkick BM25, at additional
-      # scoring cost compared with TIN's default dense-term elision.
-      score = @compiled_query == "*" || @compiled_query == "" ? "1.0" : "tin.full_score(#{quoted_table}.ctid)"
+      # Native scoring permits dense-term elision and the index's top-k path.
+      score = @compiled_query == "*" || @compiled_query == "" ? "1.0" : "tin.score(#{quoted_table}.ctid)"
+      if @offset.positive? && score != "1.0"
+        @model.logger&.warn("Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Large offsets may be slow.")
+      end
       order = @order
       ordering = order.nil? ? ["_tinkick_score DESC"] : order_clauses(order)
-      ordering << "#{quoted_column(primary_key)} ASC"
 
       relation.reselect(Arel.sql("#{quoted_table}.*"), Arel.sql("#{score} AS _tinkick_score"))
         .reorder(Arel.sql(ordering.join(", ")))
-        .limit(@limit).offset(@offset)
+        .limit(@limit).offset(@offset.zero? ? nil : @offset)
     end
 
     def order_clauses(value)
