@@ -52,7 +52,14 @@ module Tinkick
     end
 
     def column_reference(field)
-      parts = field.to_s.split(".", -1)
+      name = field.to_s
+      if name == "id"
+        primary_key = @model.primary_key
+        raise InvalidQueryError, "Filtering by id requires a single model primary key" unless primary_key.is_a?(String)
+
+        name = primary_key
+      end
+      parts = name.split(".", -1)
       name = parts.fetch(0, "")
       path = parts.drop(1)
       column = @model.columns_hash[name]
