@@ -973,11 +973,14 @@ do not produce duplicate buckets. PostgreSQL groups the records; Ruby converts
 only returned bucket boundaries, without extra queries or model loading.
 IANA subday calendar units and fixed intervals remain adapter work.
 
-Put `min_doc_count`, `order`, and `keyed` inside `date_histogram:`;
+Put `min_doc_count`, `order`, `keyed`, and `format` inside `date_histogram:`;
 only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
 avoid generating empty buckets. The default logs a warning for small intervals
-over wide date ranges. Bucket `offset`, bounds, custom
-formats, nested aggregations, and additional aggregate options remain adapter
+over wide date ranges. A custom `format`, such as `"yyyy/MM/dd"` or
+`"epoch_millis"`, controls `key_as_string` and keyed bucket names while numeric
+`key` remains UTC milliseconds. It uses the same supported patterns as date
+ranges, including format alternatives; the first format prints the label.
+Bucket `offset`, bounds, advanced formats, nested aggregations, and additional aggregate options remain adapter
 implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
 for scripted calculations. Check representative plans against TIN's
