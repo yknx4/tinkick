@@ -49,7 +49,16 @@ module Tinkick
     alias_method :prev_page, :previous_page
 
     def next_page
+      return has_next_page? ? current_page + 1 : nil if @query.countless?
+
       current_page < total_pages ? current_page + 1 : nil
+    end
+
+    def has_next_page?
+      return current_page < total_pages unless @query.countless?
+
+      results
+      @query.has_next_page?
     end
 
     def first_page?
@@ -57,10 +66,14 @@ module Tinkick
     end
 
     def last_page?
+      return !has_next_page? if @query.countless?
+
       next_page.nil?
     end
 
     def out_of_range?
+      return empty? if @query.countless?
+
       current_page > total_pages
     end
 

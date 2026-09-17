@@ -7,7 +7,7 @@ module Tinkick
   class Query
     attr_reader :model, :limit
 
-    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: 0, operator: "and", match: :word, misspellings: false)
+    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: 0, operator: "and", match: :word, misspellings: false, countless: false)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
@@ -20,15 +20,26 @@ module Tinkick
       @operator = operator.to_s
       @match = match
       @misspellings = misspellings
+      @countless = countless
       raise ArgumentError, "limit and offset must be nonnegative" if @limit.negative? || @offset.negative?
+      raise InvalidQueryError, "countless pagination requires a positive limit" if @countless && @limit.zero?
     end
 
     def records
-      @records ||= record_scope.to_a
+      @records ||= trim_page(record_scope.to_a)
     end
 
     def rows
-      @rows ||= @model.with_connection { |connection| connection.select_all(record_scope).to_a }
+      @rows ||= trim_page(@model.with_connection { |connection| connection.select_all(record_scope).to_a })
+    end
+
+    def countless?
+      @countless
+    end
+
+    def has_next_page?
+      records if @has_next_page.nil?
+      @has_next_page == true
     end
 
     def total_count
@@ -36,6 +47,11 @@ module Tinkick
     end
 
     private
+
+    def trim_page(values)
+      @has_next_page = countless? && values.length > @limit
+      countless? ? values.first(@limit) : values
+    end
 
     def scope
       @scope ||= @model.with_connection do |connection|
@@ -86,7 +102,7 @@ module Tinkick
 
       relation.reselect(Arel.sql("#{quoted_table}.*"), Arel.sql("#{score} AS _tinkick_score"))
         .reorder(Arel.sql(ordering.join(", ")))
-        .limit(@limit).offset(@offset.zero? ? nil : @offset)
+        .limit(countless? ? @limit + 1 : @limit).offset(@offset.zero? ? nil : @offset)
     end
 
     def order_clauses(value)

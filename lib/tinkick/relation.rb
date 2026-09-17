@@ -15,21 +15,31 @@ module Tinkick
     alias_method :klass, :model
     def_delegators :execute, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary,
       :total_count, :current_page, :limit_value, :total_pages, :num_pages, :offset_value,
-      :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score
+      :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score, :has_next_page?
 
-    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil)
+    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false)
       @model = model
       @term = term
       @options = {
         fields: fields, misspellings: misspellings, where: where, order: order,
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding,
-        match: match, operator: operator, load: load, total_entries: total_entries,
+        match: match, operator: operator, load: load, total_entries: total_entries, countless: countless,
       }
       query
     end
 
     def loaded?
       !@results.nil?
+    end
+
+    def countless(value = true)
+      clone.countless!(value)
+    end
+
+    def countless!(value = true)
+      check_loaded
+      @options[:countless] = value
+      self
     end
 
     # @type method load: (?(bool? | DefaultValue) value) -> Relation
@@ -221,6 +231,8 @@ module Tinkick
 
     # @type method first: (?(Integer | DefaultValue) value) -> (result_record? | Array[result_record])
     def first(value = NO_DEFAULT_VALUE)
+      return [] if value == 0
+
       single = value.is_a?(DefaultValue)
       requested = value.is_a?(DefaultValue) ? 1 : value
       records = if loaded?
@@ -263,7 +275,7 @@ module Tinkick
       @query ||= Query.new(@model, @term,
         fields: @options[:fields], where: @options[:where], order: @options[:order],
         limit: page_size, offset: (@options[:offset] || (page_number - 1) * page_size + page_padding).to_i,
-        match: @options[:match], operator: @options[:operator], misspellings: @options[:misspellings])
+        match: @options[:match], operator: @options[:operator], misspellings: @options[:misspellings], countless: @options[:countless])
     end
 
     def execute

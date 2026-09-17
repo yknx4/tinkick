@@ -42,6 +42,7 @@ module Tinkick
     def previous_page: () -> Integer?
     alias prev_page previous_page
     def next_page: () -> Integer?
+    def has_next_page?: () -> bool
     def first_page?: () -> bool
     def last_page?: () -> bool
     def out_of_range?: () -> bool
