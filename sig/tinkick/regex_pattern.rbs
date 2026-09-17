@@ -1,0 +1,29 @@
+module Tinkick
+  class RegexPattern
+    @characters: Array[String]
+    @position: Integer
+    @casefold: bool
+
+    def initialize: (Regexp value) -> void
+    def compile: () -> String
+
+    private
+
+    def union: () -> String
+    def sequence: () -> String
+    def repetition: () -> String
+    def atom: () -> String
+    def class_part: () -> String
+    def predefined: () -> String?
+    def character: () -> String
+    def literal: (String value) -> String
+    def codepoint: (String value) -> String
+    def integer: () -> Integer
+    def exact_repeat: (String expression, Integer count) -> String
+    def optional_repeat: (String expression, Integer count) -> String
+    def peek: () -> String?
+    def take: () -> String
+    def consume: (String value) -> bool
+    def expect: (String value) -> void
+  end
+end

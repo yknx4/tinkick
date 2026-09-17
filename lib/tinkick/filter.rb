@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require_relative "regex_pattern"
 
 module Tinkick
   class Filter
@@ -120,6 +121,8 @@ module Tinkick
     end
 
     def json_equality(column, path, value)
+      return json_text_predicate(column, path, :regexp, value) if value.is_a?(Regexp)
+
       if value.is_a?(Array)
         return ["FALSE", []] if value.empty?
 
@@ -183,6 +186,10 @@ module Tinkick
     end
 
     def equality(column, value, array_type: nil)
+      if value.is_a?(Regexp)
+        element = array_type ? "tinkick_filter_element.value" : column
+        return element_predicate(column, text_predicate(element, :regexp, value), array_type)
+      end
       if value.is_a?(Array)
         return ["FALSE", []] if value.empty?
 
@@ -220,6 +227,10 @@ module Tinkick
     end
 
     def text_predicate(column, operator, value)
+      if operator == :regexp && value.is_a?(Regexp)
+        @model.logger&.warn("Tinkick: regular expression filters can scan column values outside TIN. Use selective search/where conditions and inspect EXPLAIN; an optional pg_trgm expression index may help suitable patterns.")
+        return ["(#{column})::text COLLATE \"C\" ~ ?", [RegexPattern.new(value).compile]]
+      end
       raise TypeError, "#{operator} requires a string" unless value.is_a?(String)
 
       if operator == :prefix

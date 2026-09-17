@@ -1,7 +1,7 @@
 module Tinkick
   type filter_scalar = String | Symbol | Numeric | Date | Time | bool | nil
 
-  type filter_value = filter_scalar | Array[filter_value] | Range[filter_scalar] | Hash[String | Symbol, filter_value]
+  type filter_value = Regexp | filter_scalar | Array[filter_value] | Range[filter_scalar] | Hash[String | Symbol, filter_value]
 
   type filter_conditions = Hash[String | Symbol, filter_value]
 
@@ -26,7 +26,7 @@ module Tinkick
 
     def json_match: (String column, String path, String condition) -> filter_predicate
 
-    def json_text_predicate: (String column, String path, :like | :ilike | :prefix operator, filter_value value) -> filter_predicate
+    def json_text_predicate: (String column, String path, :like | :ilike | :prefix | :regexp operator, filter_value value) -> filter_predicate
 
     def warn_json_scan: (String column) -> void
 
@@ -38,7 +38,7 @@ module Tinkick
 
     def element_predicate: (String column, filter_predicate predicate, String? array_type) -> filter_predicate
 
-    def text_predicate: (String column, :like | :ilike | :prefix operator, filter_value value) -> filter_predicate
+    def text_predicate: (String column, :like | :ilike | :prefix | :regexp operator, filter_value value) -> filter_predicate
 
     def comparison: (String column, :gt | :gte | :lt | :lte operator, filter_value value) -> filter_predicate
 
