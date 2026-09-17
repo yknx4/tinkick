@@ -153,6 +153,24 @@ class ConversionScoresTest < TinkickIntegrationTest
     assert_empty statements
   end
 
+  def test_zero_factor_returns_the_native_score_without_schema_queries_or_warnings
+    statements = []
+    original_logger = UnmappedProduct.logger
+    output = StringIO.new
+    UnmappedProduct.logger = Logger.new(output)
+    native_score = "tin.score(products.ctid)"
+
+    ActiveSupport::Notifications.subscribed(->(*args) { statements << args.last.fetch(:sql) }, "sql.active_record") do
+      scorer = Tinkick::ConversionScores.new(UnmappedProduct, fields: ["metadata"], term: "apple", factor: 0)
+      assert_same native_score, scorer.score_sql(native_score)
+      assert scorer.empty?
+    end
+    assert_empty statements
+    assert_empty output.string
+  ensure
+    UnmappedProduct.logger = original_logger
+  end
+
   def test_column_validation_is_lazy_and_requires_real_jsonb_columns
     missing = compiler("apple", fields: ["missing"])
     refute missing.empty?
@@ -196,7 +214,7 @@ class ConversionScoresTest < TinkickIntegrationTest
   end
 
   def scores(term, **options)
-    sql = compiler(term, **options).score_sql("2.0")
+    sql = compiler(term, **options).score_sql("2.0::double precision")
     SearchProduct.order(:id).pluck(:id, Arel.sql(sql)).to_h
   end
 end

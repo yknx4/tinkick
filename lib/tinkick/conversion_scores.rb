@@ -15,7 +15,7 @@ module Tinkick
     end
 
     def empty?
-      @fields.empty?
+      @fields.empty? || @factor.zero?
     end
 
     def score_sql(base_score)
