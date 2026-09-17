@@ -343,10 +343,12 @@ different from `load(false)`.
 
 ### Metadata still missing
 
-`took`, `response`, `hits`, `with_hit`, `each_with_hit`, `with_details`, `error`,
+`took`, `response`, `hits`, `with_hit`, `error`,
 `missing_records`, `model_name`, `entry_name`, `misspellings?`, suggestions,
 and public highlight result methods are not implemented. Aggregation metadata
-is available through `aggs` and `aggregations`.
+is available through `aggs` and `aggregations`. Searchkick 6 removed
+`each_with_hit` and `with_details`; use `with_hit.each` and `with_highlights` when
+those adapters are available.
 Do not expect Elasticsearch `_index`, `_shards`, `_source`, scroll IDs, or JSON
 response envelopes. Use ActiveRecord instrumentation for timing and explicitly
 serialize the visible records for an HTTP response.
