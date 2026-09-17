@@ -47,7 +47,11 @@ module Tinkick
     end
 
     def encode(attributes)
-      values = @order.map { |field, _| serialize_value(attributes.fetch(field)) }
+      values = @order.map do |field, _|
+        # Decorated attributes such as enums expose labels, while SQL orders stored values.
+        stored = @model.type_for_attribute(field).serialize(attributes.fetch(field)) #: result_value
+        serialize_value(stored)
+      end
       Base64.urlsafe_encode64(JSON.generate(version: 1, table: @model.table_name, order: @order, values: values), padding: false)
     end
 
@@ -94,8 +98,7 @@ module Tinkick
       cast = type.cast(value) #: keyset_value?
       raise InvalidQueryError, "invalid keyset cursor value for #{field}" if cast.nil?
 
-      type.serialize(cast)
-      cast
+      type.serialize(cast) #: keyset_value
     end
 
     def serialize_value(value)
