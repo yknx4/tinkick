@@ -1,0 +1,40 @@
+module Tinkick
+  type query_order = String | Symbol | Hash[String | Symbol, String | Symbol] | Array[query_order]
+
+  class Query
+    @model: singleton(ActiveRecord::Base)
+    @term: String
+    @fields: Array[String]
+    @where: filter_conditions
+    @order: query_order?
+    @limit: Integer
+    @offset: Integer
+    @operator: String
+    @match: Symbol
+    @misspellings: bool
+    @records: Array[ActiveRecord::Base]?
+    @total_count: Integer?
+    @scope: ActiveRecord::Relation?
+    @compiled_query: String?
+
+    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: Array[String | Symbol], ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String, ?operator: String | Symbol, ?match: Symbol, ?misspellings: bool) -> void
+
+    def records: () -> Array[ActiveRecord::Base]
+
+    def total_count: () -> Integer
+
+    private
+
+    def scope: () -> ActiveRecord::Relation
+
+    def record_scope: () -> ActiveRecord::Relation
+
+    def order_clauses: (query_order value) -> Array[String]
+
+    def validate_column: (String field) -> void
+
+    def quoted_column: (String field) -> String
+
+    def quoted_table: () -> String
+  end
+end
