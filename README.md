@@ -989,7 +989,26 @@ in New York can start at 07:00 on the spring transition day. This is elapsed-tim
 offset behavior, not a promise of the same local wall-clock boundary every day.
 Large offsets also retain calendar-month spacing across February.
 
-Bounds, advanced formats, nested aggregations, and additional aggregate options remain adapter
+Use `extended_bounds` to include dates outside the matching records:
+
+```ruby
+Product.search("coffee", aggs: {
+  months: {date_histogram: {
+    field: :created_at, calendar_interval: :month,
+    extended_bounds: {min: "2026-01-01", max: "2026-12-31"}
+  }}
+})
+```
+
+Bounds expand the output without filtering matching records. Either endpoint may
+be omitted; an empty result set needs both to create buckets. Empty buckets are
+generated only with `min_doc_count: 0`. Strings use the configured `format`,
+`time_zone`, and date math. Numeric bounds are integral epoch milliseconds,
+regardless of `format` (unlike date-range numeric bounds). Bounds round on the
+configured time grid before the aggregation offset is added. Wide bounds with
+small intervals can generate many buckets and retain the empty-bucket warning.
+
+Hard bounds, advanced formats, nested aggregations, and additional aggregate options remain adapter
 implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
 for scripted calculations. Check representative plans against TIN's
