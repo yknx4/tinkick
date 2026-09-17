@@ -3,7 +3,7 @@ module Tinkick
 
   type relation_field = search_field | search_fields
 
-  type relation_options = { fields: search_fields, misspellings: QueryText::misspellings, where: filter_conditions, order: query_order?, limit: relation_number, offset: relation_number, page: relation_number, per_page: relation_number, padding: relation_number, match: Symbol, operator: String | Symbol, load: bool?, total_entries: Integer?, countless: bool, keyset: bool, after: String? }
+  type relation_options = { fields: search_fields, misspellings: QueryText::misspellings, where: filter_conditions, order: query_order?, limit: relation_number, offset: relation_number, page: relation_number, per_page: relation_number, padding: relation_number, match: Symbol, operator: String | Symbol, load: bool?, total_entries: Integer?, countless: bool, keyset: bool, after: String?, aggs: aggregation_spec?, smart_aggs: bool }
 
   class Relation
     include Enumerable[result_record]
@@ -22,7 +22,7 @@ module Tinkick
     attr_reader model: singleton(ActiveRecord::Base)
     alias klass model
 
-    def initialize: (singleton(ActiveRecord::Base) model, ?Object? term, fields: search_fields, misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, ?Object? term, fields: search_fields, misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool) -> void
 
     def loaded?: () -> bool
     def countless: (?bool value) -> Relation
@@ -32,6 +32,13 @@ module Tinkick
     def load: () -> Relation
             | (bool? value) -> Relation
     def load!: (bool? value) -> Relation
+    def aggs: () -> Hash[String, aggregation_result]?
+            | (*String | Symbol | aggregation_spec values, **aggregation_options options) -> Relation
+    def aggs!: (*String | Symbol | aggregation_spec values, **aggregation_options options) -> Relation
+    def smart_aggs: (bool value) -> Relation
+    def smart_aggs!: (bool value) -> Relation
+    def aggregations: () -> Hash[String, aggregation_result | Hash[String, Integer | aggregation_result]]?
+
     def fields: (*relation_field values) -> Relation
     def fields!: (*relation_field values) -> Relation
     def where: () -> Where

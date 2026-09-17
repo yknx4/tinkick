@@ -16,16 +16,16 @@ module Tinkick
     def_delegators :execute, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary,
       :total_count, :current_page, :limit_value, :total_pages, :num_pages, :offset_value,
       :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score,
-      :has_next_page?, :next_cursor
+      :has_next_page?, :next_cursor, :aggregations
 
-    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil)
+    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true)
       @model = model
       @term = term
       @options = {
         fields: fields, misspellings: misspellings, where: where, order: order,
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding,
         match: match, operator: operator, load: load, total_entries: total_entries,
-        countless: countless, keyset: keyset, after: after,
+        countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs,
       }
       query
     end
@@ -68,6 +68,41 @@ module Tinkick
     def load!(value)
       check_loaded
       @options[:load] = value
+      self
+    end
+
+    def aggs(*values, **options)
+      return execute.aggs if values.empty? && options.empty?
+
+      clone.aggs!(*values, **options)
+    end
+
+    def aggs!(*values, **options)
+      check_loaded
+      previous = @options[:aggs]
+      specifications = if previous.is_a?(Array)
+        previous.to_h do |field|
+          empty_options = {} #: aggregation_options
+          [field, empty_options]
+        end
+      else
+        (previous || {})
+      end
+      additions = {} #: Hash[String | Symbol, aggregation_options]
+      values.flatten.each do |value|
+        value.is_a?(Hash) ? additions.merge!(value) : additions[value] = {}
+      end
+      @options[:aggs] = specifications.merge(additions).merge(options)
+      self
+    end
+
+    def smart_aggs(value)
+      clone.smart_aggs!(value)
+    end
+
+    def smart_aggs!(value)
+      check_loaded
+      @options[:smart_aggs] = value
       self
     end
 
@@ -305,7 +340,7 @@ module Tinkick
         fields: @options[:fields], where: @options[:where], order: @options[:order],
         limit: page_size, offset: @options[:keyset] ? nil : (@options[:offset] || (page_number - 1) * page_size + page_padding).to_i,
         match: @options[:match], operator: @options[:operator], misspellings: @options[:misspellings],
-        countless: @options[:countless], keyset: @options[:keyset], after: @options[:after])
+        countless: @options[:countless], keyset: @options[:keyset], after: @options[:after], aggs: @options[:aggs], smart_aggs: @options[:smart_aggs])
     end
 
     def execute

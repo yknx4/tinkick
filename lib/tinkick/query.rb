@@ -5,12 +5,13 @@ require_relative "query_text"
 require_relative "text_match"
 require_relative "keyset"
 require_relative "search_field"
+require_relative "aggregations"
 
 module Tinkick
   class Query
     attr_reader :model, :limit, :after
 
-    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil)
+    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
@@ -26,6 +27,8 @@ module Tinkick
         end
       end
       @where = where
+      @aggregation_spec = aggs
+      @smart_aggs = smart_aggs
       @order = order
       @limit = limit.to_i
       @offset = offset.to_i
@@ -87,6 +90,35 @@ module Tinkick
       @total_count ||= scope.except(:order, :limit, :offset).count
     end
 
+    def aggs
+      spec = @aggregation_spec
+      return unless spec
+      return @aggs if @aggs
+
+      specifications = if spec.is_a?(Array)
+        spec.to_h do |field|
+          empty_options = {} #: aggregation_options
+          [field, empty_options]
+        end
+      else
+        spec
+      end
+      base = build_scope(@smart_aggs ? {} : @where)
+      output = {} #: Hash[String, aggregation_result]
+      specifications.each do |name, options|
+        conditions = options[:where] || {}
+        if @smart_aggs
+          other_filters = @where.reject { |field, _value| field.to_s == name.to_s }
+          unless other_filters.empty?
+            conditions = conditions.empty? ? other_filters : @where.merge(conditions)
+          end
+        end
+        aggregate_options = options.merge(where: conditions) #: aggregation_options
+        output.merge!(Aggregations.new(@model, base).call({ name => aggregate_options }))
+      end
+      @aggs = output
+    end
+
     private
 
     def trim_page(values)
@@ -99,10 +131,14 @@ module Tinkick
     end
 
     def scope
-      @scope ||= @model.with_connection do |connection|
+      @scope ||= build_scope(@where)
+    end
+
+    def build_scope(conditions)
+      @model.with_connection do |connection|
         fields = @fields.map { |field, mode| [SearchField.new(@model, field, match: mode), mode] } #: Array[[SearchField, Symbol]]
 
-        relation = Filter.new(@model).apply(@model.all, @where)
+        relation = Filter.new(@model).apply(@model.all, conditions)
         next relation if @term == "*"
 
         native = [] #: Array[filter_predicate]

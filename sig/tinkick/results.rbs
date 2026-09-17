@@ -31,6 +31,9 @@ module Tinkick
           | (Range[Integer?] range) -> Array[result_record]?
     alias slice []
     def to_ary: () -> Array[result_record]
+    def aggs: () -> Hash[String, aggregation_result]?
+    def aggregations: () -> Hash[String, aggregation_result | Hash[String, Integer | aggregation_result]]?
+
     def total_count: () -> Integer
     alias total_entries total_count
     def per_page: () -> Integer

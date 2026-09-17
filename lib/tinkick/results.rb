@@ -26,6 +26,25 @@ module Tinkick
       end
     end
 
+    def aggs
+      @query.aggs
+    end
+
+    def aggregations
+      values = aggs
+      return unless values
+
+      values.to_h do |name, result|
+        value = if result.key?("doc_count")
+          nested = result.except("doc_count") #: aggregation_result
+          { "doc_count" => result.fetch("doc_count"), name => nested }
+        else
+          result
+        end
+        [name, value]
+      end
+    end
+
     def total_count
       @total_entries || @query.total_count
     end
