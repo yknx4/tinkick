@@ -9,6 +9,7 @@ require_relative "word_match"
 require_relative "aggregations"
 require_relative "custom_spans"
 require_relative "boost_by"
+require "active_support/notifications"
 
 module Tinkick
   class Query
@@ -240,10 +241,12 @@ module Tinkick
     end
 
     def measure_page
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      value = yield
-      @took ||= ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1_000).round
-      value
+      ActiveSupport::Notifications.instrument("search.tinkick", name: "#{@model.name} Search", model: @model.name) do
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        value = yield
+        @took ||= ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1_000).round
+        value
+      end
     end
 
     def normalize_misspellings(options, fields)

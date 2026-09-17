@@ -3,3 +3,10 @@ class Hash[unchecked out K, unchecked out V]
   def to_json: (?JSON::State | Hash[Symbol, Object?] | nil options) -> String
              | ...
 end
+
+module ActiveSupport
+  module Notifications
+    def self.instrument: [T] (String name, ?Hash[Symbol, Object?] payload) { (Hash[Symbol, Object?]) -> T } -> T
+                       | ...
+  end
+end
