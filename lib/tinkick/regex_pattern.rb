@@ -116,10 +116,10 @@ module Tinkick
       if value && classes.key?(value.downcase)
         take
         "[#{value == value.upcase ? "^" : ""}#{classes.fetch(value.downcase)}]"
+      elsif value == "\\"
+        literal(take)
       elsif value && /[a-zA-Z]/.match?(value)
         raise InvalidQueryError, "Lucene does not accept the regular expression escape \\#{value}"
-      else
-        literal(take)
       end
     end
 

@@ -36,6 +36,22 @@ class RegexpFilterTest < TinkickIntegrationTest
     assert_equal [1, 2, 7, 8], matches(/[mM]oria/i)
   end
 
+  def test_escaped_punctuation_can_start_a_character_range
+    ["$", "!", ".", "/", "0"].each_with_index do |name, index|
+      SearchProduct.find(index + 1).update!(name: name)
+    end
+
+    assert_equal [1, 2, 3, 4], matches(Regexp.new("\\A[\\!-\\/]\\z"))
+  end
+
+  def test_escaped_range_start_does_not_add_a_literal_hyphen
+    ["-", ".", "/", "0"].each_with_index do |name, index|
+      SearchProduct.find(index + 1).update!(name: name)
+    end
+
+    assert_equal [2, 3, 4], matches(Regexp.new("\\A[\\.-0]\\z"))
+  end
+
   def test_groups_alternatives_and_quoted_strings
     assert_equal [1, 2, 7, 8], matches(/(moria|gondor)/i)
     assert_equal [8], matches(/"Moria|Gondor"/)
