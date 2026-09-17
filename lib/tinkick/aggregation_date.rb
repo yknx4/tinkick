@@ -5,25 +5,14 @@ require "active_support/time"
 
 module Tinkick
   class AggregationDate
-    FORMAT_TOKENS = {
-      "yyyy" => ["year", "[0-9]{4}", "%Y"], "uuuu" => ["year", "[0-9]{4}", "%Y"],
-      "MM" => ["month", "[0-9]{2}", "%m"], "dd" => ["day", "[0-9]{2}", "%d"],
-      "HH" => ["hour", "[0-9]{2}", "%H"], "mm" => ["minute", "[0-9]{2}", "%M"], "ss" => ["second", "[0-9]{2}", "%S"],
-      "S" => ["fraction", "[0-9]", "%1N"], "SS" => ["fraction", "[0-9]{2}", "%2N"], "SSS" => ["fraction", "[0-9]{3}", "%3N"],
-      "XXX" => ["offset", "(?:Z|[+-][0-9]{2}:[0-9]{2})", "%:z"],
-    }.freeze
-    ISO8601 = /\A(?<year>-?[0-9]{4})(?:-(?<month>[0-9]{2})(?:-(?<day>[0-9]{2}))?)?(?:T(?:(?<hour>[0-9]{2})(?::(?<minute>[0-9]{2})(?::(?<second>[0-9]{2})(?:[.,](?<fraction>[0-9]{1,9}))?)?)?(?<offset>Z|[+-][0-9]{2}(?::?[0-9]{2})?)?)?)?\z/
-
-    def initialize(format: nil, time_zone: nil, now: Time.now)
-      pattern = format || "strict_date_optional_time||epoch_millis"
-      raise ArgumentError, "format must be a nonempty string" unless pattern.is_a?(String) && !pattern.empty?
-
-      @formats = pattern.split("||", -1)
-      @custom_formats = {}
-      @formats.each do |name|
-        @custom_formats[name] = compile_format(name) unless ["strict_date_optional_time", "epoch_millis"].include?(name)
+    def initialize(format: nil, time_zone: nil)
+      @format = format || "strict_date_optional_time"
+      unless @format.is_a?(String) && !@format.empty?
+        raise ArgumentError, "format must be a nonempty string"
       end
-      @now = now
+      unless ["strict_date_optional_time", "epoch_millis"].include?(@format)
+        raise NotImplementedError, "Elasticsearch Java date patterns and format lists are not supported by native PostgreSQL aggregation. Format returned dates in the application, or use PostgreSQL to_char in an explicit SQL query."
+      end
       @offset = 0
       @zone = nil
       zone_name = time_zone.nil? ? "UTC" : time_zone
@@ -59,47 +48,31 @@ module Tinkick
       @offset unless @zone
     end
 
-    def midnight_key(local_milliseconds)
-      zone = @zone
-      return local_milliseconds - @offset * 1_000 unless zone
-
-      local = Time.at(Rational(local_milliseconds, 1_000)).utc
-      timezone = zone.tzinfo #: TZInfo::Timezone
-      period = timezone.periods_for_local(local).max_by(&:observed_utc_offset)
-      return local_milliseconds - period.observed_utc_offset * 1_000 if period
-
-      # Rails advances across a gap; the resulting period starts at its first
-      # valid instant, even when the gap is shorter than an hour or a whole day.
-      shifted = zone.local(local.year, local.month, local.day)
-      transition = timezone.period_for_utc(shifted.utc).start_transition
-      raise ArgumentError, "Cannot resolve calendar midnight in #{timezone.identifier}" unless transition
-
-      transition.timestamp_value * 1_000
-    end
-
     def parse(value)
       return if value.nil?
       if value.is_a?(Numeric)
         number = Float(value)
-        raise ArgumentError, "Date range epoch bounds must be finite numbers" unless number.is_a?(Float) && number.finite?
+        unless number.is_a?(Float) && number.finite?
+          raise ArgumentError, "Date range epoch bounds must be finite numbers"
+        end
 
-        # Date ranges truncate numeric bounds before applying their formatter.
-        value = number.to_i.to_s
+        return number
       end
-
       instant = case value
-      when Time then local_time(value.to_time)
-      when DateTime then local_time(value.to_time)
+      when Time, DateTime then value.to_time
       when Date then local_date(value.year, value.month, value.day)
       when String
-        if value.start_with?("now")
-          calculate(local_time(@now), value.delete_prefix("now"))
-        else
-          anchor, math = value.split("||", 2)
-          raise ArgumentError, "Date range bounds cannot be empty" unless anchor
+        if value.start_with?("now") || value.include?("||")
+          raise NotImplementedError, "Elasticsearch date math is not supported by native PostgreSQL aggregation. Compute a Time or Date boundary in the application, for example 7.days.ago.beginning_of_day."
+        end
+        integer = Integer(value, 10, exception: false)
+        return integer.to_f if integer
 
-          parsed = parse_anchor(anchor)
-          math ? calculate(parsed, math) : parsed
+        date = DateTime.iso8601(value)
+        if Date._iso8601(value).key?(:offset)
+          date.to_time
+        else
+          local_date(date.year, date.month, date.day, date.hour, date.min, date.sec + date.sec_fraction)
         end
       else
         raise ArgumentError, "Date range bounds must be Date, Time, ISO8601 strings, or epoch milliseconds"
@@ -129,61 +102,12 @@ module Tinkick
       milliseconds
     end
 
-    def histogram_boundary(milliseconds, unit:, interval:)
-      instant = local_time(Time.at(Rational(milliseconds, 1_000))).to_time
-      # The SQL bucket grid uses local wall-clock timestamps. Resolve IANA
-      # midnight gaps/overlaps only when turning returned buckets into UTC keys.
-      seconds = instant.sec + Rational(instant.nsec, 1_000_000_000)
-      local = Time.utc(instant.year, instant.month, instant.day, instant.hour, instant.min, seconds)
-      if unit == "quarter"
-        Time.utc(local.year, (local.month - 1) / 3 * 3 + 1)
-      elsif unit
-        code = { "year" => "y", "month" => "M", "week" => "w", "day" => "d", "hour" => "h", "minute" => "m", "second" => "s" }.fetch(unit)
-        round(local, code).to_time
-      else
-        rounded = (local.to_r * 1_000 / interval).floor * interval
-        Time.at(Rational(rounded, 1_000)).utc
-      end
-    end
-
-    def histogram_key(boundary)
-      midnight_key((boundary.to_r * 1_000).to_i)
-    end
-
-    def histogram_cutoff(boundary, offset:, unit:, interval:)
-      threshold = histogram_key(boundary) - offset
-      local = histogram_boundary(threshold, unit: unit, interval: interval)
-      return local if histogram_key(local) == threshold
-
-      # A hard bound applies to the shifted UTC key. Its equivalent SQL cutoff
-      # is the next local grid boundary, including across a repeated midnight.
-      if unit
-        field = { "year" => :years, "quarter" => :months, "month" => :months, "week" => :weeks, "day" => :days,
-                  "hour" => :hours, "minute" => :minutes, "second" => :seconds }.fetch(unit)
-        local.advance(field => (unit == "quarter" ? 3 : 1))
-      else
-        local + Rational(interval, 1_000)
-      end
-    end
-
     def format(value, utc_offset: nil)
+      return value.to_i.to_s if @format == "epoch_millis"
+
       timestamp = Time.at(Rational(value.to_s) / 1_000)
       instant = utc_offset ? timestamp.getlocal(utc_offset) : local_time(timestamp)
-      pattern = @formats.fetch(0)
-      case pattern
-      when "epoch_millis" then value.to_i.to_s
-      when "strict_date_optional_time"
-        # Upstream prints only offset hours/minutes, using Z when both are zero.
-        instant.iso8601(3).sub(/[+-]00:00\z/, "Z")
-      else
-        @custom_formats.fetch(pattern).last.map do |part, token|
-          if token
-            part == "XXX" && instant.utc_offset.abs < 60 ? "Z" : instant.strftime(FORMAT_TOKENS.fetch(part).fetch(2))
-          else
-            part
-          end
-        end.join
-      end
+      instant.utc_offset.zero? ? instant.utc.iso8601(3) : instant.iso8601(3)
     end
 
     private
@@ -196,121 +120,6 @@ module Tinkick
     def local_date(year, month, day, hour = 0, minute = 0, second = 0)
       zone = @zone
       zone ? zone.local(year, month, day, hour, minute, second) : Time.new(year, month, day, hour, minute, second, @offset)
-    end
-
-    def compile_format(pattern)
-      # @type var parts: Array[[String, bool]]
-      parts = []
-      source = +""
-      remaining = pattern
-      until remaining.empty?
-        if remaining.start_with?("''")
-          part = "'"
-          remaining = remaining.delete_prefix("''")
-          token = false
-        elsif remaining.start_with?("'")
-          quoted = /\A'((?:[^']|'')*)'/.match(remaining)
-          raise ArgumentError, "Unclosed quote in date format" unless quoted
-
-          part = quoted[1].to_s.gsub("''", "'")
-          remaining = quoted.post_match
-          token = false
-        else
-          match = /\A(?:([A-Za-z])\1*|[^A-Za-z'\[\]{}#]+)/.match(remaining)
-          raise ArgumentError, "Unsupported date format syntax: #{remaining.inspect}" unless match
-
-          part = match[0].to_s
-          remaining = match.post_match
-          token = /\A[A-Za-z]/.match?(part)
-        end
-        parts << [part, token]
-        if token
-          definition = FORMAT_TOKENS[part]
-          raise ArgumentError, "Unsupported date format token: #{part.inspect}" unless definition
-
-          source << "(?<#{definition[0]}>#{definition[1]})"
-        else
-          source << Regexp.escape(part)
-        end
-      end
-      raise ArgumentError, "Date format must contain a supported date or time token" unless parts.any?(&:last)
-
-      [Regexp.new("\\A#{source}\\z"), parts]
-    end
-
-    def parse_anchor(value)
-      @formats.each do |pattern|
-        if pattern == "epoch_millis"
-          next unless /\A-?[0-9]+(?:\.[0-9]+)?\z/.match?(value)
-
-          return local_time(Time.at(Rational(value) / 1_000))
-        end
-        expression = pattern == "strict_date_optional_time" ? ISO8601 : @custom_formats.fetch(pattern).first
-        match = expression.match(value)
-        return parse_parts(match.named_captures) if match
-      rescue ArgumentError
-        # A later configured format can still parse this value.
-      end
-      raise ArgumentError, "Invalid date range bound #{value.inspect} for format #{@formats.join("||").inspect}"
-    end
-
-    def parse_parts(parts)
-      year = (parts["year"] || "1970").to_i
-      month = (parts["month"] || "1").to_i
-      day = (parts["day"] || "1").to_i
-      Date.new(year, month, day)
-      hour = (parts["hour"] || "0").to_i
-      minute = (parts["minute"] || "0").to_i
-      second = (parts["second"] || "0").to_i + Rational("0.#{parts["fraction"] || "0"}")
-      unless (0..23).cover?(hour) && (0..59).cover?(minute) && second >= 0 && second < 60
-        raise ArgumentError, "Invalid date range clock time"
-      end
-
-      offset = parts["offset"]
-      return local_date(year, month, day, hour, minute, second) unless offset
-
-      hours = offset[1, 2].to_i
-      minutes = offset.delete(":")[3, 2].to_i
-      seconds = hours * 3_600 + minutes * 60
-      raise ArgumentError, "Invalid date range offset" if minutes > 59 || seconds > 18 * 3_600
-
-      local_time(Time.new(year, month, day, hour, minute, second, offset.start_with?("-") ? -seconds : seconds))
-    end
-
-    def calculate(instant, math)
-      until math.empty?
-        step = %r{\A([+/-])(\d*)([yMwdhHms])}.match(math)
-        raise ArgumentError, "Invalid date math: #{math.inspect}" unless step
-
-        operator = step[1].to_s
-        amount_text = step[2].to_s
-        amount = amount_text.empty? ? 1 : amount_text.to_i
-        raise ArgumentError, "Date math amount exceeds a 32-bit integer" if amount > 2_147_483_647
-
-        unit = step[3].to_s
-        math = step.post_match
-        if operator == "/"
-          raise ArgumentError, "Date math rounding requires a single unit" unless amount == 1
-
-          instant = round(instant, unit)
-        else
-          unit_name = { "y" => :years, "M" => :months, "w" => :weeks, "d" => :days, "h" => :hours, "H" => :hours, "m" => :minutes, "s" => :seconds }.fetch(unit)
-          instant = instant.advance(unit_name => (operator == "-" ? -amount : amount))
-        end
-      end
-      instant
-    end
-
-    def round(instant, unit)
-      case unit
-      when "y" then instant.beginning_of_year
-      when "M" then instant.beginning_of_month
-      when "w" then instant.beginning_of_week(:monday)
-      when "d" then instant.beginning_of_day
-      when "h", "H" then instant.change(min: 0, sec: 0)
-      when "m" then instant.change(sec: 0)
-      else instant.change(usec: 0)
-      end
     end
   end
 end
