@@ -45,7 +45,8 @@ module Tinkick
       unless column
         raise MissingFieldError, "#{@model.name} has no column #{name.inspect}; add it with a Rails migration before filtering"
       end
-      if column.sql_type.end_with?("[]") || [:json, :jsonb].include?(column.type)
+      array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+      if array || [:json, :jsonb].include?(column.type)
         raise InvalidQueryError, "Filtering #{name.inspect} requires array or JSON semantics that are not implemented yet"
       end
 

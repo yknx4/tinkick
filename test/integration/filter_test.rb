@@ -3,6 +3,17 @@
 require_relative "../integration_helper"
 
 class FilterTest < TinkickIntegrationTest
+  class CursorValue < ActiveRecord::Base
+    self.table_name = "tinkick_test_cursor_values"
+  end
+
+  def test_array_filters_fail_with_the_unsupported_semantics_explanation
+    error = assert_raises(Tinkick::InvalidQueryError) do
+      Tinkick::Filter.new(CursorValue).apply(CursorValue.all, tags: ["fruit"])
+    end
+    assert_includes error.message, "array or JSON semantics"
+  end
+
   def test_equality_preserves_the_tin_scope
     scope = SearchProduct.where("description ==> ?", "fruit")
 
