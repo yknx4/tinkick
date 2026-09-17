@@ -1,0 +1,39 @@
+# Remaining API inventory — 2026-09-17
+
+Baseline: Searchkick 6.1.2 / commit93e901a75b11a25101668a616e006b158251b16e, current Tinkick code, docs/compatibility.md, docs/plan.md, README. This is an implementation inventory, not a claim that every unimplemented behavior has a proven implementation design.
+
+## Source corrections before defining completion
+
+- Searchkick Relation#only/#except retain/remove QUERY OPTIONS; they are not column projections. They rebuild a relation from sliced options (relation.rb650–656). Tinkick must restore model/default query options correctly when fields/misspellings are removed.
+- select/reselect control source retrieval, including scalar/array fields, true/false/[], includes/excludes, and wildcard field forms. Pinned select tests primarily assert raw load:false behavior; a block remains Enumerable selection. Model-loading selection is not automatically ActiveRecord#select.
+- each_with_hit and with_details were removed (upstream CHANGELOG375–376); use with_hit.each and with_highlights. Query's stale delegations do not make them supported6.1.2 results methods.
+- Compatibility docs contain stale progress claims: includes/model_includes, array/JSON filters, text modes, numeric/date ranges, keycaps, and larger-distance matching have advanced. Public distance-two word refinement and phrase-option handling now have committed live-TIN tests.
+
+## Dependency-ordered feasible adapter work
+
+1. **Finish page loading and core result metadata.** scope_results (tests staged only in /private/tmp/tinkick-scope-results-tests.rb): filter already-ranked IDs, preserve ordering/scores and totals, avoid refilling pages, preload surviving visible rows, ignore for load:false, warn about extra page-bounded query. Add model_name/entry_name for Rails pagination; misspellings? after exact-first retry policy; measured took and error/missing_records semantics. No native TIN gap here.
+
+2. **Projection and query option operations.** select/reselect with raw source include/exclude patterns and Enumerable block overload; only/except on options; wildcard field expansion; explicit _score ordering. These need preservation of primary-key/cursor/preloader keys internally without leaking hidden fields into projected raw results. Model projection behavior must follow pinned source, not inferred SQL conventions.
+
+3. **Highlight public surface and portable hits.** Wire the existing tested Highlighter into highlight keyword/fluent options, per-field configuration, highlights/with_highlights, record search_highlights, raw highlighted_* values, custom tags, HTML encoding, and snippets/fragment_size. hits/with_hit/response need a documented portable envelope and identity contract first: use durable model PK, never ctid or invented Elasticsearch shard/alias metadata. Full-field native support is proven; snippet compatibility and alternate SQL match highlighting still require adapter work.
+
+4. **Finish lexical/filter controls.** exclude phrases across selected fields; Regexp/regexp filters with anchoring/flags/dialect tests; misspellings fields and below retry; explicitly requested max_expansions. Exclude, per-field selection and retry are straightforward compositions. Expansion caps and full regex dialect parity need candidate/ranking or translation proofs, not an unsupported-TIN label. JSON arrays/nested correlation and currently rejected PostgreSQL scalar types need explicit SQL semantics and real tests. Native default expansion/score differences already approved remain intentional.
+
+5. **Ranking and remaining aggregation shapes.** Field ^boost, boost/boost_by numeric modifiers, boost_where/demotion, boost_by_recency, conversions/conversions_v2/conversions_term, plus compound relevance ordering. Numeric and date histograms, remaining date formats, nested aggregation shapes and options are still missing after range commits. SQL can supply the machinery; exact formulas, NULL behavior, array semantics, cost warnings and real plans are required. Model/indices boosts wait for multi-model identity; geographic distance boosts wait for geo integration.
+
+6. **Analysis and model configuration.** case_sensitive/special_characters mapped to native index and tokenizer options with migrations; emoji-name expansion; synonym configuration/refresh using explicit application data; filterable declarations; global model_options, custom search_method_name, registry, STI/inheritance and unscope policies. Keep should_index? migration explicit: arbitrary Ruby predicates cannot be inferred as SQL. Tenant boundaries cannot be discarded as an index-name no-op.
+
+7. **Global search and integrations.** Tinkick.search(model/models), multi_search populating relations and exposing individual errors, model registry and model-specific loads, UNION/merge ordering and model boosts, pagination-library contracts and ActiveSupport instrumentation. Implement single-model global search/batching before combined-model ranking. PostgreSQL failed-query isolation needs actual savepoint/transaction tests. SQL-backed index inspection (exists?/tokens/total_docs) is feasible separately from excluded index lifecycle APIs.
+
+8. **Optional search families, with explicit prerequisites.** Suggestions require candidate generation and phrase ranking; similar requires meaningful-term selection/thresholds; locations/geo_shape/distance ranking require verified geometry primitives (such as optional PostGIS); knn/semantic/hybrid retrieval requires verified pgvector/operator/index support and merge/ranking policy. These are research/design-dependent adapter families, not proven impossible in PostgreSQL or TIN. Feature-specific extension checks must happen only when requested.
+
+## Actual native differences and intentional exclusions
+
+- Documented native stemming/language-analysis absence is the currently evidenced search capability difference; the model raises a migration-oriented NotImplementedError. Persisted normalized columns or another explicitly designed SQL analysis path remain possible application strategies.
+- TIN normalization, dense-term scoring, native fuzzy expansion and tie order differ from Lucene. The user approved native default scores and extra typo eligibility. Do not call these unfinished score-parity work unless an explicit option requests stronger semantics.
+- Observed router helper-call shapes and the multi-field tin.score plan issue are verified restrictions with implemented SQL shapes/full-score workarounds, not missing whole feature families.
+- External document import/reindex, synchronization callbacks/queues, Elasticsearch body/mappings/settings/HTTP transport, alias/index promotion, scroll IDs, and non-ActiveRecord/Mongoid backends are intentional exclusions or out-of-scope integrations. They must not masquerade as TIN limitations. Timers, SQL routing, and index inspection may still have useful adapter replacements.
+
+## Deterministic completion criterion
+
+Track each package and each README "not implemented" row as one of: implemented with pinned-contract/live-TIN tests; intentional exclusion already authorized; or unresolved design/native-evidence item. Do not convert "unverified" into "unsupported" to close the list. For the next complete core-query checkpoint, finish packages1–5 and explicitly enumerate pending packages6–8; a whole-Searchkick compatibility claim requires those remaining families to be resolved, not merely90% line coverage.

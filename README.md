@@ -725,8 +725,25 @@ more. Array aggregation and exact `COUNT(DISTINCT)` cardinality also warn about
 workload-dependent cost. Aggregations issue bounded SQL result queries, with
 sorting and bucket limits in PostgreSQL, rather than grouping Ruby records.
 
-Date ranges accept `Date`, `Time`, ISO8601 strings, or epoch-millisecond bounds
-and return UTC millisecond strings alongside numeric bounds. Date histograms,
+Date ranges accept `Date`, `Time`, ISO8601 strings, or epoch-millisecond bounds.
+`time_zone` accepts an IANA name or a fixed `+HH:MM`/`-HH:MM` offset; UTC is the
+default. Output strings include milliseconds and the selected zone. Explicit
+input offsets and epoch values preserve their instant.
+
+```ruby
+Product.search("coffee", aggs: {
+  created_at: {
+    date_ranges: [{from: "now-7d/d", to: "now/d"}],
+    time_zone: "America/Vancouver"
+  }
+})
+```
+
+Date math uses `now` or an ISO date followed by `||` as its anchor. Add/subtract
+`y`, `M`, `w`, `d`, `h`/`H`, `m`, or `s`; round down with `/unit`. Weeks start on
+Monday. Calendar-day arithmetic follows DST; adding 24 hours advances exactly
+24 elapsed hours. One captured `now` is shared across an aggregation evaluator.
+Date histograms,
 custom date formats, nested aggregations, and additional aggregate options remain
 adapter implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
