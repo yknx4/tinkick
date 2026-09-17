@@ -58,7 +58,7 @@ Throughout this guide:
   PostgreSQL installation does not include TIN.
 - Searchable columns of type `text` or `citext`, with one TIN index per column.
 
-ActiveRecord and `pg` are runtime dependencies. Rails is used for integration and
+ActiveRecord, `pg`, and `base64` are runtime dependencies. Rails is used for integration and
 migration generators; Elasticsearch and OpenSearch clients are not required.
 The version ranges permit future Ruby and Rails releases but do not claim they
 have already been tested. The CI matrix targets Ruby 4.0 with Rails 8.0 and 8.1.
