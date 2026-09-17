@@ -11,6 +11,9 @@ module Tinkick
       case_sensitive: Tinkick.model_options.fetch(:case_sensitive, Relation::NO_DEFAULT_VALUE),
       special_characters: Tinkick.model_options.fetch(:special_characters, Relation::NO_DEFAULT_VALUE),
       highlight: Tinkick.model_options[:highlight], filterable: Tinkick.model_options[:filterable],
+      conversions: Tinkick.model_options[:conversions],
+      conversions_v1: Tinkick.model_options.fetch(:conversions_v1, Relation::NO_DEFAULT_VALUE),
+      conversions_v2: Tinkick.model_options[:conversions_v2], stem_conversions: Tinkick.model_options[:stem_conversions],
       word_start: Tinkick.model_options[:word_start],
       word_middle: Tinkick.model_options[:word_middle], word_end: Tinkick.model_options[:word_end],
       text_start: Tinkick.model_options[:text_start], text_middle: Tinkick.model_options[:text_middle],
@@ -18,7 +21,9 @@ module Tinkick
       # @type self: singleton(ActiveRecord::Base)
       # @type var case_sensitive: bool? | Relation::DefaultValue
       # @type var special_characters: bool? | Relation::DefaultValue
+      # @type var conversions_v1: conversion_fields | Relation::DefaultValue
       options = Tinkick.model_options.except(:searchable, :default_fields, :match, :stem, :case_sensitive, :special_characters, :highlight, :filterable,
+        :conversions, :conversions_v1, :conversions_v2, :stem_conversions,
         :word_start, :word_middle, :word_end, :text_start, :text_middle, :text_end).merge(options)
       analysis = {} #: Hash[Symbol, bool?]
       analysis[:case_sensitive] = tinkick_analysis_flag(case_sensitive, :case_sensitive) unless case_sensitive.is_a?(Relation::DefaultValue)
@@ -33,6 +38,21 @@ module Tinkick
       raise ArgumentError, "unknown keywords: #{options.keys.join(', ')}" unless options.empty?
       raise ArgumentError, "Only call tinkick once per model" if tinkick_options
 
+      unless stem_conversions.nil? || stem_conversions == false
+        raise NotImplementedError, "stem_conversions is not yet supported by TIN. Persist normalized query keys in JSONB conversion columns with a Rails migration and pass the same normalized conversions_term"
+      end
+      conversions = conversions_v1 unless conversions_v1.is_a?(Relation::DefaultValue)
+      conversion_columns = [conversions, conversions_v2].map do |value|
+        fields = value ? Array(value) : [] #: Array[String | Symbol]
+        unless fields.all? { |field| field.is_a?(String) || field.is_a?(Symbol) }
+          raise ArgumentError, "conversions must name JSONB columns with a string, symbol, or array; false or nil disables them"
+        end
+        fields.map(&:to_s).uniq
+      end
+      unless (conversion_columns.fetch(0) & conversion_columns.fetch(1)).empty?
+        raise ArgumentError, "A conversion column cannot be declared in both conversions and conversions_v2"
+      end
+
       { highlight: highlight, filterable: filterable }.each do |option, declaration|
         unless !declaration || (declaration.is_a?(Array) && declaration.all? { |field| field.is_a?(String) || field.is_a?(Symbol) })
           raise ArgumentError, "#{option} must be an array of field names, false, or nil"
@@ -45,6 +65,7 @@ module Tinkick
         end
       end
       declared = { searchable: searchable, default_fields: default_fields, match: match, highlight: highlight, filterable: filterable,
+                   conversions: conversion_columns.fetch(0), conversions_v2: conversion_columns.fetch(1),
                    word_start: word_start, word_middle: word_middle, word_end: word_end,
                    text_start: text_start, text_middle: text_middle, text_end: text_end } #: model_options
       declared[:case_sensitive] = analysis[:case_sensitive] if analysis.key?(:case_sensitive)
