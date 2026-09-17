@@ -1,0 +1,9 @@
+# frozen_string_literal: true
+
+class <%= migration_class_name %> < ActiveRecord::Migration[8.0]
+  def change
+<% fields.each do |field| -%>
+    add_index <%= table_name.inspect %>, <%= field.inspect %>, using: :tin, name: <%= index_name(field).inspect %>
+<% end -%>
+  end
+end

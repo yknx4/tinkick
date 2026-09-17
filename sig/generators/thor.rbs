@@ -1,0 +1,20 @@
+# Thor's collection signature omits generator argument declarations and the
+# StandardError superclass used for user-facing command errors.
+class Thor
+  class Error < StandardError
+  end
+
+  class Argument
+  end
+
+  class Group
+    include Base
+    extend Base::ClassMethods
+  end
+
+  module Base
+    module ClassMethods
+      def argument: (String | Symbol name, ?type: :string | :hash | :array | :numeric, ?required: bool, ?optional: bool, ?default: Object?, ?desc: String, ?banner: String) -> Array[Argument]
+    end
+  end
+end

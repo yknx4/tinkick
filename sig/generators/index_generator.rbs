@@ -1,0 +1,18 @@
+module Tinkick
+  module Generators
+    class IndexGenerator < Rails::Generators::Base
+      include ActiveRecord::Generators::Migration
+
+      attr_accessor table_name: String
+      attr_accessor fields: Array[String]
+
+      def create_migration_file: () -> void
+
+      private
+
+      def migration_name: () -> String
+
+      def index_name: (String field) -> String
+    end
+  end
+end
