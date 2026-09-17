@@ -57,6 +57,12 @@ module Tinkick
 
     def date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions) -> aggregation_date_histogram
 
+    def subday_date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions, AggregationDate formatter, String unit, Integer bucket_offset, Integer minimum) -> aggregation_date_histogram
+
+    def subday_rounding_sql: (String value) -> String
+
+    def subday_histogram_bounds: (aggregation_date_histogram_options options, AggregationDate formatter, Hash[Symbol, String] binds) -> [ Time?, Time?, Time?, Time? ]
+
     def date_histogram_bounds: (aggregation_date_histogram_bounds bounds, AggregationDate formatter, unit: String?, interval: Integer) -> [ Time?, Time? ]
 
     def date_histogram_offset: (String | Integer | Float value) -> Integer

@@ -166,8 +166,9 @@ module Tinkick
       end
     end
 
-    def format(value)
-      instant = local_time(Time.at(Rational(value.to_s) / 1_000))
+    def format(value, utc_offset: nil)
+      timestamp = Time.at(Rational(value.to_s) / 1_000)
+      instant = utc_offset ? timestamp.getlocal(utc_offset) : local_time(timestamp)
       pattern = @formats.fetch(0)
       case pattern
       when "epoch_millis" then value.to_i.to_s

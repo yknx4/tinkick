@@ -21,7 +21,7 @@ module Tinkick
     def histogram_boundary: (Integer milliseconds, unit: String?, interval: Integer) -> Time
     def histogram_key: (Time boundary) -> Integer
     def histogram_cutoff: (Time boundary, offset: Integer, unit: String?, interval: Integer) -> Time
-    def format: (Float value) -> String
+    def format: (Float value, ?utc_offset: Integer?) -> String
 
     private
 
