@@ -1217,7 +1217,9 @@ range without excluding occupied buckets. `hard_bounds: {min: 0, max: 100}`
 filters occupied bucket ordinals with inclusive endpoints before applying
 `offset`. Each bound may omit an endpoint; extended endpoints must fit within
 the supplied hard endpoints. Both extended endpoints can produce an empty-data
-histogram. Numeric formatting remains adapter work.
+histogram. Format returned numeric values in the application, for example with
+Rails `number_with_precision`. Elasticsearch's Java numeric format patterns are
+outside this gem's native SQL API.
 
 With offsets, rounded extended buckets can fall outside the numeric hard bounds,
 matching Elasticsearch's empty-bucket behavior. For example, interval 10,
@@ -1329,10 +1331,16 @@ endpoints. Extended bounds describe the empty output grid; hard bounds restrict
 which populated buckets collect records. Explicit `where:` filters are available
 when the input timestamps themselves must fall within a range.
 
-Nested aggregations and additional aggregate options remain adapter
-implementation work. Elasticsearch/Painless scripts are not SQL;
-use a reviewed persisted/generated column or an explicit application SQL query
-for scripted calculations. Check representative plans against TIN's
+Elasticsearch nested/reverse-nested and pipeline aggregation DSL, Java numeric
+format patterns, and Painless scripts are outside this gem's native SQL API.
+Searchkick exposes general subaggregations through `body_options`; Tinkick does
+not translate that Elasticsearch request body. Use ActiveRecord `group` and
+aggregate queries, explicit SQL subqueries/window functions, or a reviewed
+persisted/generated column for those calculations. This is an API boundary,
+not a claim that PostgreSQL cannot perform grouped or nested calculations.
+Portable options still awaiting implementation are `missing` defaults, terms
+`include`/`exclude`, and flat JSONB aggregation paths.
+Check representative plans against TIN's
 [SQL shape guidance](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
 
 ## Highlighting
