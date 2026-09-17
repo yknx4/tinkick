@@ -982,10 +982,11 @@ direnv exec . bundle exec ruby -Itest test/rails_app_test.rb --fail-fast
 
 The HTTP tests exercise real stored values, rendered and JSON output, filters,
 bounded pages, injection-like search text, transpositions, and visibility after
-writes, plus countless navigation and cursor traversal. The latest Rails 8.1
-checkpoint passed 11 HTTP tests with 48 assertions and seven corpus tests with
-30 assertions. The Rails 8.0 matrix rerun is tracked separately; these figures
-do not imply remote CI completion. See the tests and
+writes, plus countless navigation and cursor traversal. Local verification on
+Ruby 4.0.1 passed **195 tests and 1,081 assertions** on both Rails 8.0.5.1
+(JSON 2.21.2) and Rails 8.1.3.1 (JSON 3.0.2), with no failures or skips.
+This includes 11 HTTP tests and seven relevance-corpus tests. These are local
+results; remote CI has not been run. See the tests and
 [development guide](docs/development.md) for verification details. A fixture
 corpus is not evidence of complete Searchkick parity or a production-scale benchmark.
 

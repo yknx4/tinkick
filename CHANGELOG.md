@@ -15,3 +15,6 @@
 - Use native TIN scoring/top-k, default distance-one typos, and warn on legacy unloaded results.
 - Verify persisted generated search fields with real Rails migrations and updates.
 - Add an actual Rails application with Faker Tolkien records and HTTP search tests.
+- Add opt-in countless navigation and typed column cursors for keyset pagination.
+- Verify relevance with a varied 268-document corpus and capture real query plans.
+- Fix duplicate fixture callbacks and generated-column assertions across Rails 8.0 and 8.1.
