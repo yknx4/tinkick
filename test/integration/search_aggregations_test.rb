@@ -9,6 +9,10 @@ class SearchAggregationsTest < TinkickIntegrationTest
     tinkick searchable: [:description]
   end
 
+  class RegionalTravelProduct < TravelProduct
+    default_scope { where.not(name: "Shire") }
+  end
+
   setup do
     SearchProduct.delete_all
     regions = %w[Lindon Lindon Lindon Gondor Gondor Moria Moria Shire]
@@ -37,7 +41,30 @@ class SearchAggregationsTest < TinkickIntegrationTest
     assert_equal(["Lindon"], search.map(&:name).uniq)
     assert_equal(4, search.aggs.fetch("name").fetch("buckets").size)
     ordinary = TravelProduct.search("voyage", where: { name: "Lindon" }, aggs: [:name], smart_aggs: false, misspellings: false)
-    assert_equal([{ "key" => "Lindon", "doc_count" => 3 }], ordinary.aggs.fetch("name").fetch("buckets"))
+    assert_equal(search.aggs, ordinary.aggs)
+    assert_equal(["Lindon"], ordinary.map(&:name).uniq)
+  end
+
+  def test_disabled_smart_facets_ignore_other_global_filters_but_keep_aggregation_filters
+    search = TravelProduct.search("voyage", where: { name: "Lindon" },
+      aggs: { name: { where: { ratings: { gt: 4 } } } }, smart_aggs: false, misspellings: false)
+
+    assert_equal(3, search.total_count)
+    assert_equal(["Lindon"], search.map(&:name).uniq)
+    assert_equal({ "Gondor" => 1, "Moria" => 2, "Shire" => 1 },
+      search.aggs.fetch("name").fetch("buckets").to_h { |bucket| [bucket.fetch("key"), bucket.fetch("doc_count")] })
+    assert_equal(4, search.aggs.fetch("name").fetch("doc_count"))
+  end
+
+  def test_disabled_smart_facets_preserve_model_scope_and_lexical_exclusions
+    search = RegionalTravelProduct.search("voyage", where: { ratings: { gt: 2 } },
+      exclude: "Moria", aggs: [:name], misspellings: false).smart_aggs(false)
+
+    assert_equal(3, search.total_count)
+    assert_equal({ "Lindon" => 3, "Gondor" => 2 },
+      search.aggs.fetch("name").fetch("buckets").to_h { |bucket| [bucket.fetch("key"), bucket.fetch("doc_count")] })
+    refute_includes(search.map(&:name), "Shire")
+    refute_includes(search.map(&:name), "Moria")
   end
 
   def test_fluent_aggregations_merge_and_reuse_their_cached_results

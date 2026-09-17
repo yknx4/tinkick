@@ -994,9 +994,34 @@ fractional milliseconds. Compute relative origins in the application, for exampl
 Factors must be finite and nonnegative and have no Float32 cap. Negligible distant
 scores become zero to avoid PostgreSQL floating-point exponential underflow.
 Numeric columns also accept these functions with explicit numeric `origin` and
-`scale`. JSONB recency paths
-still require a date/numeric type contract; use a typed stored or generated
-column in the meantime.
+`scale`. Recency ranking requires a typed PostgreSQL column. Dotted JSONB paths
+raise `Tinkick::InvalidQueryError` with migration guidance: Tinkick does not infer
+whether a JSON number or string represents a date or a numeric measurement.
+
+Persist the values needed for ranking in typed columns:
+
+```ruby
+class AddProductRecencyFields < ActiveRecord::Migration[8.0]
+  def change
+    add_column :products, :search_published_at, :datetime, precision: 6
+    add_column :products, :search_distance, :decimal
+  end
+end
+```
+
+Backfill these columns using the application's date/numeric interpretation and
+keep them updated when the source JSONB changes. Once populated, search with
+`boost_by_recency: {search_published_at: {scale: "7d"}}`, or use the numeric
+column with an explicit origin and scale. No JSONB type mapping or date parser
+is added by the gem.
+
+A stored generated column is also suitable when its expression is immutable.
+[PostgreSQL requires immutable generated expressions](https://www.postgresql.org/docs/18/ddl-generated-columns.html).
+Direct text-to-timestamp casts do not meet that requirement: PostgreSQL marks
+its timestamp input functions as stable, rather than immutable, in the
+[native function catalog](https://raw.githubusercontent.com/postgres/postgres/REL_18_STABLE/src/include/catalog/pg_proc.dat).
+Use an ordinary maintained timestamp column for JSON timestamp strings instead
+of wrapping those casts in a falsely declared immutable function.
 
 Recency scoring needs no optional extension. It logs the additional per-row
 calculation and sorting cost; counts and aggregation membership remain unchanged.
@@ -1149,10 +1174,12 @@ Product.search("coffee", where: {category: "drinks", in_stock: true},
 
 Product.search("coffee", where: {category: "drinks"},
   aggs: [:category], smart_aggs: false)
-# Category buckets now use the complete record filter.
+# Category buckets ignore the global where; record results remain drinks.
 ```
 
-The fluent `.smart_aggs(false)` modifier is equivalent. Smart facet removal only
+The fluent `.smart_aggs(false)` modifier is equivalent. Disabled smart facets
+keep the lexical query, exclusions, model scopes and per-aggregation `where`,
+but ignore the query's global `where` when calculating buckets. Smart facet removal only
 examines top-level filter keys, matching Searchkick's behavior. If a facet has its
 own `where` and other global filters remain, Searchkick's merge rule applies:
 global filters are merged with the facet's filters, and the latter win duplicate

@@ -140,7 +140,7 @@ module Tinkick
         else
           spec
         end
-        base = build_scope(@smart_aggs ? {} : @where)
+        base = build_scope({})
         output = {} #: Hash[String, aggregation_result]
         specifications.each do |name, options|
           conditions = options[:where] || {}
