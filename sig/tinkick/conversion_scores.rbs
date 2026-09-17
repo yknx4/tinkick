@@ -1,0 +1,22 @@
+module Tinkick
+  type conversion_factor = Integer | Float | BigDecimal | String
+
+  class ConversionScores
+    @model: singleton(ActiveRecord::Base)
+    @fields: Array[String]
+    @term: String
+    @factor: Float
+    @case_sensitive: bool
+    @warned: bool
+
+    def initialize: (singleton(ActiveRecord::Base) model, fields: Array[String], term: String, ?factor: conversion_factor, ?case_sensitive: bool) -> void
+    def empty?: () -> bool
+    def score_sql: (String base_score) -> String
+
+    private
+
+    def factor_number: (conversion_factor value) -> Float
+    def column_score: (String name) -> String
+    def checked_count: (String value) -> String
+  end
+end
