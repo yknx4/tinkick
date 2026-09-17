@@ -8,11 +8,15 @@ module Tinkick
 
     def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: misspellings, ?analysis: Hash[String, String]) -> String
 
+    def refinement_required?: (String term, misspellings: misspellings, ?analysis: Hash[String, String]) -> bool
+
     def exclusion: (String term, words: Array[String], match: Symbol) -> String
 
     def tokens: (String term, ?analysis: Hash[String, String]) -> Array[String]
 
     private
+
+    def literal_fuzzy_token?: (String word) -> bool
 
     def quote: (String term) -> String
 

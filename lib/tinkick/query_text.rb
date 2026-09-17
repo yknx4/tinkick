@@ -39,7 +39,7 @@ module Tinkick
       return exact if distance.zero?
 
       words.map do |word|
-        if ["*", "#"].include?(word) || /[()\[\]"~^]/.match?(word)
+        if literal_fuzzy_token?(word)
           if word.length > 50
             raise ArgumentError, "Fuzzy tokens containing TINQL delimiters longer than 50 characters require SQL refinement"
           end
@@ -48,6 +48,20 @@ module Tinkick
           fuzzy(word, distance, prefix, transpositions)
         end
       end.join(separator)
+    end
+
+    def refinement_required?(term, misspellings:, analysis: {})
+      return false if misspellings == false || !/[()\[\]"~^*#]/.match?(term)
+
+      settings = fuzzy_settings(misspellings)
+      return false unless settings
+
+      distance = settings.first
+      return false if distance.zero?
+
+      tokens(term, analysis: analysis).any? do |word|
+        literal_fuzzy_token?(word) && (distance > 1 || word.length > 50)
+      end
     end
 
     def exclusion(term, words:, match:)
@@ -82,6 +96,10 @@ module Tinkick
     end
 
     private
+
+    def literal_fuzzy_token?(word)
+      ["*", "#"].include?(word) || /[()\[\]"~^]/.match?(word)
+    end
 
     def quote(term)
       escaped = term.gsub(/["\\_\[\]]/) { |character| "\\#{character}" }

@@ -16,12 +16,12 @@ module Tinkick
       @model = model
     end
 
-    def predicate(field_name, term, operator: "and", match: :word, misspellings:)
+    def predicate(field_name, term, operator: "and", match: :word, misspellings:, excluded: nil)
       raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(operator)
       unless [:word, :word_start, :word_middle, :word_end].include?(match)
         raise ArgumentError, "Unsupported token match mode: #{match.inspect}"
       end
-      prefix, transpositions = settings(misspellings, match)
+      distance, prefix, transpositions = settings(misspellings, match)
       field = SearchField.new(@model, field_name)
       analysis = index_analysis(field_name, field)
       @model.with_connection do |connection|
@@ -43,21 +43,24 @@ module Tinkick
         end
         next ["FALSE", []] if words.empty?
 
-        function = if transpositions
+        function = if match == :word && (distance != 2 || !transpositions)
+          Functions.require_edit_distance!(@model)
+        elsif transpositions
           Functions.require!(@model)
         else
           schema = Extensions.require!(@model, "fuzzystrmatch")
           "#{connection.quote_column_name(schema)}.levenshtein_less_equal"
         end
-        candidates = words.map { |word| candidate(word, prefix, match) }.join(" #{operator.upcase} ")
+        candidates = words.map { |word| candidate(word, prefix, match, distance, transpositions) }.join(" #{operator.upcase} ")
+        candidates = "(#{candidates}) AND NOT (#{excluded})" if excluded
         binds = [candidates] #: Array[filter_scalar]
         refinements = words.map do |word|
           fixed = [prefix, word.length].min
           binds << word.chars.first(fixed).join << word.chars.drop(fixed).join
-          refinement(field.text_sql, options, word, prefix, match, function)
+          refinement(field.text_sql, options, word, prefix, match, function, distance, transpositions)
         end
         if match == :word
-          @model.logger&.warn("Tinkick: two-edit transposition matching checks tokens from native TIN candidates with SQL edit distance and can bypass native top-k ranking. Broad candidates or long fields can be expensive; inspect EXPLAIN ANALYZE for your workload.")
+          @model.logger&.warn("Tinkick: fuzzy literal or two-edit transposition matching checks tokens from native TIN candidates with SQL edit distance and can bypass native top-k ranking. Broad candidates or long fields can be expensive; inspect EXPLAIN ANALYZE for your workload.")
         else
           @model.logger&.warn("Tinkick: two-edit partial matching enumerates bounded grams from TIN candidate tokens and can bypass native top-k ranking and sort matches. Without a fixed prefix, candidates can cover most tokens; word_middle also checks each position. Inspect EXPLAIN ANALYZE before using this on long fields or large result sets.")
         end
@@ -68,41 +71,41 @@ module Tinkick
     private
 
     def settings(options, match)
+      options = { transpositions: true } if options == true
       unless options.is_a?(Hash)
-        raise ArgumentError, "Two-edit word matching requires a misspellings options hash"
+        raise ArgumentError, "Token refinement requires true or a misspellings options hash"
       end
       unknown = options.keys - [:transpositions, :edit_distance, :distance, :prefix_length]
       raise ArgumentError, "Unsupported misspellings options: #{unknown.join(', ')}" unless unknown.empty?
       distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
       transpositions = options.fetch(:transpositions, true)
-      unless distance.is_a?(Integer) && distance == 2
-        raise ArgumentError, "This token refinement requires edit_distance: 2"
+      unless distance.is_a?(Integer) && distance.positive? && (match == :word || distance == 2)
+        raise ArgumentError, "Token refinement requires a positive edit_distance, or edit_distance: 2 for partial matching"
       end
       unless transpositions == true || transpositions == false
         raise ArgumentError, "Misspellings transpositions must be true or false"
       end
-      raise ArgumentError, "Whole-word refinement requires transpositions: true" if match == :word && !transpositions
       prefix = options.fetch(:prefix_length, 0)
       unless prefix.is_a?(Integer) && prefix >= 0
         raise ArgumentError, "Misspellings prefix_length must be a nonnegative integer"
       end
 
-      [prefix, transpositions]
+      [distance, prefix, transpositions]
     end
 
-    def candidate(word, prefix, match)
+    def candidate(word, prefix, match, distance, transpositions)
       fixed = [prefix, word.length].min
       # Two restricted transpositions require at most four Levenshtein edits.
       if match == :word && /\A[\p{L}\p{M}\p{N}]+\z/.match?(word) && word == word.downcase
-        return "#{word}~#{fixed}:4"
+        return "#{word}~#{fixed}:#{distance * (transpositions ? 2 : 1)}"
       end
 
       # Regex addresses dictionary tokens directly when fuzzy syntax would
       # reinterpret punctuation or a case-preserved TINQL keyword.
       literal = Regexp.escape(word.chars.first(fixed).join)
       if match == :word
-        minimum = [[1, word.length - 2].max - fixed, 0].max
-        maximum = word.length + 2 - fixed
+        minimum = [[1, word.length - distance].max - fixed, 0].max
+        maximum = word.length + distance - fixed
       else
         minimum, maximum = partial_lengths(word, prefix)
         minimum -= fixed
@@ -117,7 +120,7 @@ module Tinkick
       [[1, word.length - 2, [prefix, word.length].min].max, [50, word.length + 2].min]
     end
 
-    def refinement(column_sql, options, word, prefix, match, function)
+    def refinement(column_sql, options, word, prefix, match, function, distance, transpositions)
       fixed = [prefix, word.length].min
       value = "tinkick_tokens.value"
       joins = ""
@@ -134,12 +137,14 @@ module Tinkick
         end
         value = "substring(tinkick_tokens.value FROM #{position} FOR tinkick_lengths.length)"
       end
+      arguments = "substring(#{value} FROM #{fixed + 1}), ?, #{distance}"
+      arguments += ", #{transpositions}" if function == "tinkick.edit_distance"
       <<~SQL
         EXISTS (
           SELECT 1 FROM tin.tokenize(#{column_sql}#{options}) AS tinkick_tokens(value)
           #{joins}
           WHERE left(#{value}, #{fixed}) COLLATE "C" = ? COLLATE "C"
-            AND #{function}(substring(#{value} FROM #{fixed + 1}), ?, 2) <= 2
+            AND #{function}(#{arguments}) <= #{distance}
         )
       SQL
     end

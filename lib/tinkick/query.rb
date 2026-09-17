@@ -275,16 +275,18 @@ module Tinkick
             exact << field_predicate(field, ["#{field.text_sql}::text COLLATE \"C\" = ?", [@term]])
           elsif [:text_start, :text_middle, :text_end].include?(mode)
             exact << field_predicate(field, TextMatch.new(@model).predicate(field.text_sql, @term, match: mode, misspellings: misspellings))
-          elsif two_edit_word?(mode, misspellings)
-            native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings))
           else
             analysis = @model.tinkick_index_analysis(name, field)
-            compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
-            compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded && !compiled.empty?
-            if [:word_start, :word_middle, :word_end].include?(mode) && misspellings != false && compiled.include?("MATCHES")
-              @fuzzy_partial = true
+            if two_edit_word?(mode, misspellings) || (mode == :word && compiler.refinement_required?(@term, misspellings: misspellings, analysis: analysis))
+              native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings, excluded: excluded))
+            else
+              compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
+              compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded && !compiled.empty?
+              if [:word_start, :word_middle, :word_end].include?(mode) && misspellings != false && compiled.include?("MATCHES")
+                @fuzzy_partial = true
+              end
+              native << field_predicate(field, ["#{field.text_sql} ==> ?", [compiled]]) unless compiled.empty?
             end
-            native << field_predicate(field, ["#{field.text_sql} ==> ?", [compiled]]) unless compiled.empty?
           end
         end
         if native.empty?

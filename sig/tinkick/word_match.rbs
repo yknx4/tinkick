@@ -5,14 +5,14 @@ module Tinkick
     @model: singleton(ActiveRecord::Base)
 
     def initialize: (singleton(ActiveRecord::Base) model) -> void
-    def predicate: (String field_name, String term, misspellings: QueryText::misspellings, ?operator: String, ?match: Symbol) -> filter_predicate
+    def predicate: (String field_name, String term, misspellings: QueryText::misspellings, ?operator: String, ?match: Symbol, ?excluded: String?) -> filter_predicate
     def index_analysis: (String field_name, SearchField field) -> Hash[String, String]
 
     private
 
-    def settings: (QueryText::misspellings options, Symbol match) -> [ Integer, bool ]
-    def candidate: (String word, Integer prefix, Symbol match) -> String
+    def settings: (QueryText::misspellings options, Symbol match) -> [ Integer, Integer, bool ]
+    def candidate: (String word, Integer prefix, Symbol match, Integer distance, bool transpositions) -> String
     def partial_lengths: (String word, Integer prefix) -> [ Integer, Integer ]
-    def refinement: (String column_sql, String options, String word, Integer prefix, Symbol match, String function) -> String
+    def refinement: (String column_sql, String options, String word, Integer prefix, Symbol match, String function, Integer distance, bool transpositions) -> String
   end
 end

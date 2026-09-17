@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../integration_helper"
+require "stringio"
 
 class CustomAnalysisSearchTest < TinkickIntegrationTest
   class Product < SearchProduct
@@ -19,6 +20,26 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     def down
       remove_index(:tinkick_test_products, :name, using: :tin)
       add_index(:tinkick_test_products, :name, using: :tin)
+    end
+  end
+
+  class PreserveLongNameTokens < ActiveRecord::Migration[8.0]
+    def up
+      remove_index(:tinkick_test_products, :name, using: :tin)
+      execute(<<~SQL)
+        CREATE INDEX index_tinkick_test_products_on_name ON tinkick_test_products USING tin (name)
+        WITH (tokenizer = whitespace, case_folding = preserve, accent_folding = preserve, max_token_bytes = 1024)
+      SQL
+    end
+  end
+
+  class FoldNameCase < ActiveRecord::Migration[8.0]
+    def up
+      remove_index(:tinkick_test_products, :name, using: :tin)
+      execute(<<~SQL)
+        CREATE INDEX index_tinkick_test_products_on_name ON tinkick_test_products USING tin (name)
+        WITH (tokenizer = whitespace, case_folding = fold, accent_folding = preserve)
+      SQL
     end
   end
 
@@ -164,6 +185,81 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     assert_includes(plan, '"Top K": "10"')
     refute_includes(plan, "osa_distance")
     assert_equal([@first.id], search(term, misspellings: { prefix_length: 50 }).map(&:id))
+  end
+
+  def test_long_fuzzy_delimiters_preserve_prefixes_and_exact_exclusions
+    term = "A" * 60 + "(b)"
+    @first.update!(name: term)
+    @second.update!(name: "Z#{term[1..]}")
+
+    assert_equal([@first.id, @second.id].sort, search(term, misspellings: true).map(&:id).sort)
+    assert_equal([@first.id], search(term, misspellings: { prefix_length: 1 }).map(&:id))
+    assert_equal([@second.id], search(term, misspellings: true, exclude: term).map(&:id))
+    assert_equal(1, search(term, misspellings: true, exclude: term).total_count)
+    assert_empty(search(term.downcase, misspellings: true))
+  end
+
+  def test_two_edit_literal_delimiters_can_disable_transpositions
+    @first.update!(name: "ab()")
+    @second.update!(name: "Wrong")
+    options = { edit_distance: 2, transpositions: false }
+
+    assert_equal([@first.id], search("a(b)", misspellings: options).map(&:id))
+    assert_empty(search("a(b)", misspellings: options.merge(edit_distance: 1)))
+    assert_empty(search("a(b)", misspellings: options.merge(prefix_length: 2)))
+    assert_empty(search("a(b)", misspellings: options, exclude: "ab()"))
+
+    @first.update!(name: "#")
+    @second.update!(name: "$")
+    assert_equal([@first.id, @second.id].sort, search("#", misspellings: options).map(&:id).sort)
+  end
+
+  def test_refinement_uses_custom_long_token_limits_without_fuzzystrmatch_truncation
+    PreserveLongNameTokens.new.migrate(:up)
+    SearchProduct.reset_column_information
+    term = "A" * 300 + "()"
+    @first.update!(name: term)
+    @second.update!(name: "A" * 300 + ")(")
+
+    assert_equal([@first.id, @second.id].sort, search(term, misspellings: true).map(&:id).sort)
+    assert_equal([@first.id], search(term, misspellings: { transpositions: false }).map(&:id))
+    assert_equal([@first.id, @second.id].sort,
+      search(term, misspellings: { edit_distance: 2, transpositions: false }).map(&:id).sort)
+    assert_equal([@first.id], search(term, misspellings: { prefix_length: 301 }).map(&:id))
+  end
+
+  def test_refinement_threshold_uses_analyzed_codepoints_after_case_folding
+    FoldNameCase.new.migrate(:up)
+    SearchProduct.reset_column_information
+    term = "İ" * 30 + ")"
+    @first.update!(name: term)
+    @second.update!(name: "Unrelated")
+
+    assert_equal([@first.id], search(term, misspellings: true).map(&:id))
+  end
+
+  def test_refined_literal_tokens_warn_and_use_tin_candidates_in_the_real_plan
+    term = "A" * 60 + ")"
+    @first.update!(name: term)
+    @second.update!(name: "Z" * 60 + ")")
+    previous_logger = Product.logger
+    messages = StringIO.new
+    Product.logger = Logger.new(messages)
+    statements = []
+    callback = ->(_name, _start, _finish, _id, payload) { statements << payload.slice(:sql, :binds) }
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      assert_equal([@first.id], search(term, misspellings: true, limit: 10).map(&:id))
+    end
+    assert_includes(messages.string, "top-k")
+    statement = statements.find { |entry| entry.fetch(:sql).include?(" AS _tinkick_score") }
+    assert_includes(statement.fetch(:sql), "tinkick.edit_distance")
+    plan = Product.connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}",
+      "Tinkick Refined Literal Explain", statement.fetch(:binds))
+    assert_includes(plan, "Text Search Scan")
+    assert_includes(plan, '"Function Name": "tokenize"')
+  ensure
+    Product.logger = previous_logger
   end
 
   private
