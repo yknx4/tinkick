@@ -28,6 +28,10 @@ creates its migration tracking tables. Fixture tests run in transactions;
 schema migrations remain installed in the dedicated test database.
 
 Do not run separate fixture test processes concurrently against this database.
+The stress and relevance corpora share a table but use different fixture paths.
+Rails caches fixture sets without their paths, so the stress test clears that
+cache before setup and after teardown. Preserve both boundaries when changing
+the corpus harness; otherwise test order can substitute the wrong dataset.
 CI serializes Rails matrix jobs and workflow runs for the same reason. CI needs
 repository secrets `PGHOST`, `PGUSER`, `PGPASSWORD`, and optionally `PGPORT`
 (default 5432) and `PGSSLMODE` (default require). Credentials must access only

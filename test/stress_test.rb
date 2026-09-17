@@ -13,6 +13,18 @@ class StressTest < ActiveSupport::TestCase
   set_fixture_class(tinkick_test_documents: SearchDocument)
   fixtures :tinkick_test_documents
 
+  def before_setup
+    # Rails caches fixture sets by table, ignoring our alternate corpus path.
+    ActiveRecord::FixtureSet.reset_cache
+    super
+  end
+
+  def after_teardown
+    super
+  ensure
+    ActiveRecord::FixtureSet.reset_cache
+  end
+
   def test_fixed_ten_thousand_document_search_happy_paths
     assert_equal(10_000, SearchDocument.count)
     assert_equal({ "control" => 8, "fantasy" => 2_498, "food" => 2_498, "technical" => 2_498, "travel" => 2_498 }, SearchDocument.group(:category).count)
