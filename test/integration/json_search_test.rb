@@ -6,6 +6,15 @@ require_relative "../../lib/tinkick/model"
 class JsonSearchTest < TinkickIntegrationTest
   HOSTILE_KEY = %q[quoted'key\"); DROP TABLE ignored; --]
 
+  class CreateUnusableJsonIndexes < ActiveRecord::Migration[8.0]
+    def change
+      add_index :tinkick_test_products, "(metadata ->> 'unindexed')", using: :tin,
+        where: "metadata IS NOT NULL", name: :tinkick_test_products_json_partial_tin
+      add_index :tinkick_test_products, "lower(metadata ->> 'transformed')", using: :tin,
+        name: :tinkick_test_products_json_transformed_tin
+    end
+  end
+
   def test_searches_indexed_scalar_paths_and_observes_changes_immediately
     apple = tinkick_test_products(:red_apple)
     pear = tinkick_test_products(:green_pear)
@@ -81,6 +90,20 @@ class JsonSearchTest < TinkickIntegrationTest
 
     assert_includes(error.message, "tinkick:index")
     assert_includes(error.message, "metadata.unindexed")
+  end
+
+  def test_partial_or_different_expressions_do_not_satisfy_the_index_contract
+    migration = CreateUnusableJsonIndexes.new
+    migration.migrate(:up)
+    begin
+      ["metadata.unindexed", "metadata.transformed"].each do |field|
+        error = assert_raises(Tinkick::Error) { search("apple", fields: [field]) }
+
+        assert_includes(error.message, "valid, nonpartial TIN expression index")
+      end
+    ensure
+      migration.migrate(:down)
+    end
   end
 
   def test_search_data_still_validates_physical_columns_on_a_new_instance
