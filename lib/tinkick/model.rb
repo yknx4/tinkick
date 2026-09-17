@@ -6,9 +6,15 @@ require "json"
 
 module Tinkick
   module Model
-    def tinkick(searchable: nil, default_fields: nil, match: :word, stem: false, highlight: nil,
-      word_start: nil, word_middle: nil, word_end: nil, text_start: nil, text_middle: nil, text_end: nil, **options)
+    def tinkick(searchable: Tinkick.model_options[:searchable], default_fields: Tinkick.model_options[:default_fields],
+      match: Tinkick.model_options.fetch(:match, :word), stem: Tinkick.model_options.fetch(:stem, false),
+      highlight: Tinkick.model_options[:highlight], word_start: Tinkick.model_options[:word_start],
+      word_middle: Tinkick.model_options[:word_middle], word_end: Tinkick.model_options[:word_end],
+      text_start: Tinkick.model_options[:text_start], text_middle: Tinkick.model_options[:text_middle],
+      text_end: Tinkick.model_options[:text_end], **options)
       # @type self: singleton(ActiveRecord::Base)
+      options = Tinkick.model_options.except(:searchable, :default_fields, :match, :stem, :highlight,
+        :word_start, :word_middle, :word_end, :text_start, :text_middle, :text_end).merge(options)
       raise ArgumentError, "stem must be true or false" unless stem == true || stem == false
 
       stemming = options.keys & [:language, :stemmer, :stem_exclusion, :stemmer_override]
