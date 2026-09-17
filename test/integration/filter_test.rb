@@ -1,19 +1,10 @@
 # frozen_string_literal: true
 
 require_relative "../integration_helper"
+require "logger"
+require "stringio"
 
 class FilterTest < TinkickIntegrationTest
-  class CursorValue < ActiveRecord::Base
-    self.table_name = "tinkick_test_cursor_values"
-  end
-
-  def test_array_filters_fail_with_the_unsupported_semantics_explanation
-    error = assert_raises(Tinkick::InvalidQueryError) do
-      Tinkick::Filter.new(CursorValue).apply(CursorValue.all, tags: ["fruit"])
-    end
-    assert_includes error.message, "array or JSON semantics"
-  end
-
   def test_equality_preserves_the_tin_scope
     scope = SearchProduct.where("description ==> ?", "fruit")
 
@@ -190,9 +181,112 @@ class FilterTest < TinkickIntegrationTest
     assert_raises(ArgumentError) { filter(SearchProduct.all, or: [{ name: "Red Apple" }]) }
   end
 
+  def test_array_membership_and_all_preserve_the_tin_scope
+    set_array_values
+    scope = SearchProduct.where("description ==> ?", "fruit")
+
+    assert_equal(["Red Apple"], filter(scope, tags: "red").pluck(:name))
+    assert_equal(["Green Pear", "Red Apple"], filter(scope, tags: ["red", "green"]).order(:name).pluck(:name))
+    assert_equal(["Green Pear"], filter(scope, tags: { in: ["green"] }).pluck(:name))
+    assert_equal(["Red Apple"], filter(scope, tags: { all: ["fruit", "red", "red"] }).pluck(:name))
+    assert_empty(filter(scope, tags: { all: ["red", "green"] }))
+    assert_empty(filter(scope, tags: []))
+    assert_equal(2, filter(scope, tags: { all: [] }).count)
+    assert_empty(filter(scope.where("name ==> ?", "pear"), tags: "red"))
+  end
+
+  def test_array_null_and_exists_ignore_null_elements
+    set_array_values
+    SearchProduct.create!(name: "Empty", tags: [])
+    SearchProduct.create!(name: "Missing", tags: nil)
+    SearchProduct.create!(name: "Null entries", tags: [nil, nil])
+    absent = ["Empty", "Missing", "Null entries"]
+
+    assert_equal(absent, filter(SearchProduct.all, tags: nil).order(:name).pluck(:name))
+    assert_equal(absent, filter(SearchProduct.all, tags: { exists: false }).order(:name).pluck(:name))
+    assert_equal(["Green Pear", "Red Apple"], filter(SearchProduct.all, tags: { exists: true }).order(:name).pluck(:name))
+    assert_equal(absent + ["Red Apple"], filter(SearchProduct.all, tags: [nil, "red"]).order(:name).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, tags: { not: [nil, "red"] }).pluck(:name))
+    assert_empty(filter(SearchProduct.all, tags: { all: [nil, "red"] }))
+  end
+
+  def test_array_negation_preserves_individual_predicates
+    set_array_values
+    SearchProduct.create!(name: "Missing", tags: nil)
+
+    assert_equal(["Green Pear", "Missing"], filter(SearchProduct.all, tags: { not: "red" }).order(:name).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, tags: { not: ["red"], in: ["fruit"] }).pluck(:name))
+    assert_equal(["Missing"], filter(SearchProduct.all, _not: { tags: { all: ["red", "green"] } }).pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, _and: [{ tags: "fruit" }, { _not: { tags: "green" } }]).pluck(:name))
+  end
+
+  def test_array_range_bounds_must_match_the_same_element
+    set_array_values
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, ratings: { gt: 26, lt: 36 }).pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, ratings: 26...36).pluck(:name))
+    assert_empty(filter(SearchProduct.all, ratings: 20...32))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, ratings: 20..32).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, ratings: ...19).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, ratings: 43..).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, _not: { ratings: { gt: 26, lt: 36 } }).pluck(:name))
+  end
+
+  def test_multidimensional_arrays_match_flattened_values
+    tinkick_test_products(:red_apple).update!(tags: [["fruit", "red"], [nil, "ripe"]], ratings: [[1, 19], [32, 42]])
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, tags: { all: ["fruit", "ripe"] }).pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, tags: { exists: true }).pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, ratings: 30..35).pluck(:name))
+  end
+
+  def test_array_text_filters_and_values_remain_bound
+    set_array_values
+    product = tinkick_test_products(:red_apple)
+    product.update!(tags: ["Product 100%_\\ABC", "red"])
+
+    assert_equal([product.id], filter(SearchProduct.all, tags: { like: "Product 100\\%\\_\\A%" }).ids)
+    assert_equal([product.id], filter(SearchProduct.all, tags: { ilike: "product%" }).ids)
+    assert_equal([product.id], filter(SearchProduct.all, tags: { prefix: "Product 100%_\\" }).ids)
+    assert_empty(filter(SearchProduct.all, tags: "red']::text[] OR TRUE --"))
+    assert_empty(filter(SearchProduct.all, tags: { prefix: "red') OR TRUE --" }))
+  end
+
+  def test_array_membership_can_use_a_gin_index
+    set_array_values
+    SearchProduct.with_connection do |connection|
+      connection.execute("SET LOCAL enable_seqscan = off")
+      relation = filter(SearchProduct.all, tags: "red")
+      plan = connection.select_values("EXPLAIN #{relation.to_sql}").join("\n")
+
+      assert_includes(plan, "index_tinkick_test_products_on_tags")
+      assert_includes(plan, "Index Cond")
+    end
+  end
+
+  def test_array_element_scans_warn_but_membership_does_not
+    set_array_values
+    output = StringIO.new
+    original_logger = SearchProduct.logger
+    SearchProduct.logger = Logger.new(output, level: Logger::WARN)
+
+    filter(SearchProduct.all, tags: "red").load
+    assert_empty(output.string)
+    filter(SearchProduct.all, ratings: 26..36).load
+    assert_includes(output.string, "array elements")
+    assert_includes(output.string, "GIN")
+  ensure
+    SearchProduct.logger = original_logger
+  end
+
   private
 
   def filter(scope, conditions)
     Tinkick::Filter.new(SearchProduct).apply(scope, conditions)
+  end
+
+  def set_array_values
+    tinkick_test_products(:red_apple).update!(tags: ["fruit", "red", nil], ratings: [19, 32, 42])
+    tinkick_test_products(:green_pear).update!(tags: ["fruit", "green"], ratings: [13, 40, 52])
   end
 end

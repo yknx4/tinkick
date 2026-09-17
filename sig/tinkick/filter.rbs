@@ -18,13 +18,15 @@ module Tinkick
 
     def predicates: (filter_value conditions) -> Array[filter_predicate]
 
-    def quoted_column: (String | Symbol field) -> String
+    def column_reference: (String | Symbol field) -> [ String, String? ]
 
-    def field_predicates: (String column, filter_value value) -> Array[filter_predicate]
+    def field_predicates: (String column, filter_value value, ?array_type: String?) -> Array[filter_predicate]
 
-    def equality: (String column, filter_value value) -> filter_predicate
+    def equality: (String column, filter_value value, ?array_type: String?) -> filter_predicate
 
-    def existence: (String column, filter_value value) -> filter_predicate
+    def existence: (String column, filter_value value, ?array_type: String?) -> filter_predicate
+
+    def element_predicate: (String column, filter_predicate predicate, String? array_type) -> filter_predicate
 
     def text_predicate: (String column, :like | :ilike | :prefix operator, filter_value value) -> filter_predicate
 

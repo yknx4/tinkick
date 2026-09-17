@@ -34,83 +34,100 @@ module Tinkick
         when :_not
           predicates(value).map { |predicate| negate(predicate) }
         else
-          field_predicates(quoted_column(field), value)
+          column, array_type = column_reference(field)
+          field_predicates(column, value, array_type: array_type)
         end
       end
     end
 
-    def quoted_column(field)
+    def column_reference(field)
       name = field.to_s
       column = @model.columns_hash[name]
       unless column
         raise MissingFieldError, "#{@model.name} has no column #{name.inspect}; add it with a Rails migration before filtering"
       end
-      array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
-      if array || [:json, :jsonb].include?(column.type)
-        raise InvalidQueryError, "Filtering #{name.inspect} requires array or JSON semantics that are not implemented yet"
+      if [:json, :jsonb].include?(column.type)
+        raise InvalidQueryError, "Filtering #{name.inspect} requires JSON semantics that are not implemented yet"
       end
+      array_type = "#{column.sql_type}[]" if column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
 
-      @model.with_connection do |connection|
+      reference = @model.with_connection do |connection|
         "#{connection.quote_table_name(@model.table_name)}.#{connection.quote_column_name(name)}"
       end
+      [reference, array_type]
     end
 
-    def field_predicates(column, value)
+    def field_predicates(column, value, array_type: nil)
+      element = array_type ? "tinkick_filter_element.value" : column
       case value
       when Range
-        [range_predicate(column, value)]
+        [element_predicate(column, range_predicate(element, value), array_type)]
       when Hash
         # @type var comparisons: Array[filter_predicate]
         comparisons = []
         filters = value.flat_map do |operator, operand|
           case operator
           when :in
-            [equality(column, operand)]
+            [equality(column, operand, array_type: array_type)]
           when :all
             raise ArgumentError, "all requires an array of values" unless operand.is_a?(Array)
 
-            operand.map { |entry| equality(column, entry) }
+            operand.map { |entry| equality(column, entry, array_type: array_type) }
           when :exists
-            [existence(column, operand)]
+            [existence(column, operand, array_type: array_type)]
           when :like, :ilike, :prefix
-            [text_predicate(column, operator, operand)]
+            [element_predicate(column, text_predicate(element, operator, operand), array_type)]
           when :not, :_not
-            [negate(equality(column, operand))]
+            [negate(equality(column, operand, array_type: array_type))]
           when :gt, :gte, :lt, :lte
-            comparisons << comparison(column, operator, operand)
+            comparisons << comparison(element, operator, operand)
             []
           else
             raise ArgumentError, "Unknown where operator: #{operator.inspect}"
           end
         end
-        filters << combine(comparisons, "AND") unless comparisons.empty?
+        filters << element_predicate(column, combine(comparisons, "AND"), array_type) unless comparisons.empty?
         filters
       else
-        [equality(column, value)]
+        [equality(column, value, array_type: array_type)]
       end
     end
 
-    def equality(column, value)
+    def equality(column, value, array_type: nil)
       if value.is_a?(Array)
         return ["FALSE", []] if value.empty?
 
-        combine(value.map { |entry| equality(column, entry) }, "OR")
+        combine(value.map { |entry| equality(column, entry, array_type: array_type) }, "OR")
       elsif value.nil?
-        ["#{column} IS NULL", []]
+        if array_type
+          negate(element_predicate(column, ["tinkick_filter_element.value IS NOT NULL", []], array_type))
+        else
+          ["#{column} IS NULL", []]
+        end
+      elsif array_type
+        ["#{column} @> ARRAY[?]::#{array_type}", [scalar(value)]]
       else
         ["#{column} = ?", [scalar(value)]]
       end
     end
 
-    def existence(column, value)
+    def existence(column, value, array_type: nil)
       case value
       when TrueClass
-        negate(equality(column, nil))
+        negate(equality(column, nil, array_type: array_type))
       when FalseClass
-        equality(column, nil)
+        equality(column, nil, array_type: array_type)
       else
         raise ArgumentError, "Passing a value other than true or false to exists is not supported"
       end
+    end
+
+    def element_predicate(column, predicate, array_type)
+      return predicate unless array_type
+
+      @model.logger&.warn("Tinkick: this filter scans array elements for #{column}; ordinary GIN array indexes cannot accelerate range, pattern, or missing-value checks. Consider a persisted or generated scalar column with an appropriate index for frequent filters.")
+      sql, binds = predicate
+      ["EXISTS (SELECT 1 FROM unnest(#{column}) AS tinkick_filter_element(value) WHERE #{sql})", binds]
     end
 
     def text_predicate(column, operator, value)

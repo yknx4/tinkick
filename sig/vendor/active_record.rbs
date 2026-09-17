@@ -18,6 +18,7 @@ module ActiveRecord
 
     class Column
       def type: () -> Symbol
+      def sql_type: () -> String
     end
   end
 
