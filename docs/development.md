@@ -61,6 +61,20 @@ types nor type errors should be suppressed as a workaround.
 
 ## Verified environment
 
+Checkpoint at commit `5409f2f` (2026-09-17): Ruby 4.0.1 / Rails 8.1.3.1
+passed `bundle exec rake coverage`: **373 tests, 2,251 assertions, no failures or
+skips**, with **97.71% line coverage** (1,494 / 1,529 executable lines).
+`rake rbs:format rbs:quality steep rubocop` passed: 46 type-checked files and
+88 Ruby files with no offenses. The gem built successfully with all three
+migration templates and without local secrets or test files.
+
+A separate Rails 8.0.5.1 / JSON 2 run passed **82 tests and 565 assertions** for
+date parsing, aggregations, public facets, association loading, JSONB search,
+two-edit words, phrase options, whole-field matching, and the 10,000-record stress
+test. This was a targeted compatibility run, not the full Rails 8.0 suite.
+These are local results; remote CI was not run. Later feature commits still
+need their own targeted checks and a final coverage gate.
+
 On 2026-09-17 UTC, read-only connection checks confirmed `tinkick_test` on
 PostgreSQL 18.6 with TIN 1.0.2. Rails migrations created TIN indexes and fixture
 tests verified matches, insert visibility, and savepoint rollback. These
