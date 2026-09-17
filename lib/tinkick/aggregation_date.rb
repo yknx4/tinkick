@@ -33,7 +33,12 @@ module Tinkick
         number = Float(value)
         raise ArgumentError, "Date range epoch bounds must be finite numbers" unless number.is_a?(Float) && number.finite?
 
-        return number
+        # Date ranges parse numeric bounds through the default date formatter.
+        # It tries a four-digit year before epoch milliseconds.
+        integer = number.to_i
+        return integer.to_f unless /\A-?\d{4}\z/.match?(integer.to_s)
+
+        value = Date.new(integer, 1, 1)
       end
 
       instant = case value

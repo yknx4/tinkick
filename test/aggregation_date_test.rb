@@ -47,6 +47,16 @@ class AggregationDateTest < Minitest::Test
     assert_nil dates.parse(nil)
   end
 
+  def test_numeric_bounds_try_a_four_digit_year_before_epoch_milliseconds
+    dates = Tinkick::AggregationDate.new
+    january = Time.utc(2026, 1, 1).to_i * 1_000
+
+    assert_equal january, dates.parse(2026)
+    assert_equal january, dates.parse(2026.9)
+    assert_equal 12_345, dates.parse(12_345)
+    assert_equal 1_767_225_600_001, dates.parse(1_767_225_600_001)
+  end
+
   def test_invalid_dates_math_and_time_zones_raise_clear_errors
     ["Not/A_Zone", "+19:00", "+01:99", "Pacific Time (US & Canada)", 5].each do |zone|
       assert_raises(ArgumentError) { Tinkick::AggregationDate.new(time_zone: zone) }
