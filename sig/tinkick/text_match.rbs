@@ -10,6 +10,8 @@ module Tinkick
 
     private
 
-    def validate_misspellings: (QueryText::misspellings options) -> void
+    def fuzzy_pattern: (String term, Symbol match, Integer prefix, bool transpositions) -> String?
+
+    def fuzzy_settings: (QueryText::misspellings options) -> [ Integer, Integer, bool ]
   end
 end

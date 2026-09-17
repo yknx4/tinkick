@@ -89,6 +89,7 @@ class TextMatchTest < TinkickIntegrationTest
   def test_rejects_invalid_match_modes_and_misspelling_settings
     assert_raises(ArgumentError) { ids("red", :word_start) }
     assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: -1 }) }
+    assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: 0.0 }) }
     assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: 0, unexpected: true }) }
     assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: 0, prefix_length: -1 }) }
     assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: 0, transpositions: nil }) }
@@ -106,6 +107,62 @@ class TextMatchTest < TinkickIntegrationTest
     assert_includes output.string, "word_start"
   ensure
     SearchProduct.logger = original_logger
+  end
+
+  def test_fuzzy_text_matches_substitution_insertion_deletion_and_swaps
+    expected = [tinkick_test_products(:red_apple).id]
+
+    assert_equal expected, ids("rex app", :text_start, misspellings: true)
+    assert_equal expected, ids("re app", :text_start, misspellings: true)
+    assert_equal expected, ids("redd app", :text_start, misspellings: true)
+    assert_equal expected, ids("rde app", :text_start, misspellings: true)
+    assert_equal expected, ids("d xp", :text_middle, misspellings: true)
+    assert_equal expected, ids("aplpe", :text_end, misspellings: true)
+    assert_empty ids("rxx app", :text_start, misspellings: true)
+  end
+
+  def test_fuzzy_text_honors_fixed_prefix_and_transposition_settings
+    expected = [tinkick_test_products(:red_apple).id]
+
+    assert_empty ids("xed ap", :text_start, misspellings: { prefix_length: 1 })
+    assert_equal expected, ids("rex ap", :text_start, misspellings: { prefix_length: 2 })
+    assert_empty ids("rde app", :text_start, misspellings: { transpositions: false })
+    assert_empty ids("rde app", :text_start, misspellings: { prefix_length: 2 })
+    assert_equal expected, ids("red applx", :text_start, misspellings: { distance: 1 })
+    assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: 2 }) }
+  end
+
+  def test_fuzzy_text_normalizes_accents_and_preserves_literal_regex_characters
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "Jalapeño (a|b).* 😀x😀")
+
+    assert_equal [product.id], ids("JALAPENA", :text_start, misspellings: true)
+    assert_equal [product.id], ids("(a|b).x", :text_middle, misspellings: true)
+    assert_equal [product.id], ids("😀y😀", :text_end, misspellings: true)
+    assert_empty ids("(?s).*", :text_middle, misspellings: true)
+    assert_empty ids("' OR true --", :text_middle, misspellings: true)
+  end
+
+  def test_fuzzy_text_uses_absolute_field_anchors_and_can_edit_newlines
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "Header\nRed Apple\nFooter")
+
+    assert_empty ids("rex app", :text_start, misspellings: true)
+    assert_empty ids("red applx", :text_end, misspellings: true)
+    assert_equal [product.id], ids("headerxred", :text_start, misspellings: true)
+    assert_equal [product.id], ids("applexfooter", :text_end, misspellings: true)
+    assert_equal [product.id], ids("red applx", :text_middle, misspellings: true)
+  end
+
+  def test_fuzzy_text_limits_candidate_grams_to_fifty_codepoints
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "😀" * 60)
+
+    [:text_start, :text_middle, :text_end].each do |mode|
+      assert_equal [product.id], ids("😀" * 51, mode, misspellings: true)
+      assert_empty ids("😀" * 52, mode, misspellings: true)
+      assert_empty ids("", mode, misspellings: true)
+    end
   end
 
   private

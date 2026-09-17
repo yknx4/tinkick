@@ -12,41 +12,80 @@ module Tinkick
       unless [:text_start, :text_middle, :text_end].include?(match)
         raise ArgumentError, "Unsupported whole-field match mode: #{match.inspect}"
       end
-      validate_misspellings(misspellings)
+      distance, prefix, transpositions = fuzzy_settings(misspellings)
       return ["FALSE", []] if term.empty?
 
       schema = Extensions.require!(@model, "unaccent")
       function = @model.with_connection { |connection| "#{connection.quote_column_name(schema)}.unaccent" }
       normalized = @model.with_connection { |connection| connection.select_value(Arel.sql("SELECT #{function}(lower(?))", term)) } #: String
-      return ["FALSE", []] unless normalized.length.between?(1, 50)
+      return ["FALSE", []] unless normalized.length.between?(1, 50 + distance)
 
-      pattern = @model.sanitize_sql_like(normalized)
-      pattern = "%#{pattern}" unless match == :text_start
-      pattern = "#{pattern}%" unless match == :text_end
       @model.logger&.warn("Tinkick: #{match} uses whole-field SQL normalization and can scan rows outside TIN. Prefer word_start, word_middle, or word_end when token matching is suitable; inspect EXPLAIN for this query.")
-      ["#{function}(lower(#{column_sql})) LIKE ?", [pattern]]
+      if distance.zero?
+        pattern = @model.sanitize_sql_like(normalized)
+        pattern = "%#{pattern}" unless match == :text_start
+        pattern = "#{pattern}%" unless match == :text_end
+        ["#{function}(lower(#{column_sql})) LIKE ?", [pattern]]
+      else
+        pattern = fuzzy_pattern(normalized, match, prefix, transpositions)
+        pattern ? ["#{function}(lower(#{column_sql})) ~ ?", [pattern]] : ["FALSE", []]
+      end
     end
 
     private
 
-    def validate_misspellings(options)
-      return if options == false
+    def fuzzy_pattern(term, match, prefix, transpositions)
+      characters = term.chars.map { |character| Regexp.escape(character) }
+      alternatives = [characters]
+      fixed = [prefix, characters.length].min
+      (fixed...characters.length).each do |index|
+        substituted = characters.dup
+        substituted[index] = "."
+        alternatives << substituted
 
-      unless options.is_a?(Hash)
-        raise ArgumentError, "Whole-field matching currently requires misspellings: false or edit_distance: 0"
+        deleted = characters.dup
+        deleted.delete_at(index)
+        alternatives << deleted
+
+        if transpositions && index + 1 < characters.length
+          swapped = characters.dup
+          swapped[index] = characters.fetch(index + 1)
+          swapped[index + 1] = characters.fetch(index)
+          alternatives << swapped
+        end
       end
+      (fixed..characters.length).each do |index|
+        alternatives << characters.dup.insert(index, ".")
+      end
+
+      patterns = alternatives.select { |candidate| candidate.length.between?(1, 50) }.map(&:join).uniq
+      return if patterns.empty?
+
+      leading = match == :text_start ? "\\A" : ""
+      trailing = match == :text_end ? "\\Z" : ""
+      "#{leading}(#{patterns.join('|')})#{trailing}"
+    end
+
+    def fuzzy_settings(options)
+      return [0, 0, false] if options == false
+
+      options = { transpositions: true } if options == true
+      raise ArgumentError, "Misspellings must be true, false, or an options hash" unless options.is_a?(Hash)
+
       unknown = options.keys - [:transpositions, :edit_distance, :distance, :prefix_length]
       raise ArgumentError, "Unsupported misspellings options: #{unknown.join(', ')}" unless unknown.empty?
 
       distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
       prefix = options.fetch(:prefix_length, 0)
       transpositions = options.fetch(:transpositions, true)
-      unless distance == 0 && prefix.is_a?(Integer) && prefix >= 0
-        raise ArgumentError, "Whole-field matching currently requires edit_distance: 0 and nonnegative prefix_length"
+      unless distance.is_a?(Integer) && [0, 1].include?(distance) && prefix.is_a?(Integer) && prefix >= 0
+        raise ArgumentError, "Whole-field matching currently requires edit_distance: 0 or 1 and nonnegative prefix_length"
       end
       unless transpositions == true || transpositions == false
         raise ArgumentError, "Misspellings transpositions must be true or false"
       end
+
+      [distance, prefix, transpositions]
     end
   end
 end
