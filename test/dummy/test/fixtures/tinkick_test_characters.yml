@@ -1,0 +1,26 @@
+<%
+require "faker"
+previous_random = Faker::Config.random
+begin
+  Faker::Config.random = Random.new(4242)
+  names = []
+  characters = Array.new(64) do
+    name = Faker::Fantasy::Tolkien.character
+    name = Faker::Fantasy::Tolkien.character while names.include?(name)
+    names << name
+    { name: name, location: Faker::Fantasy::Tolkien.location,
+      race: Faker::Fantasy::Tolkien.race, poem: Faker::Fantasy::Tolkien.poem }
+  end
+ensure
+  Faker::Config.random = previous_random
+end
+%>
+<% characters.each_with_index do |character, index| %>
+character_<%= index %>:
+  id: <%= index + 1 %>
+  name: <%= character[:name].to_json %>
+  location: <%= character[:location].to_json %>
+  race: <%= character[:race].to_json %>
+  poem: <%= character[:poem].to_json %>
+<% end %>
+

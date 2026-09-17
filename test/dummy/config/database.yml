@@ -1,0 +1,8 @@
+test:
+  adapter: postgresql
+  database: tinkick_test
+
+development:
+  adapter: postgresql
+  database: tinkick_development
+
