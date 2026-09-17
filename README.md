@@ -251,8 +251,16 @@ Product.search("apple", fields: [:name]).fields(:description)
 
 The fluent `fields` method **appends** fields. Use the keyword form to replace the
 model's defaults. Per-field match hashes and dotted JSONB scalar paths are
-available. Boosted names such as `"name^5"` and wildcard field names remain
-implementation work.
+available. Boosted names such as `"name^5"` remain implementation work.
+
+`fields: ["*"]` searches declared `searchable` fields, or eligible text columns
+when none are declared. Leading `*.` patterns also expand known dotted paths:
+`fields: ["*.title"]` includes a declared `metadata.title`. They never discover
+arbitrary JSON keys. Partial match patterns expand fields configured for that
+mode; exact-mode `"*"` and patterns such as `"na*"` remain literal field names,
+matching Searchkick's field handling. An unmatched pattern has no lexical hits.
+Per-field misspelling restrictions must use the original selector, for example
+`fields: ["*"], misspellings: {fields: ["*"]}`.
 
 ### Laziness and modifiers
 
