@@ -60,6 +60,7 @@ module Tinkick
 
     def highlight_fields: () -> Array[String]
     def highlight_matches: (String name, texts: Array[String?]) -> Array[String?]
+    def highlight_spans: (String name, texts: Array[String?]) -> Array[Array[CustomSpans::span]]?
     def highlight_query: (String name, texts: Array[String?]) -> String
 
     def total_count: () -> Integer

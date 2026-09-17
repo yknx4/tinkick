@@ -7,6 +7,7 @@ require_relative "keyset"
 require_relative "search_field"
 require_relative "word_match"
 require_relative "aggregations"
+require_relative "custom_spans"
 
 module Tinkick
   class Query
@@ -166,6 +167,29 @@ module Tinkick
         values.each_with_index { |value, index| matched[index] ||= value }
       end
       matched
+    end
+
+    def highlight_spans(name, texts:)
+      resolve_misspellings
+      return if @term == "*"
+
+      modes = @fields.filter_map do |field_name, mode|
+        mode if field_name == name && [:word, :phrase, :word_start, :word_middle, :word_end].include?(mode)
+      end.uniq
+      return if modes.empty?
+
+      field = SearchField.new(@model, name, match: modes.first || :word)
+      analysis = @model.tinkick_index_analysis(name, field)
+      return if analysis == WordMatch::ANALYSIS_DEFAULTS
+      if modes.include?(:phrase)
+        raise ArgumentError, "Highlighting custom TIN phrases still requires source-span witness support"
+      end
+
+      matcher = WordMatch.new(@model)
+      tokens = modes.flat_map do |mode|
+        matcher.highlight_tokens(name, @term, texts: texts, match: mode, misspellings: misspellings_for(name))
+      end.uniq
+      @model.with_connection { |connection| CustomSpans.new(connection).locate(texts, tokens: tokens, analysis: analysis) }
     end
 
     def highlight_query(name, texts:)
