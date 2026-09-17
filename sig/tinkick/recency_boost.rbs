@@ -1,0 +1,34 @@
+module Tinkick
+  type recency_boost_number = Integer | Float | BigDecimal | String | nil
+
+  type recency_boost_options = { ?function: String | Symbol | nil, ?origin: aggregation_range_bound, ?scale: recency_boost_number, ?offset: recency_boost_number, ?decay: recency_boost_number, ?factor: recency_boost_number | false }
+
+  type recency_boost_spec = Hash[String | Symbol, recency_boost_options] | false | nil
+
+  class RecencyBoost
+    MAX_WEIGHT: Float
+    MAX_MILLISECONDS: Integer
+    TIME_UNITS: Hash[String, Integer | Rational]
+
+    @model: singleton(ActiveRecord::Base)
+    @now: Time
+    @functions: Array[[ String, String ]]
+    @weights: Array[Float]
+    @warned: bool
+
+    attr_reader weights: Array[Float]
+
+    def initialize: (singleton(ActiveRecord::Base) model, recency_boost_spec specification, ?now: Time) -> void
+    def empty?: () -> bool
+    def functions: () -> Array[[ String, String ]]
+
+    private
+
+    def compile: (String name, recency_boost_options options) -> String
+    def date_origin: (aggregation_range_bound value) -> Integer
+    def duration: (recency_boost_number value, String name) -> Integer
+    def number: (aggregation_range_bound value, String name) -> Float
+    def weight: (recency_boost_number value) -> Float
+    def distance: (String name, ActiveRecord::ConnectionAdapters::Column column, Integer | Float origin, Integer | Float offset, date: bool) -> String
+  end
+end
