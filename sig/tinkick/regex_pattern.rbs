@@ -4,7 +4,7 @@ module Tinkick
     @position: Integer
     @casefold: bool
 
-    def initialize: (Regexp value) -> void
+    def initialize: (Regexp | String value) -> void
     def compile: () -> String
 
     private

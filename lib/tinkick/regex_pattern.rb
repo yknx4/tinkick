@@ -1,16 +1,22 @@
 # frozen_string_literal: true
 
 module Tinkick
-  # Searchkick sends Ruby Regexp sources to Lucene with optional syntax disabled.
-  # Translate that language, rather than executing Ruby or PostgreSQL extensions.
+  # Translate ordinary Lucene syntax, rather than executing Ruby extensions.
+  # Raw strings are whole-value patterns; Regexp objects retain Searchkick's
+  # implicit substring matching and ASCII case folding.
   class RegexPattern
     def initialize(value)
-      source = value.source
-      source = source.start_with?("\\A") ? source.delete_prefix("\\A") : ".*#{source}"
-      source = source.end_with?("\\z") ? source.delete_suffix("\\z") : "#{source}.*"
+      if value.is_a?(Regexp)
+        source = value.source
+        source = source.start_with?("\\A") ? source.delete_prefix("\\A") : ".*#{source}"
+        source = source.end_with?("\\z") ? source.delete_suffix("\\z") : "#{source}.*"
+        @casefold = value.casefold?
+      else
+        source = value
+        @casefold = false
+      end
       @characters = source.chars
       @position = 0
-      @casefold = value.casefold?
     end
 
     def compile

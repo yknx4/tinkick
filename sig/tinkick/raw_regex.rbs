@@ -1,0 +1,13 @@
+module Tinkick
+  class RawRegex
+    @model: singleton(ActiveRecord::Base)
+
+    def initialize: (singleton(ActiveRecord::Base) model) -> void
+    def predicate: (String column, String source) -> filter_predicate
+
+    private
+
+    def requires_automaton?: (String source) -> bool
+    def automaton_predicate: (String column, String source) -> filter_predicate
+  end
+end
