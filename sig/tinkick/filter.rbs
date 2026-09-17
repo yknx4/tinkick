@@ -13,6 +13,7 @@ module Tinkick
     def initialize: (singleton(ActiveRecord::Base) model) -> void
 
     def apply: (ActiveRecord::Relation scope, filter_conditions conditions) -> ActiveRecord::Relation
+    def predicate: (filter_conditions conditions) -> filter_predicate
 
     private
 

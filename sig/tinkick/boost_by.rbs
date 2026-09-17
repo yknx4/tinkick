@@ -5,6 +5,8 @@ module Tinkick
 
   type numeric_boost_spec = Array[String | Symbol] | Hash[String | Symbol, numeric_boost_options] | false | nil
 
+  type where_boosts = filter_conditions | false | nil
+
   class BoostBy
     MAX_SCORE: Float
 
@@ -12,13 +14,18 @@ module Tinkick
     @sums: Array[[ String, String ]]
     @multipliers: Array[[ String, String ]]
     @warned: bool
+    @conditions: Array[[ filter_conditions, Float ]]
+    @conditional_scoring: bool
 
-    def initialize: (singleton(ActiveRecord::Base) model, numeric_boost_spec specification) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, numeric_boost_spec specification, ?boost_where: where_boosts) -> void
     def empty?: () -> bool
     def score_sql: (String base_score) -> String
 
     private
 
+    def conditional_functions: (where_boosts specification) -> Array[[ filter_conditions, Float ]]
+    def conditional_number: (filter_value value) -> Float
+    def compile_conditions: () -> void
     def number: (numeric_boost_number value) -> Float
     def numeric_field: (String name) -> String
     def json_numeric_field: (String root, Array[String] path) -> String

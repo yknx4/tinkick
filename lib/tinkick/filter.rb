@@ -10,8 +10,12 @@ module Tinkick
     end
 
     def apply(scope, conditions)
-      sql, binds = combine(predicates(conditions), "AND")
+      sql, binds = predicate(conditions)
       scope.where(Arel.sql(sql, *binds))
+    end
+
+    def predicate(conditions)
+      combine(predicates(conditions), "AND")
     end
 
     private

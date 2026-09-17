@@ -1,14 +1,18 @@
 # frozen_string_literal: true
 
+require_relative "filter"
+
 module Tinkick
   class BoostBy
     MAX_SCORE = 3.4028234663852886e38
 
-    def initialize(model, specification)
+    def initialize(model, specification, boost_where: nil)
       @model = model
       @sums = [] #: Array[[String, String]]
       @multipliers = [] #: Array[[String, String]]
       @warned = false
+      @conditions = conditional_functions(boost_where)
+      @conditional_scoring = @conditions.any? { |_condition, weight| weight.positive? }
       return unless specification
 
       fields = if specification.is_a?(Array)
@@ -41,20 +45,82 @@ module Tinkick
     end
 
     def empty?
-      @sums.empty? && @multipliers.empty?
+      @sums.empty? && @multipliers.empty? && @conditions.empty?
     end
 
     def score_sql(base_score)
+      compile_conditions unless @conditions.empty?
       return base_score if empty?
 
       unless @warned
-        @model.logger&.warn("Tinkick: numeric boost_by scoring evaluates numeric fields for matching rows and can sort results instead of using native TIN top-k. Numeric arrays and JSONB paths also inspect values per row. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets.")
+        message = if @conditional_scoring
+          "Tinkick: conditional boost_where scoring evaluates filters for matching rows and can sort results instead of using native TIN top-k. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets."
+        else
+          "Tinkick: numeric boost_by scoring evaluates numeric fields for matching rows and can sort results instead of using native TIN top-k. Numeric arrays and JSONB paths also inspect values per row. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets."
+        end
+        @model.logger&.warn(message)
         @warned = true
       end
       "((#{base_score})::double precision * #{group(@sums, '+')} * #{group(@multipliers, '*')})"
     end
 
     private
+
+    def conditional_functions(specification)
+      return [] unless specification
+      raise ArgumentError, "boost_where must be a field conditions hash" unless specification.is_a?(Hash)
+
+      specification.flat_map do |field, value|
+        descriptors = if value.is_a?(Array) && value.first.is_a?(Hash)
+          unless value.all? { |entry| entry.is_a?(Hash) }
+            raise ArgumentError, "boost_where descriptor arrays must contain value/factor hashes"
+          end
+          value
+        else
+          [value]
+        end
+        descriptors.map do |descriptor|
+          if descriptor.is_a?(Hash)
+            [{ field => descriptor[:value] }, conditional_number(descriptor[:factor])]
+          else
+            [{ field => descriptor }, 1000.0]
+          end
+        end
+      end
+    end
+
+    def conditional_number(value)
+      unless value.is_a?(Integer) || value.is_a?(Float) || value.is_a?(BigDecimal) || value.is_a?(String)
+        raise ArgumentError, "boost_where factor must be a nonnegative number or numeric string"
+      end
+      result = if value.is_a?(String) && ["Infinity", "+Infinity"].include?(value.strip)
+        Float::INFINITY
+      else
+        Float(value)
+      end
+      if result.nan? || result.negative? || (result.zero? && (1.0 / result).negative?)
+        raise ArgumentError, "boost_where factor must be a nonnegative number or numeric string"
+      end
+
+      [result, MAX_SCORE].min
+    rescue ArgumentError, TypeError
+      raise ArgumentError, "boost_where factor must be a nonnegative number or numeric string"
+    end
+
+    def compile_conditions
+      filter = Filter.new(@model)
+      # @type var functions: Array[[String, String]]
+      functions = @conditions.filter_map do |conditions, weight|
+        sql, binds = filter.predicate(conditions)
+        # Elasticsearch's sum group keeps its identity when only zero weights match.
+        next if weight.zero?
+
+        quoted = binds.empty? ? sql : @model.sanitize_sql_array([sql, *binds])
+        [quoted, weight.to_s]
+      end
+      @sums.concat(functions)
+      @conditions.clear
+    end
 
     def number(value)
       unless value.nil? || value.is_a?(Integer) || value.is_a?(Float) || value.is_a?(BigDecimal) || value.is_a?(String)
