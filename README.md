@@ -1079,12 +1079,20 @@ on that local time grid; `key` remains UTC epoch milliseconds and
 calendar time, preserving month starts across February. Offsets may include
 seconds, though the upstream-compatible default label prints only offset hours
 and minutes. Fixed offsets are limited to ±18 hours. IANA zones such as
-`"America/New_York"` work with day, week, month, quarter, and year calendar
-intervals. Local days can span 23 or 25 hours. Repeated midnights use the earliest
-instant; missing midnights use the first valid instant. Entirely skipped dates
-do not produce duplicate buckets. PostgreSQL groups the records; Ruby converts
-only returned bucket boundaries, without extra queries or model loading.
-IANA subday calendar units and fixed intervals remain adapter work.
+`"America/New_York"` work with every calendar interval. Local days can span 23
+or 25 hours. Repeated midnights use the earliest instant; missing midnights use
+the first valid instant. Entirely skipped dates do not produce duplicate buckets.
+Hour buckets preserve both occurrences of a repeated hour with distinct UTC
+keys and offset-bearing labels. Half-hour transitions, such as Lord Howe's,
+follow the changed local grid instead of assuming every day has 24 hour buckets.
+
+PostgreSQL groups matching records and generates empty buckets without loading
+models. Subday intervals use PostgreSQL's timezone data for both keys and labels;
+historical boundaries can differ from Elasticsearch when the installed timezone
+databases differ. Explicit subday bounds add one query to round four scalar
+endpoints; unbounded histograms need no bounds query. Dense subday ranges use
+recursive SQL and can be expensive: prefer `min_doc_count: 1` when empty buckets
+are unnecessary. IANA `fixed_interval` support remains adapter work.
 
 Put `min_doc_count`, `order`, `keyed`, and `format` inside `date_histogram:`;
 only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
