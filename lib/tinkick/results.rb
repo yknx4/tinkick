@@ -339,7 +339,7 @@ module Tinkick
           values = hit_highlights(hit)
           if record.is_a?(HashWrapper)
             highlighter.fields.each_key do |name|
-              record.to_h["highlighted_#{name}"] = values[name.to_sym] || record[name]
+              record.to_h["highlighted_#{name}"] ||= values[name.to_sym] || record[name]
             end
           elsif !record.respond_to?(:search_highlights)
             record.define_singleton_method(:search_highlights) { values }
