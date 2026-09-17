@@ -1209,7 +1209,8 @@ The following reference maps less common upstream options to their current statu
 | `timeout`, `search_timeout`, `client_options` | Not implemented; configure database timeouts/pooling. |
 | `includes`, `model_includes` | Available; preload only visible model results. |
 | `scope_results` | Result-loading callback adapter remains implementation work. |
-| `select`, source filtering, `reselect`, `only`, `except` | Not implemented; use an explicit SQL projection recipe. |
+| `select`, source filtering, `reselect` | Projection adapter remains implementation work. |
+| `only`, `except` | Query-option selection/removal remains implementation work; these do not select model columns. |
 | `body`, `body_options`, query-mutating blocks | Excluded Elasticsearch DSL; use reviewed native SQL. |
 | `search_index`/`searchkick_index` inspection | Not implemented; use PostgreSQL catalogs and TIN helpers. |
 | Index refresh, clean/promote/store/remove, queue inspection | Excluded external-index lifecycle. |
