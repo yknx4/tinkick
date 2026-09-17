@@ -167,9 +167,10 @@ module Tinkick
           end
           misspellings = misspellings_for(name)
           if two_edit_word?(mode, misspellings) || (mode == :word && compiler.refinement_required?(@term, misspellings: misspellings, analysis: analysis))
-            raise ArgumentError, "Highlighting refined fuzzy matches still requires Tinkick eligible-token support"
+            WordMatch.new(@model).highlight_query(name, @term, texts: texts, match: mode, misspellings: misspellings)
+          else
+            compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
           end
-          compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
         end.reject(&:empty?).map { |query| "(#{query})" }.join(" OR ")
       end
     end
