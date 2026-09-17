@@ -667,7 +667,7 @@ Product.search("coffee").aggs(:category).aggs(
 | Feature | Available behavior |
 | --- | --- |
 | Terms | `field`, `limit` (default 1,000), `min_doc_count` (default 1), and `_key`/`_count` ordering |
-| Numeric ranges | Inclusive `from`, exclusive `to`, overlapping and empty buckets, optional `key`, and `keyed: true` |
+| Numeric/date ranges | Inclusive `from`, exclusive `to`, overlapping and empty buckets, optional `key`, and `keyed: true` |
 | Metrics | `avg`, `min`, `max`, `sum`, and exact `cardinality` |
 | Per-aggregation filters | `where` limits that aggregation without changing the record results |
 | Smart facets | Enabled by default; a facet ignores its own top-level `where` field while retaining other filters |
@@ -701,8 +701,10 @@ more. Array aggregation and exact `COUNT(DISTINCT)` cardinality also warn about
 workload-dependent cost. Aggregations issue bounded SQL result queries, with
 sorting and bucket limits in PostgreSQL, rather than grouping Ruby records.
 
-Date ranges/histograms, nested aggregations, and additional aggregate options
-remain adapter implementation work. Elasticsearch/Painless scripts are not SQL;
+Date ranges accept `Date`, `Time`, ISO8601 strings, or epoch-millisecond bounds
+and return UTC millisecond strings alongside numeric bounds. Date histograms,
+custom date formats, nested aggregations, and additional aggregate options remain
+adapter implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
 for scripted calculations. Check representative plans against TIN's
 [SQL shape guidance](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
@@ -1104,13 +1106,25 @@ direnv exec . bundle exec ruby -Itest test/rails_app_test.rb --fail-fast
 
 The HTTP tests exercise real stored values, rendered and JSON output, filters,
 bounded pages, injection-like search text, transpositions, and visibility after
-writes, plus countless navigation and cursor traversal. Local verification on
-Ruby 4.0.1 passed **195 tests and 1,081 assertions** on both Rails 8.0.5.1
-(JSON 2.21.2) and Rails 8.1.3.1 (JSON 3.0.2), with no failures or skips.
-This includes 11 HTTP tests and seven relevance-corpus tests. These are local
-results; remote CI has not been run. See the tests and
-[development guide](docs/development.md) for verification details. A fixture
-corpus is not evidence of complete Searchkick parity or a production-scale benchmark.
+writes, plus countless navigation and cursor traversal. The development matrix
+uses Ruby 4.0.1, Rails 8.0.5.1 and 8.1.3.1, with JSON 2.21.2. Remote CI has not
+been run. See the tests and [development guide](docs/development.md) for current
+verification commands.
+
+A separate fixed **10,000-document** corpus uses Faker Tolkien seed 314159,
+9,992 varied documents across fantasy/travel/food/technical topics, and eight
+explicit controls. Its stress test passed **26 assertions** covering ranking,
+unrelated text, phrases, typos, facets, keyset/countless pagination, and updates:
+
+```sh
+direnv exec . bundle exec ruby -Itest test/stress_test.rb --fail-fast
+```
+
+[Executed stress query plans](docs/query-plans.md#fixed-10000-document-corpus)
+show TIN top-k for relevance/countless queries, a primary-key scan for the
+match-all cursor case, and SQL aggregation over the complete corpus. These are
+local regression and execution-plan results, not complete Searchkick parity or
+production throughput claims.
 
 ### CI and database isolation
 

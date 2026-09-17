@@ -203,6 +203,38 @@ direnv exec . bundle exec ruby script/explain_match_modes.rb
 The [collector](../script/explain_match_modes.rb) checks the database name and
 corpus size, captures real bound queries, and performs no writes or migrations.
 
+## Fixed 10,000-document corpus
+
+The [stress capture](benchmarks/2026-09-17-stress-plans.json) uses 9,992 varied
+Faker Tolkien documents across four topics and eight ranking/phrase/typo controls,
+with seed 314159. Ruby 4.0.1, Rails 8.1.3.1, PostgreSQL 18.6, and TIN 1.0.2
+produced these individual observations:
+
+| Query | Visible rows/buckets | Execution ms | Observed plan |
+| --- | ---: | ---: | --- |
+| Rare two-term relevance, limit 2 | 2 | 0.519 | TIN Text Search Scan, Top K 2; no Sort |
+| Relevance countless, limit 20 | 20 | 0.797 | TIN Top K 21; one extra row detects the next page |
+| Column keyset, limit 137 | 137 | 0.240 | Primary-key index scan, 138 rows including the probe |
+| Category facets over all documents | 5 | 9.254 | Sequential scan of 10,000 rows, SQL grouping/window total and bucket sorting |
+
+Facet cost reflects examining the complete matched set. Neither pagination path
+automatically counts that set. The keyset case is match-all with a category filter;
+it does not establish the plan for keyset pagination combined with lexical search.
+These warm, single-query observations include database execution time, not client
+round-trip latency, concurrency, or a production throughput guarantee.
+
+```sh
+direnv exec . bundle exec ruby -Itest test/stress_test.rb --fail-fast
+direnv exec . bundle exec ruby script/explain_stress.rb
+```
+
+The [stress test](../test/stress_test.rb) passed 26 assertions, including result
+eligibility, ranking relationships, phrase order, typo recovery, filters, facets,
+countless SQL without automatic counts, complete keyset traversal, and immediate
+visibility after an update. The collector requires this exact corpus size and
+uses a read-only transaction. Run it before another fixture class replaces the
+corpus. This is a deterministic regression stress test, not a load generator.
+
 ## Reproduce
 
 Load the designated test fixtures through their normal tests, then run the
