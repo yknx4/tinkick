@@ -18,6 +18,14 @@ module Tinkick
 
       conditions.flat_map do |field, value|
         case field
+        when :or
+          raise ArgumentError, "or requires an array of alternative groups" unless value.is_a?(Array)
+
+          value.map do |alternatives|
+            raise ArgumentError, "or requires an array of alternative groups" unless alternatives.is_a?(Array)
+
+            combine(alternatives.map { |entry| combine(predicates(entry), "AND") }, "OR")
+          end
         when :_and, :_or
           raise ArgumentError, "#{field} requires an array of condition hashes" unless value.is_a?(Array)
 
@@ -53,15 +61,23 @@ module Tinkick
       when Hash
         # @type var comparisons: Array[filter_predicate]
         comparisons = []
-        filters = value.filter_map do |operator, operand|
+        filters = value.flat_map do |operator, operand|
           case operator
           when :in
-            equality(column, operand)
+            [equality(column, operand)]
+          when :all
+            raise ArgumentError, "all requires an array of values" unless operand.is_a?(Array)
+
+            operand.map { |entry| equality(column, entry) }
+          when :exists
+            [existence(column, operand)]
+          when :like, :ilike, :prefix
+            [text_predicate(column, operator, operand)]
           when :not, :_not
-            negate(equality(column, operand))
+            [negate(equality(column, operand))]
           when :gt, :gte, :lt, :lte
             comparisons << comparison(column, operator, operand)
-            nil
+            []
           else
             raise ArgumentError, "Unknown where operator: #{operator.inspect}"
           end
@@ -82,6 +98,30 @@ module Tinkick
         ["#{column} IS NULL", []]
       else
         ["#{column} = ?", [scalar(value)]]
+      end
+    end
+
+    def existence(column, value)
+      case value
+      when TrueClass
+        negate(equality(column, nil))
+      when FalseClass
+        equality(column, nil)
+      else
+        raise ArgumentError, "Passing a value other than true or false to exists is not supported"
+      end
+    end
+
+    def text_predicate(column, operator, value)
+      raise TypeError, "#{operator} requires a string" unless value.is_a?(String)
+
+      if operator == :prefix
+        ["#{column} ^@ ?", [value]]
+      else
+        # Searchkick only treats a backslash as an escape before % and _.
+        pattern = value.gsub(/\\(?![%_])/) { "\\\\" }
+        sql_operator = operator == :ilike ? "ILIKE" : "LIKE"
+        ["#{column} #{sql_operator} ? ESCAPE ?", [pattern, "\\"]]
       end
     end
 

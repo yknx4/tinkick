@@ -24,6 +24,10 @@ module Tinkick
 
     def equality: (String column, filter_value value) -> filter_predicate
 
+    def existence: (String column, filter_value value) -> filter_predicate
+
+    def text_predicate: (String column, :like | :ilike | :prefix operator, filter_value value) -> filter_predicate
+
     def comparison: (String column, :gt | :gte | :lt | :lte operator, filter_value value) -> filter_predicate
 
     def range_predicate: (String column, Range[filter_scalar] range) -> filter_predicate

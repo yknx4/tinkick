@@ -86,6 +86,99 @@ class FilterTest < TinkickIntegrationTest
     assert_raises(ArgumentError) { filter(SearchProduct.all, name: { "gt" => "Red" }) }
   end
 
+  def test_exists_distinguishes_null_from_empty_text
+    tinkick_test_products(:red_apple).update!(description: nil)
+    tinkick_test_products(:green_pear).update!(description: "")
+
+    assert_equal(["Green Pear"], filter(SearchProduct.all, description: { exists: true }).pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, description: { exists: false }).pluck(:name))
+    [nil, "true", 1].each do |value|
+      error = assert_raises(ArgumentError) { filter(SearchProduct.all, description: { exists: value }) }
+      assert_equal("Passing a value other than true or false to exists is not supported", error.message)
+    end
+  end
+
+  def test_all_requires_every_requested_value
+    assert_equal(["Red Apple"], filter(SearchProduct.all, name: { all: ["Red Apple", "Red Apple"] }).pluck(:name))
+    assert_empty(filter(SearchProduct.all, name: { all: ["Red Apple", "Green Pear"] }))
+    assert_equal(2, filter(SearchProduct.all, name: { all: [] }).count)
+    assert_raises(ArgumentError) { filter(SearchProduct.all, name: { all: "Red Apple" }) }
+
+    tinkick_test_products(:red_apple).update!(description: nil)
+    assert_equal(["Red Apple"], filter(SearchProduct.all, description: { all: [nil] }).pluck(:name))
+  end
+
+  def test_negating_all_excludes_each_requested_value
+    assert_empty(filter(SearchProduct.all, _not: { name: { all: ["Red Apple", "Green Pear"] } }))
+  end
+
+  def test_like_and_ilike_match_the_whole_field_with_wildcards
+    scope = SearchProduct.where("description ==> ?", "fruit")
+
+    assert_equal(["Red Apple"], filter(scope, name: { like: "%Apple" }).pluck(:name))
+    assert_equal(["Red Apple"], filter(scope, name: { like: "Red_Apple" }).pluck(:name))
+    assert_empty(filter(scope, name: { like: "Apple" }))
+    assert_empty(filter(scope, name: { like: "red%" }))
+    assert_equal(["Red Apple"], filter(scope, name: { ilike: "red%" }).pluck(:name))
+  end
+
+  def test_like_escapes_wildcards_but_preserves_other_backslashes
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "Product 100%_\\ABC")
+
+    assert_equal([product.id], filter(SearchProduct.all, name: { like: "Product 100\\%\\_\\A%" }).ids)
+    assert_equal([product.id], filter(SearchProduct.all, name: { ilike: "product 100\\%\\_\\a%" }).ids)
+    assert_empty(filter(SearchProduct.all, name: { like: "Product 100\\%\\_A%" }))
+
+    product.update!(name: "Product\\")
+    assert_equal([product.id], filter(SearchProduct.all, name: { like: "Product\\" }).ids)
+  end
+
+  def test_like_does_not_interpret_regular_expression_syntax
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "Product.[ABC](red)+?")
+
+    assert_equal([product.id], filter(SearchProduct.all, name: { like: "Product.[ABC](red)+?" }).ids)
+    assert_empty(filter(SearchProduct.all, name: { like: "Product.Ared" }))
+  end
+
+  def test_prefix_is_case_sensitive_and_treats_wildcards_literally
+    assert_equal(["Red Apple"], filter(SearchProduct.all, name: { prefix: "Red" }).pluck(:name))
+    assert_empty(filter(SearchProduct.all, name: { prefix: "red" }))
+    assert_empty(filter(SearchProduct.all, name: { prefix: "R%" }))
+
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "100%_\\Value")
+    assert_equal([product.id], filter(SearchProduct.all, name: { prefix: "100%_\\" }).ids)
+  end
+
+  def test_negated_text_filters_include_null
+    tinkick_test_products(:red_apple).update!(description: nil)
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, _not: { description: { like: "Ripe%" } }).pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, _not: { description: { prefix: "Ripe" } }).pluck(:name))
+  end
+
+  def test_text_filter_values_remain_bound
+    [:like, :ilike, :prefix].each do |operator|
+      assert_empty(filter(SearchProduct.all, name: { operator => "Red%' OR TRUE --" }))
+      assert_raises(TypeError) { filter(SearchProduct.all, name: { operator => ["Red"] }) }
+    end
+  end
+
+  def test_legacy_or_combines_alternative_groups_with_and
+    conditions = {
+      or: [
+        [{ name: "Red Apple" }, { name: "Green Pear" }],
+        [{ description: "Fresh orchard fruit" }, { name: "Missing" }],
+      ],
+    }
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, conditions).pluck(:name))
+    assert_equal(2, filter(SearchProduct.all, or: []).count)
+    assert_raises(ArgumentError) { filter(SearchProduct.all, or: [{ name: "Red Apple" }]) }
+  end
+
   private
 
   def filter(scope, conditions)
