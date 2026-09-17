@@ -8,15 +8,17 @@ require_relative "search_field"
 require_relative "word_match"
 require_relative "aggregations"
 require_relative "custom_spans"
+require_relative "boost_by"
 
 module Tinkick
   class Query
     attr_reader :model, :limit, :after, :took
 
-    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil)
+    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
+      @boost_by = BoostBy.new(model, boost_by)
       @term = term.to_s
       @fields = model.tinkick_expand_fields(fields, match: match).map do |field|
         if field.is_a?(Hash)
@@ -538,7 +540,7 @@ module Tinkick
     end
 
     def score_sql
-      @scoring
+      @boost_by.score_sql(@scoring)
     end
 
     def validate_column(field)
