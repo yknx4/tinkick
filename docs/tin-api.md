@@ -191,8 +191,9 @@ tokenization requires an explicit query. Explicit indexed-column highlighting
 still used default analysis: `MATCHES FooBar` did not mark the preserved matching
 token, while `MATCHES jalapeno` also marked accented/case variants. Supplying an
 explicit query therefore does not establish analyzer-equivalent highlighting.
-The public adapter needs a separate verified path for these settings; this
-observation does not make all custom-analysis highlighting impossible.
+Tinkick raises `Tinkick::NotImplementedError` for lexical highlighting with
+non-default index tokenization. It does not reconstruct source positions or use
+a different analyzer silently; ordinary matching remains available.
 
 Default scoring, full scoring, and disabled dense-term elision each returned
 `0.9517491` for the two visible apple/pear matches during the probe. That is
