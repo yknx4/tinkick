@@ -1,0 +1,13 @@
+module Tinkick
+  class Highlighter
+    @connection: ActiveRecord::ConnectionAdapters::AbstractAdapter
+
+    def initialize: (ActiveRecord::ConnectionAdapters::AbstractAdapter connection) -> void
+    def highlight: (String? text, String query, ?tag: String, ?encoder: String) -> String?
+
+    private
+
+    def mark: (String text, String query, String opening, String closing) -> String?
+    def encode_html: (String text) -> String
+  end
+end
