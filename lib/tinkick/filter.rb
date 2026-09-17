@@ -73,7 +73,7 @@ module Tinkick
       if column.type == :jsonb && !array_type
         raise ArgumentError, "JSONB paths require non-empty components" if path.any?(&:empty?)
 
-        json_path = "$#{path.map { |part| ".#{JSON.generate(part)}" }.join}[*]"
+        json_path = path
       elsif !path.empty?
         raise InvalidQueryError, "Dotted filter #{field.inspect} requires a JSONB root column"
       end
@@ -142,18 +142,49 @@ module Tinkick
         warn_json_scan(column)
         negate(json_match(column, path, '@.type() != "null" && @.type() != "array" && @.type() != "object"'))
       else
-        json_match(column, path, "@ == #{JSON.generate(scalar(value))}")
+        condition = "@ == #{JSON.generate(scalar(value))}"
+        # @type var candidate: filter_predicate
+        candidate = ["#{column} @@ ?::jsonpath", ["exists($.** ? (#{condition}))"]]
+        combine([candidate, json_match(column, path, condition)], "AND")
       end
     end
 
     def json_match(column, path, condition)
-      ["#{column} @@ ?::jsonpath", ["exists(#{path} ? (#{condition}))"]]
+      values, binds = json_values(column, path)
+      ["EXISTS (SELECT 1 FROM (#{values}) AS tinkick_filter_element(value) WHERE value @@ ?::jsonpath)",
+        [*binds, "strict exists($ ? (#{condition}))"]]
     end
 
     def json_text_predicate(column, path, operator, value)
       sql, binds = text_predicate("tinkick_filter_element.value #>> '{}'", operator, value)
       warn_json_scan(column)
-      ["EXISTS (SELECT 1 FROM jsonb_path_query(#{column}, ?::jsonpath) AS tinkick_filter_element(value) WHERE jsonb_typeof(tinkick_filter_element.value) = 'string' AND #{sql})", [path, *binds]]
+      values, path_binds = json_values(column, path)
+      ["EXISTS (SELECT 1 FROM (#{values}) AS tinkick_filter_element(value) WHERE jsonb_typeof(tinkick_filter_element.value) = 'string' AND #{sql})", [*path_binds, *binds]]
+    end
+
+    def json_values(column, path)
+      @model.logger&.warn("Tinkick: JSONB filters verify recursive array paths per candidate row. A jsonb_ops GIN index can narrow equality candidates; jsonb_path_ops cannot index recursive descent. Consider indexed persisted or generated scalar columns for frequent filters.")
+      keys = path.map { "?" }.join(", ")
+      # Arrays retain their path depth; only the requested object key advances it.
+      sql = <<~SQL.squish
+        WITH RECURSIVE tinkick_filter_json(value, depth) AS (
+          SELECT #{column}, 0
+          UNION ALL
+          SELECT element.value,
+            parent.depth + CASE WHEN jsonb_typeof(parent.value) = 'array' THEN 0 ELSE 1 END
+          FROM tinkick_filter_json AS parent
+          CROSS JOIN LATERAL jsonb_array_elements(
+            CASE WHEN jsonb_typeof(parent.value) = 'array' THEN parent.value
+              WHEN parent.depth < #{path.length} AND jsonb_typeof(parent.value) = 'object'
+                THEN jsonb_build_array(parent.value -> (ARRAY[#{keys}]::text[])[parent.depth + 1])
+              ELSE '[]'::jsonb END
+          ) AS element(value)
+          WHERE parent.depth < #{path.length} OR jsonb_typeof(parent.value) = 'array'
+        )
+        SELECT value FROM tinkick_filter_json
+        WHERE depth = #{path.length} AND jsonb_typeof(value) <> 'array'
+      SQL
+      [sql, path]
     end
 
     def warn_json_scan(column)

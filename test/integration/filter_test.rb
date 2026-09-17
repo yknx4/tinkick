@@ -392,7 +392,8 @@ class FilterTest < TinkickIntegrationTest
     SearchProduct.logger = Logger.new(output, level: Logger::WARN)
 
     filter(SearchProduct.all, "metadata.tags" => "red").load
-    assert_empty(output.string)
+    assert_includes(output.string, "recursive array paths")
+    assert_includes(output.string, "jsonb_ops GIN")
     filter(SearchProduct.all, "metadata.ratings" => 26..36).load
     assert_includes(output.string, "JSONB")
     assert_includes(output.string, "GIN")
