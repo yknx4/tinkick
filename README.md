@@ -1373,11 +1373,14 @@ remote CI run has completed.
 
 ## Reference and unsupported options
 
-The current model declaration accepts `searchable`, `default_fields`, `match`, and `stem: false`.
+The current model declaration accepts `searchable`, `default_fields`, `match`,
+the `word_start`/`word_middle`/`word_end` and `text_start`/`text_middle`/`text_end`
+field declarations, and `stem: false`.
 The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
 `per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
-`countless`, `keyset`, `after`, `aggs`, `smart_aggs`, `includes`, and
-`model_includes`. Use the detailed sections above for their limits.
+`countless`, `keyset`, `after`, `aggs`, `smart_aggs`, `includes`,
+`model_includes`, `scope_results`, `exclude`, and `select`.
+Use the detailed sections above for their limits.
 Unknown keywords or methods are not compatibility no-ops.
 Features proven unsupported by TIN raise `Tinkick::NotImplementedError` with an
 explanation naming the backend limitation. Unfinished Tinkick adapters must not
@@ -1407,8 +1410,8 @@ The following reference maps less common upstream options to their current statu
 | `timeout`, `search_timeout`, `client_options` | Not implemented; configure database timeouts/pooling. |
 | `includes`, `model_includes` | Available; preload only visible model results. |
 | `scope_results` | Available; filters the ranked page with an extra query and warning. |
-| `select`, source filtering, `reselect` | Available for top-level raw source columns; model loading remains complete. |
-| `only`, `except` | Query-option selection/removal remains implementation work; these do not select model columns. |
+| `select`, source filtering, `reselect` | Available for top-level columns and nested JSON source filtering; model loading remains complete. |
+| `only`, `except` | Available for query-option selection/removal; these do not select model columns. |
 | `body`, `body_options`, query-mutating blocks | Excluded Elasticsearch DSL; use reviewed native SQL. |
 | `search_index`/`searchkick_index` inspection | Not implemented; use PostgreSQL catalogs and TIN helpers. |
 | Index refresh, clean/promote/store/remove, queue inspection | Excluded external-index lifecycle. |
