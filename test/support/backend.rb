@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "lead_failures"
+
 module TinkickTestBackend
   def require_production_tin_plan!
     return unless ENV["TINKICK_TEST_BACKEND"] == "lead"
