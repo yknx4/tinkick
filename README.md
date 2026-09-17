@@ -737,9 +737,31 @@ Searchkick's extra-whitespace/word-joining analyzers are not reproduced:
 `dishwasher` and `dish washer` need not have the same matches. Persist an
 application-normalized search column if that behavior is required.
 
-TIN provides case/accent preservation and tokenizer options, but Tinkick's
-`case_sensitive`, `special_characters`, and custom analyzer mappings are not yet
-implemented. Native literal, phrase, and partial queries read the selected
+Declare case and accent behavior on the model:
+
+```ruby
+class Product < ApplicationRecord
+  tinkick searchable: [:name], case_sensitive: true, special_characters: false
+end
+```
+
+`case_sensitive: true` requires the TIN index's `case_folding = 'preserve'`;
+false or nil requires `'fold'`. `special_characters: false` requires
+`accent_folding = 'preserve'`; true or nil requires `'fold'`. This option controls
+accent folding, not punctuation tokenization. Mismatched declarations raise
+instructions to rebuild the affected index through a Rails migration. Model
+declarations never change indexes automatically.
+
+Omitted options adopt the native index's existing policy. Explicit nil requests
+the folded default, including when overriding `Tinkick.model_options`. SQL
+`text_start`, `text_middle`, and `text_end` apply the declared controls to both
+query and stored text; their omitted defaults fold case and accents. These SQL
+modes need `unaccent` only when accent folding is enabled. `match: :exact` keeps
+its byte-sensitive behavior. Fuzzy searches can still match case/accent
+differences as edits. Unicode normalization is not identical across all engines.
+
+Custom Elasticsearch analyzer mappings are not accepted. Native literal, phrase,
+and partial queries read the selected
 index's actual analysis settings, including preserved case/accents and whitespace
 tokenization. Each selected field uses its own configuration. One-edit fuzzy
 queries also escape short preserved punctuation tokens through native dictionary
@@ -1789,7 +1811,7 @@ The following reference maps less common upstream options to their current statu
 | `index_name`, dynamic names, prefix/suffix | Excluded index identity API; use explicit database/schema/table tenancy. |
 | Custom `search_document_id` | Excluded document identity API; results use the model's single primary key. |
 | `mappings`, `merge_mappings`, `settings` | Excluded server configuration DSL; use migrations and native index options. |
-| `case_sensitive`, `special_characters` | Model-option mapping missing; configure native analysis through index migrations. |
+| `case_sensitive`, `special_characters` | Implemented as native index-policy validation and SQL text normalization; migrate indexes to match explicit declarations. |
 | `language`, stemming options | `stem: false` is accepted. `stem: true`, `language`, `stemmer`, `stem_exclusion`, and `stemmer_override` raise `Tinkick::NotImplementedError` with migration guidance. |
 | `search_synonyms`, synonym file/reload | Not implemented; application synonym storage/expansion is a recipe. |
 | `conversions`, `conversions_v2`, `stem_conversions` | Not implemented; maintain SQL features and an explicit ranking formula. |
