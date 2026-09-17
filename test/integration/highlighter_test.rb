@@ -53,6 +53,40 @@ class HighlighterTest < Minitest::Test
     assert_match "encoder must be default or html", error.message
   end
 
+  def test_batch_highlighting_preserves_positions_with_one_bound_database_query
+    statements = []
+    listener = ->(*arguments) { statements << arguments.last if arguments.last[:name] == "Tinkick Highlight" }
+    texts = ["Mithril lantern in Moria", nil, "Unrelated orchard harvest", "<b>Mithril lantern</b> 😀", "Mithril bright lantern"]
+    expected = ["<mark>Mithril lantern</mark> in Moria", nil, nil, "&lt;b&gt;<mark>Mithril lantern</mark>&lt;&#x2F;b&gt; 😀", nil]
+    ActiveRecord::Base.with_connection do |connection|
+      ActiveSupport::Notifications.subscribed(listener, "sql.active_record") do
+        actual = Tinkick::Highlighter.new(connection).highlight_many(texts, '"mithril lantern"', tag: "<mark>", encoder: "html")
+        assert_equal expected, actual
+      end
+    end
+    assert_equal 1, statements.length
+    refute_includes statements.first.fetch(:sql), "Mithril"
+  end
+
+  def test_batch_markers_are_literal_and_nonmatching_inputs_skip_sql
+    text = "\u0001tinkickstart\u0002 Hello"
+    expected = "\u0001tinkickstart\u0002 <mark title='$QUERY_PART'>Hello</mark>"
+    ActiveRecord::Base.with_connection do |connection|
+      highlighter = Tinkick::Highlighter.new(connection)
+      assert_equal [expected, "<mark title='$QUERY_PART'>Hello</mark>"],
+        highlighter.highlight_many([text, "Hello"], '"hello"', tag: "<mark title='$QUERY_PART'>")
+      statements = []
+      listener = ->(*arguments) { statements << arguments.last[:sql] }
+      ActiveSupport::Notifications.subscribed(listener, "sql.active_record") do
+        assert_empty highlighter.highlight_many([], '"hello"')
+        assert_equal [nil, nil], highlighter.highlight_many(["Hello", nil], "*")
+        assert_equal [nil], highlighter.highlight_many(["Hello"], "")
+        assert_equal [nil, nil], highlighter.highlight_many([nil, nil], '"hello"')
+      end
+      assert_empty statements
+    end
+  end
+
   private
 
   def highlight(text, query, **options)

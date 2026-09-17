@@ -4,10 +4,11 @@ module Tinkick
 
     def initialize: (ActiveRecord::ConnectionAdapters::AbstractAdapter connection) -> void
     def highlight: (String? text, String query, ?tag: String, ?encoder: String) -> String?
+    def highlight_many: (Array[String?] texts, String query, ?tag: String, ?encoder: String) -> Array[String?]
 
     private
 
-    def mark: (String text, String query, String opening, String closing) -> String?
+    def mark_many: (Array[String?] texts, String query, String opening, String closing) -> Array[String?]
     def encode_html: (String text) -> String
   end
 end
