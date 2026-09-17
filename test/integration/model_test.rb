@@ -2,6 +2,7 @@
 
 require_relative "../../lib/tinkick/model"
 require_relative "../integration_helper"
+require "rails"
 require "searchkick"
 
 class ModelTest < TinkickIntegrationTest
