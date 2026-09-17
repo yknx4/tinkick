@@ -4,7 +4,8 @@ source "https://rubygems.org"
 
 gemspec
 
-gem "faker", "~> 3.5"
+# Keep the seeded Tolkien fixtures stable across dependency resolution.
+gem "faker", "3.8.0"
 gem "json", ENV.fetch("JSON_VERSION", ">= 2.0")
 gem "minitest", "~> 5.25"
 gem "rails", ENV.fetch("RAILS_VERSION", ">= 8.0")
