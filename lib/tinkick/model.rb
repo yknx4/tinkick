@@ -8,14 +8,21 @@ module Tinkick
   module Model
     def tinkick(searchable: Tinkick.model_options[:searchable], default_fields: Tinkick.model_options[:default_fields],
       match: Tinkick.model_options.fetch(:match, :word), stem: Tinkick.model_options.fetch(:stem, false),
+      case_sensitive: Tinkick.model_options.fetch(:case_sensitive, Relation::NO_DEFAULT_VALUE),
+      special_characters: Tinkick.model_options.fetch(:special_characters, Relation::NO_DEFAULT_VALUE),
       highlight: Tinkick.model_options[:highlight], filterable: Tinkick.model_options[:filterable],
       word_start: Tinkick.model_options[:word_start],
       word_middle: Tinkick.model_options[:word_middle], word_end: Tinkick.model_options[:word_end],
       text_start: Tinkick.model_options[:text_start], text_middle: Tinkick.model_options[:text_middle],
       text_end: Tinkick.model_options[:text_end], **options)
       # @type self: singleton(ActiveRecord::Base)
-      options = Tinkick.model_options.except(:searchable, :default_fields, :match, :stem, :highlight, :filterable,
+      # @type var case_sensitive: bool? | Relation::DefaultValue
+      # @type var special_characters: bool? | Relation::DefaultValue
+      options = Tinkick.model_options.except(:searchable, :default_fields, :match, :stem, :case_sensitive, :special_characters, :highlight, :filterable,
         :word_start, :word_middle, :word_end, :text_start, :text_middle, :text_end).merge(options)
+      analysis = {} #: Hash[Symbol, bool?]
+      analysis[:case_sensitive] = tinkick_analysis_flag(case_sensitive, :case_sensitive) unless case_sensitive.is_a?(Relation::DefaultValue)
+      analysis[:special_characters] = tinkick_analysis_flag(special_characters, :special_characters) unless special_characters.is_a?(Relation::DefaultValue)
       raise ArgumentError, "stem must be true or false" unless stem == true || stem == false
 
       stemming = options.keys & [:language, :stemmer, :stem_exclusion, :stemmer_override]
@@ -37,9 +44,12 @@ module Tinkick
           raise ArgumentError, "Partial match declarations must be arrays of field names"
         end
       end
-      @tinkick_options = { searchable: searchable, default_fields: default_fields, match: match, highlight: highlight, filterable: filterable,
-                          word_start: word_start, word_middle: word_middle, word_end: word_end,
-                          text_start: text_start, text_middle: text_middle, text_end: text_end }
+      declared = { searchable: searchable, default_fields: default_fields, match: match, highlight: highlight, filterable: filterable,
+                   word_start: word_start, word_middle: word_middle, word_end: word_end,
+                   text_start: text_start, text_middle: text_middle, text_end: text_end } #: model_options
+      declared[:case_sensitive] = analysis[:case_sensitive] if analysis.key?(:case_sensitive)
+      declared[:special_characters] = analysis[:special_characters] if analysis.key?(:special_characters)
+      @tinkick_options = declared
       method_name = Tinkick.search_method_name
       if method_name && !respond_to?(method_name, true)
         singleton_class.alias_method(method_name, :tinkick_search)
@@ -128,10 +138,39 @@ module Tinkick
         raise Error, "#{name}.#{field_name} has TIN indexes with conflicting tokenization options; use the same analysis configuration for this indexed source"
       end
 
-      schema[:analysis][field_name] = configurations.fetch(0)
+      analysis = configurations.fetch(0)
+      tinkick_validate_analysis(field_name, analysis)
+      schema[:analysis][field_name] = analysis
     end
 
     private
+
+    def tinkick_analysis_flag(value, option)
+      return if value.nil?
+      return true if value == true
+      return false if value == false
+
+      raise ArgumentError, "#{option} must be true, false, or nil"
+    end
+
+    def tinkick_validate_analysis(field_name, analysis)
+      # @type self: singleton(ActiveRecord::Base)
+      options = tinkick_options
+      return unless options
+
+      expected = {} #: Hash[String, String]
+      if options.key?(:case_sensitive)
+        expected["case_folding"] = options[:case_sensitive] ? "preserve" : "fold"
+      end
+      if options.key?(:special_characters)
+        expected["accent_folding"] = options[:special_characters] == false ? "preserve" : "fold"
+      end
+      expected.each do |setting, value|
+        next if analysis[setting] == value
+
+        raise Error, "#{name}.#{field_name} has TIN #{setting}=#{analysis[setting]}, but its model declaration requires #{setting}=#{value}; rebuild the affected TIN index with this setting in a Rails migration, then reset_column_information or restart application processes. Changing tokenization settings alone does not update existing indexed rows"
+      end
+    end
 
     def tinkick_validate_filterable(schema, fields)
       # @type self: singleton(ActiveRecord::Base)

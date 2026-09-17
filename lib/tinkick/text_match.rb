@@ -38,9 +38,16 @@ module Tinkick
       distance, prefix, transpositions = fuzzy_settings(misspellings)
       return ["FALSE", []] if term.empty?
 
-      schema = Extensions.require!(@model, "unaccent")
-      function = @model.with_connection { |connection| "#{connection.quote_column_name(schema)}.unaccent" }
-      normalized = @model.with_connection { |connection| connection.select_value(Arel.sql("SELECT #{function}(lower(?))", term)) } #: String
+      options = @model.tinkick_options
+      case_sensitive = options && options[:case_sensitive] == true
+      function = nil #: String?
+      unless options && options[:special_characters] == false
+        schema = Extensions.require!(@model, "unaccent")
+        function = @model.with_connection { |connection| "#{connection.quote_column_name(schema)}.unaccent" }
+      end
+      source = normalize_sql(column_sql, !!case_sensitive, function)
+      query = normalize_sql("?", !!case_sensitive, function)
+      normalized = @model.with_connection { |connection| connection.select_value(Arel.sql("SELECT #{query}", term)) } #: String
       return ["FALSE", []] unless normalized.length.between?(1, 50 + distance)
 
       @model.logger&.warn("Tinkick: #{match} uses whole-field SQL normalization and can scan rows outside TIN. Prefer word_start, word_middle, or word_end when token matching is suitable; inspect EXPLAIN for this query.")
@@ -48,16 +55,22 @@ module Tinkick
         pattern = @model.sanitize_sql_like(normalized)
         pattern = "%#{pattern}" unless match == :text_start
         pattern = "#{pattern}%" unless match == :text_end
-        ["#{function}(lower(#{column_sql})) LIKE ?", [pattern]]
+        ["#{source} COLLATE \"C\" LIKE ?", [pattern]]
       elsif distance == 1
         pattern = fuzzy_pattern(normalized, match, prefix, transpositions)
-        pattern ? ["#{function}(lower(#{column_sql})) ~ ?", [pattern]] : ["FALSE", []]
+        pattern ? ["#{source} COLLATE \"C\" ~ ?", [pattern]] : ["FALSE", []]
       else
-        distance_predicate("#{function}(lower(#{column_sql}))", normalized, match, prefix, transpositions)
+        distance_predicate(source, normalized, match, prefix, transpositions)
       end
     end
 
     private
+
+    def normalize_sql(expression, case_sensitive, function)
+      sql = "(#{expression})::text"
+      sql = "lower(#{sql})" unless case_sensitive
+      function ? "#{function}(#{sql})" : sql
+    end
 
     def distance_predicate(column_sql, term, match, prefix, transpositions)
       function = if transpositions
