@@ -2,10 +2,12 @@
 
 class EnableTinForTinkick < ActiveRecord::Migration[8.0]
   def up
-    enable_extension "tin"
+<% extensions.each do |extension| -%>
+    enable_extension "<%= extension %>"
+<% end -%>
   end
 
   def down
-    raise ActiveRecord::IrreversibleMigration, "TIN may be used by other indexes; remove it manually if no longer needed."
+    raise ActiveRecord::IrreversibleMigration, "TIN may be used by other indexes and optional extensions by other applications; remove them manually if no longer needed."
   end
 end

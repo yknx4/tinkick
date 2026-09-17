@@ -6,6 +6,8 @@ require "rails/generators/test_case"
 require "generators/tinkick/install/install_generator"
 
 class InstallGeneratorTest < Rails::Generators::TestCase
+  class_attribute :use_transactional_tests, default: false
+
   tests Tinkick::Generators::InstallGenerator
   destination File.expand_path("../../tmp/install_generator", __dir__)
   setup :prepare_destination
@@ -20,7 +22,30 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     assert_migration "db/migrate/enable_tin_for_tinkick.rb" do |migration|
       assert_match "ActiveRecord::Migration[8.0]", migration
       assert_match 'enable_extension "tin"', migration
+      assert_equal ["tin"], migration.scan(/enable_extension "([^"]+)"/).flatten
     end
+  end
+
+  test "includes only requested optional extensions" do
+    %w[unaccent fuzzystrmatch pg-trgm].each do |flag|
+      prepare_destination
+      run_generator(["--#{flag}"])
+
+      assert_migration "db/migrate/enable_tin_for_tinkick.rb" do |migration|
+        assert_equal ["tin", flag.tr("-", "_")], migration.scan(/enable_extension "([^"]+)"/).flatten
+      end
+    end
+  end
+
+  test "combines optional extension flags and preserves the generated migration" do
+    run_generator(["--unaccent", "--fuzzystrmatch", "--pg-trgm"])
+    migration_path = Dir[File.join(destination_root, "db/migrate/*.rb")].fetch(0)
+    migration = File.read(migration_path)
+
+    assert_equal %w[tin unaccent fuzzystrmatch pg_trgm], migration.scan(/enable_extension "([^"]+)"/).flatten
+    run_generator(["--unaccent", "--fuzzystrmatch", "--pg-trgm"])
+    assert_equal [migration_path], Dir[File.join(destination_root, "db/migrate/*.rb")]
+    assert_equal migration, File.read(migration_path)
   end
 
   test "retains an existing installation migration when rerun" do
@@ -72,6 +97,27 @@ class InstallGeneratorTest < Rails::Generators::TestCase
       end
 
       assert connection.extension_enabled?("tin")
+    end
+  end
+
+  test "executes optional extension installation repeatedly without disabling them" do
+    run_generator(["--unaccent", "--fuzzystrmatch", "--pg-trgm"])
+    migration = load_migration
+    ActiveRecord::Base.establish_connection(adapter: "postgresql", database: "tinkick_test")
+
+    ActiveRecord::Base.with_connection do |connection|
+      database = connection.select_value("SELECT current_database()")
+      raise "Refusing to run tests against #{database.inspect}; expected tinkick_test" unless database == "tinkick_test"
+
+      capture(:stdout) do
+        migration.migrate(:up)
+        migration.migrate(:up)
+      end
+
+      %w[tin unaccent fuzzystrmatch pg_trgm].each do |extension|
+        assert connection.extension_enabled?(extension), "#{extension} should remain installed"
+      end
+      assert_raises(ActiveRecord::IrreversibleMigration) { migration.down }
     end
   end
 

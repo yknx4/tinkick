@@ -1,0 +1,5 @@
+module Tinkick
+  module Extensions
+    def self.require!: (singleton(ActiveRecord::Base) model, String name) -> String
+  end
+end

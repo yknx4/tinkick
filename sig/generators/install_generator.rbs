@@ -4,6 +4,10 @@ module Tinkick
       include ActiveRecord::Generators::Migration
 
       def create_migration_file: () -> void
+
+      private
+
+      def extensions: () -> Array[String]
     end
   end
 end
