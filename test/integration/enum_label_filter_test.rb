@@ -39,14 +39,14 @@ class EnumLabelFilterTest < TinkickIntegrationTest
     assert_equal %w[archived draft published éclair], labels(status: { gt: 0 })
     assert_empty labels(status: { lt: 1 })
     assert_empty labels(status: { gte: "z", lt: "é" })
-    assert_equal %w[archived draft published éclair], labels(status: /\A.*\z/)
+    assert_equal %w[archived draft published éclair], labels(status: { regexp: ".*" })
   end
 
   def test_prefix_like_ilike_and_regexp_match_labels
     assert_equal ["published"], labels(status: { prefix: "publ" })
     assert_equal ["draft"], labels(status: { like: "%raft" })
     assert_equal ["published"], labels(status: { ilike: "PUBL%" })
-    assert_equal %w[archived published], labels(status: /\A(archived|published)\z/)
+    assert_equal %w[archived published], labels(status: { regexp: "^(archived|published)$" })
     assert_equal ["published beacon"], Tinkick::Relation.new(EnumLabelFilterValue, "beacon", fields: [:name],
       misspellings: false, where: { status: { prefix: "publ" } }).map(&:name)
   end
@@ -61,9 +61,9 @@ class EnumLabelFilterTest < TinkickIntegrationTest
 
     assert_equal [ready.id], filter.apply(scope, description: { like: "100\\%\\_\\ready" }).ids
     assert_equal [quoted.id], filter.apply(scope, description: { prefix: "draft'); DROP TABLE" }).ids
-    assert_equal [absent.id], filter.apply(scope, description: /\Aabsent\z/).ids
-    assert_empty filter.apply(scope, description: /live/)
-    assert_equal [ready.id, quoted.id, absent.id].sort, filter.apply(scope, description: /\A.*\z/).ids.sort
+    assert_equal [absent.id], filter.apply(scope, description: { regexp: "^absent$" }).ids
+    assert_empty filter.apply(scope, description: { regexp: "live" })
+    assert_equal [ready.id, quoted.id, absent.id].sort, filter.apply(scope, description: { regexp: ".*" }).ids.sort
     assert_equal [quoted.id], filter.apply(scope, description: { gt: "b", lt: "e" }).ids
   end
 

@@ -25,7 +25,7 @@ class GlobalSearchTest < TinkickIntegrationTest
   end
 
   def test_default_term_and_options_follow_model_search
-    result = Tinkick.search(model: Product, where: { name: /Pear\z/ },
+    result = Tinkick.search(model: Product, where: { name: { regexp: "Pear$" } },
       order: { id: :asc }, keyset: true, per_page: 1)
 
     assert_equal ["Green Pear"], result.map(&:name)

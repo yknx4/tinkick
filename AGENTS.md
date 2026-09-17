@@ -91,6 +91,11 @@ For touched Ruby or RBS:
 
 ## Architecture and Production Safety
 
+- Use native TIN, PostgreSQL, and available extensions. Do not recreate Lucene
+  or Elasticsearch execution engines, parsers, or automata for compatibility;
+  document backend dialect differences and use native SQL boolean filters.
+- Regex filters accept native PostgreSQL strings only. Do not translate Ruby
+  Regexp sources or flags.
 - Keep jobs idempotent where practical and choose queues deliberately.
 - Never preload a collection merely to count or aggregate it.
 - Load only the data currently visible. Tabs, date ranges, toggles, modals, and

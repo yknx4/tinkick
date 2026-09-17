@@ -501,7 +501,7 @@ use the primary key's actual name for an explicit equivalent filter.
 | Existence | `where(deleted_at: { exists: false })` |
 | LIKE / ILIKE | `where(name: { like: "App%" })`, `where(name: { ilike: "%apple%" })` |
 | Literal field prefix | `where(name: { prefix: "Apple" })` |
-| Whole-value Lucene regexp | `where(name: { regexp: "Moria.*" })` |
+| Native PostgreSQL regexp | `where(name: { regexp: "^Moria.*$" })` |
 | Boolean OR | `where(_or: [{ in_stock: true }, { backordered: true }])` |
 | Boolean AND / negation | `where(_and: [{ price: { gt: 10 } }, { price: { lt: 50 } }])`, `where(_not: { store_id: 2 })` |
 | Legacy grouped OR | `where(or: [[{ store_id: 1 }, { store_id: 2 }]])` |
@@ -562,51 +562,41 @@ string. Equality, range, and pattern checks still use the exact requested path.
 See the [recursive JSONB plans](docs/recursive-json-plans.md) for measured
 candidate pruning and its limits.
 
-Ruby Regexp values work on scalar, PostgreSQL array, and dotted JSONB text fields:
+String `regexp` patterns use native PostgreSQL `~` on scalar, PostgreSQL array,
+and dotted JSONB text fields:
 
 ```ruby
-Product.search("coffee", where: { name: /\Aorganic/i })
-Product.search("*", where: { "metadata.code" => /\d{2}\z/ })
+Product.search("coffee", where: { name: { regexp: "(?i)^organic" } })
+Product.search("*", where: { "metadata.code" => { regexp: '[[:digit:]]{2}\Z' } })
+Product.search("archive", where: { name: { regexp: "^Moria.*$" } })
 ```
 
-These preserve Searchkick's Lucene pattern rules: matching is unanchored unless
-the source uses `\A`/`\z`; `^`/`$` are literal characters. The `i` flag folds
-ASCII literal characters, but does not fold character ranges or accented letters.
-Other Ruby options do not change matching. Unsupported Lucene escapes such as
-`\b` raise `InvalidQueryError`. Patterns are bound SQL values. This path logs a
-scan warning; an optional `pg_trgm` expression index may help suitable patterns,
-but is not required.
+Pattern strings are bound unchanged; use PostgreSQL syntax and embedded flags
+such as `(?i)` for case-insensitive matching. Ruby Regexp values raise
+`Tinkick::NotImplementedError`; use `regexp: "..."` instead. Tinkick does not
+adapt Ruby regex sources or flags. Matching is unanchored unless the pattern
+supplies anchors. Use `\A` and PostgreSQL `\Z` for complete-string boundaries;
+`^`/`$` newline behavior follows the native flags. PostgreSQL `\b` means
+backspace; its word-boundary escape is `\y`.
+See [PostgreSQL pattern matching](https://www.postgresql.org/docs/18/functions-matching.html).
 
-The raw string `regexp` operator matches the whole value and enables Lucene's
-optional syntax:
+Lucene operators such as intersection/complement and decimal intervals are not
+emulated. Use SQL boolean filters and native patterns, for example:
 
 ```ruby
-Product.search("archive", where: { name: { regexp: "Moria.*" } })
-Product.search("archive", where: { name: { regexp: "Moria@&~(.*closed.*)" } })
-Product.search("*", where: { "metadata.code" => { regexp: "room<01-12>" } })
+Product.search("archive", where: {
+  _and: [{ name: { regexp: "Moria" } }, { _not: { name: { regexp: "closed" } } }]
+})
+Product.search("*", where: { "metadata.code" => { regexp: "^room(0[1-9]|1[0-2])$" } })
 ```
 
-`&` intersects patterns, `~` complements the following expression, `@` accepts
-any string, `#` accepts no string, and `<min-max>` matches a decimal interval.
-Equal-width interval bounds preserve that width. Escape these characters or
-double-quote literal text when they are not operators. `^`/`$` remain literal;
-raw strings do not strip Ruby `\A`/`\z` anchors. See
-[Lucene regexp syntax](https://www.elastic.co/docs/reference/query-languages/query-dsl/regexp-syntax).
-
-Ordinary patterns use PostgreSQL regex. Patterns with optional operators compile
-to a bound transition graph evaluated by recursive SQL. This path logs a warning:
-it walks each candidate value character by character, and long values can make
-it expensive. Use selective TIN/SQL conditions and inspect `EXPLAIN ANALYZE`.
-Neither path requires an optional extension. The graph path does not use a
-`pg_trgm` index.
-
-Array and JSONB patterns must match one string element; intersection cannot
-combine evidence from different elements. JSONB numbers, booleans, and null are
-not converted to text for these filters. Canonical enum labels are supported.
-Invalid patterns, undefined named automata, nesting over 256 groups, or exceeding
-the adapter's compilation-work budget raise `Tinkick::InvalidQueryError`. The
-budget is an adapter resource limit, not Elasticsearch's determinization limit.
-Geospatial filter hashes remain implementation work.
+Each array or JSONB pattern matches one string element. Separate boolean filters
+retain the array/path semantics described above. JSONB numbers, booleans, and
+null are not converted to text; canonical enum labels are supported. Invalid
+native patterns raise a PostgreSQL error through `ActiveRecord::StatementInvalid`.
+Regex filters log a scan warning. Use selective TIN/SQL conditions and inspect
+`EXPLAIN`; optional `pg_trgm` indexes may help suitable patterns. No extension is
+required for matching. Geospatial filter hashes remain implementation work.
 
 Recipe alternatives, returning ordinary ActiveRecord relations:
 
@@ -616,9 +606,8 @@ Product.where("metadata @> ?::jsonb", { origin: "local" }.to_json)
 Product.where("name ~ ?", "^Apple [[:alpha:]]+$")
 ```
 
-These require the shown column types and appropriate indexes. PostgreSQL regex
-syntax is not Ruby regex syntax; translate and test patterns rather than passing
-arbitrary Ruby regex objects through. See [PostgreSQL pattern matching](https://www.postgresql.org/docs/current/functions-matching.html).
+These require the shown column types and appropriate indexes. Check pattern
+syntax against PostgreSQL when migrating from Ruby or Lucene.
 
 ## Matching and analysis
 

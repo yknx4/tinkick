@@ -68,8 +68,7 @@ class ExtensionsTest < TinkickIntegrationTest
     end
     assert_equal ["Red Apple"], model.search("apple", misspellings: false).map(&:name)
     assert_equal ["Red Apple"], model.search("aplpe").map(&:name)
-    assert_equal ["Red Apple"], model.search("*", where: { name: /Apple\z/ }).map(&:name)
-    assert_equal ["Red Apple"], model.search("*", where: { name: { regexp: "Red@&@Apple" } }).map(&:name)
+    assert_equal ["Red Apple"], model.search("*", where: { name: { regexp: "Apple$" } }).map(&:name)
     assert_equal ["Red Apple"], model.search("Red Apple", match: :exact).map(&:name)
 
     error = assert_raises(Tinkick::Error) { model.search("red", match: :text_start).to_a }

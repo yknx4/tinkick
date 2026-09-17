@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 require "json"
-require_relative "regex_pattern"
-require_relative "raw_regex"
 
 module Tinkick
   class Filter
@@ -285,12 +283,16 @@ module Tinkick
 
     def text_predicate(column, operator, value, enum_values: nil)
       column = enum_label_expression(column, enum_values)
-      if operator == :regexp && value.is_a?(Regexp)
+      if operator == :regexp
+        if value.is_a?(Regexp)
+          raise NotImplementedError, "Ruby Regexp filters are not supported by TIN; use regexp: with a PostgreSQL pattern string instead"
+        end
+        raise TypeError, "regexp requires a PostgreSQL pattern string" unless value.is_a?(String)
+
         @model.logger&.warn("Tinkick: regular expression filters can scan column values outside TIN. Use selective search/where conditions and inspect EXPLAIN; an optional pg_trgm expression index may help suitable patterns.")
-        return ["(#{column})::text COLLATE \"C\" ~ ?", [RegexPattern.new(value).compile]]
+        return ["(#{column})::text ~ ?", [value]]
       end
       raise TypeError, "#{operator} requires a string" unless value.is_a?(String)
-      return RawRegex.new(@model).predicate(column, value) if operator == :regexp
 
       if operator == :prefix
         ["#{column} ^@ ?", [value]]
