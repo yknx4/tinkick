@@ -1,0 +1,27 @@
+module Tinkick
+  type numeric_boost_number = Integer | Float | BigDecimal | String | nil
+
+  type numeric_boost_options = { ?factor: numeric_boost_number, ?modifier: String | Symbol, ?missing: numeric_boost_number | false, ?boost_mode: String | Symbol | nil }
+
+  type numeric_boost_spec = Array[String | Symbol] | Hash[String | Symbol, numeric_boost_options] | false | nil
+
+  class BoostBy
+    MAX_SCORE: Float
+
+    @model: singleton(ActiveRecord::Base)
+    @sums: Array[[ String, String ]]
+    @multipliers: Array[[ String, String ]]
+    @warned: bool
+
+    def initialize: (singleton(ActiveRecord::Base) model, numeric_boost_spec specification) -> void
+    def empty?: () -> bool
+    def score_sql: (String base_score) -> String
+
+    private
+
+    def number: (numeric_boost_number value) -> Float
+    def numeric_field: (String name) -> String
+    def modified: (String value, String modifier) -> String
+    def group: (Array[[ String, String ]] functions, String operation) -> String
+  end
+end
