@@ -1,0 +1,30 @@
+module Tinkick
+  type aggregation_order = Hash[String | Symbol, String | Symbol] | Array[Hash[String | Symbol, String | Symbol]]
+
+  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions }
+
+  type aggregation_spec = Array[String | Symbol] | Hash[String | Symbol, aggregation_options]
+
+  type aggregation_bucket = { "key" => String | Numeric, "doc_count" => Integer, ?"key_as_string" => String }
+
+  type aggregation_terms = { "doc_count_error_upper_bound" => Integer, "sum_other_doc_count" => Integer, "buckets" => Array[aggregation_bucket], ?"doc_count" => Integer }
+
+  class Aggregations
+    @model: singleton(ActiveRecord::Base)
+    @scope: ActiveRecord::Relation
+
+    def initialize: (singleton(ActiveRecord::Base) model, ActiveRecord::Relation scope) -> void
+
+    def call: (aggregation_spec spec) -> Hash[String, aggregation_terms]
+
+    private
+
+    def terms: (String field, aggregation_options options) -> aggregation_terms
+
+    def values_relation: (ActiveRecord::Relation scope, String field) -> ActiveRecord::Relation
+
+    def order_sql: (aggregation_order order) -> String
+
+    def bucket: (result_value value, Integer count) -> aggregation_bucket
+  end
+end
