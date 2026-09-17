@@ -76,7 +76,7 @@ Source: [query.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a251016
 | Misspellings | Distance, stable prefix, per-field selection, below-count retry, transpositions, expansion limits; TIN does not document every Searchkick control. |
 | Ranking | Field boosts, numeric boosts, `boost_where`, recency, conversions and model boosts need ranking tests and query-plan measurements. |
 | Aggregations | Terms, ranges/date ranges, histograms, avg/min/max/sum/cardinality, per-aggregation filters, limits/order, minimum counts, smart facets; aggregate in SQL. |
-| Analysis | Native stemming differs from Searchkick's default analyzer. Language analyzers, stem overrides/exclusions, synonyms and emoji-name expansion require translation or explicit compatibility decisions; native absence does not prove an adapter implementation impossible. |
+| Analysis | `stem: false` uses native matching; requests for stemming or language analyzers raise `Tinkick::NotImplementedError` with migration guidance. Synonyms and emoji-name expansion remain adapter work; native absence does not prove an adapter implementation impossible. |
 | Beyond lexical search | Suggestions, similar items, geospatial, KNN, semantic/hybrid search and RRF need separate implementation designs. No absence claim follows from an unimplemented adapter. TIN's overview describes pgvector composition for hybrid retrieval. |
 
 Smart aggregation behavior must follow source/contract tests, not a generic
@@ -100,7 +100,7 @@ These classifications supersede a broad “gap” label for the families above.
 | Nested stored JSON text | Text-producing expression indexes. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes) | Native primitive; field-path validation and nested-object semantics need design. |
 | Filters/counts/aggregations | Boolean predicates combine with SQL and counts. [Operator](https://planetscale.com/docs/postgres/search/reference/operator) | Adapter SQL and smart-facet semantics. |
 | Token inspection / term quoting | `tin.tokenize`, `tin.maybe_quote`. [Functions](https://planetscale.com/docs/postgres/search/reference/functions) | Helpers verified when selected from `pg_extension`; the current router rejects standalone helper calls. Zero-token input and phrase escaping still need explicit handling. |
-| Default stemming | Explicitly absent from TIN's capability table. [Overview](https://planetscale.com/docs/postgres/search) | Confirmed native difference; compatibility policy remains open. |
+| Default stemming | Explicitly absent from TIN's capability table. [Overview](https://planetscale.com/docs/postgres/search) | `stem: false` uses native matching. Requests for stemming or language analyzers raise `Tinkick::NotImplementedError` with migration guidance; no stemming adapter is implemented. |
 | Synonyms, suggestions, similar items | Boolean/phrase/term-score primitives offer possible building blocks. | Investigate composition; no blanket impossibility claim. |
 | Physical rebuild / replicas | Concurrent index DDL and replica operation. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes), [Operations](https://planetscale.com/docs/postgres/search/operations) | Operational support; distinct from intentionally removed data import. |
 
@@ -123,7 +123,8 @@ are covered by real TIN tests.
 For highlighting, Searchkick passes through the `encoder` option. The
 [Elasticsearch encoder contract](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/highlighting-settings)
 preserves text by default and escapes source text with `encoder: "html"` while
-retaining highlight tags. The internal Tinkick helper covers both modes; a
+retaining highlight tags. Tinkick's public `highlight:` keyword and fluent
+`.highlight` API cover both modes; a
 native highlight function by itself does not implement that optional encoder.
 
 The separate [live evidence record](tin-api.md#live-evidence) identifies the
@@ -148,12 +149,14 @@ Preserve the array-like interface (`each`, `any?`, `empty?`, `size`, `length`,
   `misspellings?`, `suggestions`, `aggregations`, `aggs`, `took`, `error`,
   `missing_records`, `response`.
 
-`load(false)` must project database data into compatible result wrappers;
-it does not imply an external document store. Decide the portable subset of
-`hits`/`response` separately from Elasticsearch shard and transport metadata.
-Highlight fragments and HTML escaping need tests; numeric scores cannot be
-claimed identical across engines. Scroll IDs and backend cursor operations are
-excluded unless a later migration design explicitly replaces them.
+`load(false)` projects database values into compatible wrappers. Cached `hits`
+expose model primary keys, table identity, native scores, optional source snapshots,
+and requested highlights. Cached `response` includes those hits, page timing,
+requested aggregations, and ordinary exact totals; countless/keyset responses omit
+unknown totals without counting. Public highlight helpers, HTML encoding,
+per-field options, and Unicode-safe snippets have integration coverage.
+Custom-analysis highlighting remains adapter work. Elasticsearch shard/transport
+metadata and scroll IDs are excluded. Numeric scores differ across engines.
 
 ## Global APIs, lifecycle and integrations
 

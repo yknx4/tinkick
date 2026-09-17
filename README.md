@@ -1508,7 +1508,7 @@ field declarations, and `stem: false`.
 The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
 `per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
 `countless`, `keyset`, `after`, `aggs`, `smart_aggs`, `includes`,
-`model_includes`, `scope_results`, `exclude`, and `select`.
+`model_includes`, `scope_results`, `exclude`, `select`, and `highlight`.
 Use the detailed sections above for their limits.
 Unknown keywords or methods are not compatibility no-ops.
 Features proven unsupported by TIN raise `Tinkick::NotImplementedError` with an
@@ -1527,7 +1527,8 @@ The following reference maps less common upstream options to their current statu
 | `index_name`, dynamic names, prefix/suffix | Excluded index identity API; use explicit database/schema/table tenancy. |
 | Custom `search_document_id` | Excluded document identity API; results use the model's single primary key. |
 | `mappings`, `merge_mappings`, `settings` | Excluded server configuration DSL; use migrations and native index options. |
-| `case_sensitive`, `special_characters`, language/stem options | Adapter mapping missing; see analysis limitations above. |
+| `case_sensitive`, `special_characters` | Model-option mapping missing; configure native analysis through index migrations. |
+| `language`, stemming options | `stem: false` is accepted. `stem: true`, `language`, `stemmer`, `stem_exclusion`, and `stemmer_override` raise `Tinkick::NotImplementedError` with migration guidance. |
 | `search_synonyms`, synonym file/reload | Not implemented; application synonym storage/expansion is a recipe. |
 | `conversions`, `conversions_v2`, `stem_conversions` | Not implemented; maintain SQL features and an explicit ranking formula. |
 | `exclude` | Available across selected fields; exact phrase negatives with mode-specific matching. |
