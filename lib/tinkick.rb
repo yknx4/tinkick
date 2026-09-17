@@ -9,3 +9,9 @@ require_relative "tinkick/query"
 require_relative "tinkick/highlighter"
 require_relative "tinkick/results"
 require_relative "tinkick/relation"
+require_relative "tinkick/model"
+require "active_support/lazy_load_hooks"
+
+ActiveSupport.on_load(:active_record) do
+  extend Tinkick::Model
+end

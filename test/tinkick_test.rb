@@ -28,6 +28,14 @@ class TinkickTest < Minitest::Test
 
         TestApplication.initialize!
         require "tinkick"
+        abort "Missing Tinkick model declaration" unless ActiveRecord::Base.respond_to?(:tinkick)
+        abort "Unexpected Searchkick namespace" if defined?(Searchkick)
+        abort "Unexpected Searchkick declaration" if ActiveRecord::Base.respond_to?(:searchkick)
+        class BootProduct < ActiveRecord::Base
+          tinkick searchable: [:name]
+        end
+        abort "Missing explicit search" unless BootProduct.respond_to?(:tinkick_search)
+        abort "Missing default search alias" unless BootProduct.method(:search).original_name == :tinkick_search
         abort "Unexpected connection" if ActiveRecord::Base.connected?
       RUBY
 

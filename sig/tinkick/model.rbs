@@ -1,0 +1,35 @@
+module Tinkick
+  type model_fields = Array[String | Symbol]
+
+  type model_options = { searchable: model_fields?, default_fields: model_fields?, match: Symbol }
+
+  type model_schema = { columns: Hash[String, ActiveRecord::ConnectionAdapters::Column], pool: ActiveRecord::ConnectionAdapters::ConnectionPool, data_fields: Array[String], index_fields: Array[String] }
+
+  module Model
+    @tinkick_options: model_options?
+
+    @tinkick_schema: model_schema?
+
+    def tinkick: (?searchable: model_fields?, ?default_fields: model_fields?, ?match: Symbol) -> void
+
+    def tinkick_options: () -> model_options?
+
+    def tinkick_search: (?Object? term, ?fields: model_fields?, ?misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol?, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?) -> Relation
+
+    alias search tinkick_search
+
+    private
+
+    def tinkick_schema: () -> model_schema
+
+    def tinkick_data_fields: (Hash[String, ActiveRecord::ConnectionAdapters::Column] columns) -> Array[String]
+
+    def tinkick_validate_fields: (model_schema schema, model_fields fields) -> void
+  end
+end
+
+module ActiveRecord
+  class Base
+    extend Tinkick::Model
+  end
+end

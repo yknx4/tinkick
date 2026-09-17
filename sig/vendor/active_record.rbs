@@ -1,5 +1,11 @@
 # Rails 8 interfaces missing from the collection's generated signatures.
 module ActiveRecord
+  module ConnectionAdapters
+    class Column
+      def type: () -> Symbol
+    end
+  end
+
   module ConnectionHandling
     def with_connection: [T] (?prevent_permanent_checkout: bool) { (ConnectionAdapters::AbstractAdapter) -> T } -> T
   end
