@@ -276,15 +276,25 @@ and reject mutation after loading. Repeated `where` calls combine constraints;
 ### Ordering and projection
 
 The default is native relevance descending. Explicit ordering accepts real
-column names and `asc`/`desc` directions:
+column names, `_score`, and `asc`/`desc` directions:
 
 ```ruby
 Product.search("apple").order(price: :asc, id: :asc)
 Product.search("apple").order(:name).reorder(created_at: :desc)
+Product.search("apple").order(_score: :desc)
+Product.search("apple").order(_score: :desc, id: :asc)
 ```
 
-`order(_score: :desc)`, arbitrary SQL sort expressions, Elasticsearch missing-value
-rules, and nested sorts are not implemented. Leave `order` unset for relevance.
+Descending score order retains the native relevance path. Ascending scores or
+column tiebreakers can require a sort and log a cost warning. In the 268-document
+ranking fixture, `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for explicit descending
+score order with `limit: 2, countless: true` showed a TIN Text Search Scan with
+`Top K: 3` and no Sort node; the regression test checks this live.
+
+Prefer explicit directions. Searchkick's scalar keyword `order: :_score` means
+ascending, while `order: [:_score]` and fluent `.order(:_score)` mean descending.
+Keyset pagination still requires stable columns. Arbitrary SQL sort expressions,
+Elasticsearch missing-value rules, and nested sorts remain adapter work.
 
 For raw results, `select` limits source columns in SQL and `reselect` replaces
 the selection:
@@ -788,7 +798,17 @@ alongside it. Bucket keys follow `floor((value - offset) / interval) * interval 
 Array values count each record once per bucket. The default `min_doc_count: 0`
 fills gaps between matching buckets in SQL and logs a warning: small intervals
 over wide ranges can return many empty buckets. Use `min_doc_count: 1` when gaps
-are unnecessary. Extended/hard bounds and numeric formatting remain adapter work.
+are unnecessary. `extended_bounds: {min: 0, max: 100}` expands that empty-bucket
+range without excluding occupied buckets. `hard_bounds: {min: 0, max: 100}`
+filters occupied bucket ordinals with inclusive endpoints before applying
+`offset`. Each bound may omit an endpoint; extended endpoints must fit within
+the supplied hard endpoints. Both extended endpoints can produce an empty-data
+histogram. Numeric formatting remains adapter work.
+
+With offsets, rounded extended buckets can fall outside the numeric hard bounds,
+matching Elasticsearch's empty-bucket behavior. For example, interval 10,
+offset 5, hard min 0, and extended min 0 can emit an empty bucket at -5. Use
+explicit input filters when a value range must restrict matching records.
 
 Date ranges accept `Date`, `Time`, ISO8601 strings, or epoch-millisecond bounds.
 `time_zone` accepts an IANA name or a fixed `+HH:MM`/`-HH:MM` offset; UTC is the
