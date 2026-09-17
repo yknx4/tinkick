@@ -67,15 +67,15 @@ class ExtensionsTest < TinkickIntegrationTest
       refute SearchProduct.connection.extension_enabled?(name)
     end
     assert_equal ["Red Apple"], model.search("apple", misspellings: false).map(&:name)
-    assert_equal ["Red Apple"], model.search("aplpe").map(&:name)
+    assert_equal ["Red Apple"], model.search("appl").map(&:name)
     assert_equal ["Red Apple"], model.search("*", where: { name: { regexp: "Apple$" } }).map(&:name)
     assert_equal ["Red Apple"], model.search("Red Apple", match: :exact).map(&:name)
 
-    error = assert_raises(Tinkick::Error) { model.search("red", match: :text_start).to_a }
+    error = assert_raises(Tinkick::Error) { model.search("red", match: :text_start, misspellings: false).to_a }
     assert_includes error.message, 'enable_extension "unaccent"'
-    error = assert_raises(Tinkick::Error) do
+    error = assert_raises(Tinkick::NotImplementedError) do
       model.search("apple", match: :word_middle, misspellings: { edit_distance: 2, transpositions: false }).to_a
     end
-    assert_includes error.message, 'enable_extension "fuzzystrmatch"'
+    assert_includes error.message, "native TIN"
   end
 end

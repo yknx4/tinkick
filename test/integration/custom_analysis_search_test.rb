@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative "../integration_helper"
-require "stringio"
 
 class CustomAnalysisSearchTest < TinkickIntegrationTest
   class Product < SearchProduct
@@ -29,16 +28,6 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
       execute(<<~SQL)
         CREATE INDEX index_tinkick_test_products_on_name ON tinkick_test_products USING tin (name)
         WITH (tokenizer = whitespace, case_folding = preserve, accent_folding = preserve, max_token_bytes = 1024)
-      SQL
-    end
-  end
-
-  class FoldNameCase < ActiveRecord::Migration[8.0]
-    def up
-      remove_index(:tinkick_test_products, :name, using: :tin)
-      execute(<<~SQL)
-        CREATE INDEX index_tinkick_test_products_on_name ON tinkick_test_products USING tin (name)
-        WITH (tokenizer = whitespace, case_folding = fold, accent_folding = preserve)
       SQL
     end
   end
@@ -132,7 +121,7 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
   end
 
   def test_fuzzy_whitespace_tokens_escape_native_query_syntax_and_preserve_prefixes
-    ['a(b)', 'a[b]', 'a"b', "a\\b", "a~b", "a^b", "a*b", "a?b", "AND"].each do |term|
+    ["a\\b", "a*b", "a?b", "AND", "C++", "Éowyn"].each do |term|
       @first.update!(name: term)
       @second.update!(name: "Z#{term[1..]}")
 
@@ -143,12 +132,7 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     end
   end
 
-  def test_fuzzy_preserved_tokens_support_transpositions_and_long_whole_words
-    @first.update!(name: "a(b)")
-    @second.update!(name: "Unrelated")
-    assert_equal([@first.id], search("ab()", misspellings: true).map(&:id))
-    assert_empty(search("ab()", misspellings: { transpositions: false }))
-
+  def test_native_fuzzy_preserves_case_on_long_whole_words
     term = "A" * 90
     @first.update!(name: term)
     @second.update!(name: "A" * 45 + "B" + "A" * 44)
@@ -156,23 +140,10 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     assert_empty(search(term.downcase, misspellings: true))
   end
 
-  def test_fuzzy_partials_keep_preserved_index_tokens_and_per_field_controls
-    { word_start: "ANXtail", word_middle: "leadANXtail", word_end: "leadANX" }.each do |mode, name|
-      @first.update!(name: name, description: "Unrelated")
-      @second.update!(name: "and", description: "AND")
-      fields = [{ name: mode }, :description]
-      options = { fields: fields, misspellings: { fields: [:name], prefix_length: 2 } }
-
-      assert_equal([@first.id, @second.id].sort, search("AND", **options).map(&:id).sort)
-      assert_equal([@second.id], search("AND", **options.merge(misspellings: { fields: [], prefix_length: 2 })).map(&:id))
-      assert_equal([@second.id], search("AND", **options.merge(misspellings: { fields: [:name], prefix_length: 3 })).map(&:id))
-    end
-  end
-
-  def test_fifty_character_fuzzy_literals_match_insertions_and_keep_native_top_k
-    term = "A" * 49 + ")"
+  def test_native_fuzzy_literals_keep_native_top_k
+    term = "A" * 49 + "Z"
     @first.update!(name: term)
-    @second.update!(name: "A" * 49 + "X)")
+    @second.update!(name: "A" * 49 + "XZ")
     statements = []
     callback = ->(_name, _start, _finish, _id, payload) { statements << payload.slice(:sql, :binds) }
     ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
@@ -187,8 +158,8 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     assert_equal([@first.id], search(term, misspellings: { prefix_length: 50 }).map(&:id))
   end
 
-  def test_long_fuzzy_delimiters_preserve_prefixes_and_exact_exclusions
-    term = "A" * 60 + "(b)"
+  def test_long_native_fuzzy_tokens_preserve_prefixes_and_exact_exclusions
+    term = "A" * 60 + "BCD"
     @first.update!(name: term)
     @second.update!(name: "Z#{term[1..]}")
 
@@ -199,67 +170,27 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     assert_empty(search(term.downcase, misspellings: true))
   end
 
-  def test_two_edit_literal_delimiters_can_disable_transpositions
-    @first.update!(name: "ab()")
-    @second.update!(name: "Wrong")
-    options = { edit_distance: 2, transpositions: false }
-
-    assert_equal([@first.id], search("a(b)", misspellings: options).map(&:id))
-    assert_empty(search("a(b)", misspellings: options.merge(edit_distance: 1)))
-    assert_empty(search("a(b)", misspellings: options.merge(prefix_length: 2)))
-    assert_empty(search("a(b)", misspellings: options, exclude: "ab()"))
-
-    @first.update!(name: "#")
-    @second.update!(name: "$")
-    assert_equal([@first.id, @second.id].sort, search("#", misspellings: options).map(&:id).sort)
+  def test_fuzzy_delimiter_tokens_fail_explicitly_and_exact_matching_remains_available
+    ["a(b)", "a[b]", %q(a"b), "a~b", "a^b"].each do |term|
+      @first.update!(name: term)
+      @second.update!(name: "Unrelated")
+      assert_raises(Tinkick::NotImplementedError) { search(term, misspellings: true).to_a }
+      assert_equal([@first.id], search(term, misspellings: false).map(&:id))
+    end
   end
 
-  def test_refinement_uses_custom_long_token_limits_without_fuzzystrmatch_truncation
+  def test_native_fuzzy_uses_custom_long_token_limits
     PreserveLongNameTokens.new.migrate(:up)
     SearchProduct.reset_column_information
-    term = "A" * 300 + "()"
+    term = "A" * 300 + "B"
     @first.update!(name: term)
-    @second.update!(name: "A" * 300 + ")(")
+    @second.update!(name: "A" * 300 + "C")
 
     assert_equal([@first.id, @second.id].sort, search(term, misspellings: true).map(&:id).sort)
-    assert_equal([@first.id], search(term, misspellings: { transpositions: false }).map(&:id))
+    assert_equal([@first.id, @second.id].sort, search(term, misspellings: { transpositions: false }).map(&:id).sort)
     assert_equal([@first.id, @second.id].sort,
       search(term, misspellings: { edit_distance: 2, transpositions: false }).map(&:id).sort)
     assert_equal([@first.id], search(term, misspellings: { prefix_length: 301 }).map(&:id))
-  end
-
-  def test_refinement_threshold_uses_analyzed_codepoints_after_case_folding
-    FoldNameCase.new.migrate(:up)
-    SearchProduct.reset_column_information
-    term = "İ" * 30 + ")"
-    @first.update!(name: term)
-    @second.update!(name: "Unrelated")
-
-    assert_equal([@first.id], search(term, misspellings: true).map(&:id))
-  end
-
-  def test_refined_literal_tokens_warn_and_use_tin_candidates_in_the_real_plan
-    term = "A" * 60 + ")"
-    @first.update!(name: term)
-    @second.update!(name: "Z" * 60 + ")")
-    previous_logger = Product.logger
-    messages = StringIO.new
-    Product.logger = Logger.new(messages)
-    statements = []
-    callback = ->(_name, _start, _finish, _id, payload) { statements << payload.slice(:sql, :binds) }
-
-    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
-      assert_equal([@first.id], search(term, misspellings: true, limit: 10).map(&:id))
-    end
-    assert_includes(messages.string, "top-k")
-    statement = statements.find { |entry| entry.fetch(:sql).include?(" AS _tinkick_score") }
-    assert_includes(statement.fetch(:sql), "tinkick.edit_distance")
-    plan = Product.connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}",
-      "Tinkick Refined Literal Explain", statement.fetch(:binds))
-    assert_includes(plan, "Text Search Scan")
-    assert_includes(plan, '"Function Name": "tokenize"')
-  ensure
-    Product.logger = previous_logger
   end
 
   private
