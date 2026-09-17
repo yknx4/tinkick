@@ -944,8 +944,50 @@ because evaluating predicates and sorting matches can replace native TIN top-k;
 inspect `EXPLAIN (ANALYZE, BUFFERS)` on representative data. Native single-precision
 scores and SQL arithmetic may expose different numbers of decimal digits.
 
-`boost_by_recency`, `boost_by_distance`, `indices_boost`, and
-`conversions`/`conversions_v2` remain adapter work.
+Recency boosts apply a decay function around a chosen origin:
+
+```ruby
+Product.search("coffee", boost_by_recency: {created_at: {scale: "7d", decay: 0.5}})
+Product.search("coffee").boost_by_recency(
+  published_at: {origin: Time.current, scale: "30d", offset: "2d", function: :exp, factor: 3}
+)
+```
+
+The default function is `gauss`, the origin is the query's current time, and
+`decay` defaults to 0.5. `scale` is required. With distance
+`d = max(abs(value - origin) - offset, 0)`, the unweighted functions are:
+
+| Function | Contribution |
+| --- | --- |
+| `gauss` | `decay ** ((d / scale) ** 2)` |
+| `exp` | `decay ** (d / scale)` |
+| `linear` | `max(0, 1 - (1 - decay) * d / scale)` |
+
+Future and past values decay symmetrically; `offset` creates a full-weight
+plateau around the origin. The factor multiplies each contribution, which joins
+the same sum group as default numeric boosts and conditional weights. Missing
+values contribute the full factor. Date and numeric arrays use the nearest
+non-NULL value; empty/all-NULL arrays are missing. Repeated fluent calls merge
+fields and replace earlier options for the same field.
+
+Date scales and offsets use integer `nanos`, `micros`, `ms`, `s`, `m`, `h` or `d`
+units. Submillisecond durations truncate to milliseconds; the resulting scale
+must be positive. Bare nonzero numeric date durations, fractional durations,
+weeks and months are rejected, following the Elasticsearch time-value parser.
+Origins accept dates, times, epoch milliseconds and supported date math such as
+`"now-1d"`. Date scoring uses millisecond precision. Numeric columns also accept
+these functions with explicit numeric `origin` and `scale`. JSONB recency paths
+still require a date/numeric type contract; use a typed stored or generated
+column in the meantime.
+
+Recency scoring needs no optional extension. It logs the additional per-row
+calculation and sorting cost; counts and aggregation membership remain unchanged.
+`nil`, `false` and `{}` disable the option. A single zero-weight recency function
+zeros scores; multiple functions whose applicable weights are all zero retain
+the original score, matching the upstream sum-group behavior.
+
+`boost_by_distance`, `indices_boost`, and `conversions`/`conversions_v2` remain
+adapter work.
 
 Recipe: rank a bounded SQL search with application-owned numeric weights:
 
