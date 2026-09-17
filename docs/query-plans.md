@@ -261,6 +261,50 @@ The [collector](../script/explain_field_weights.rb) checks `tinkick_test` and th
 268-row corpus, captures actual query binds and version metadata, and performs
 no writes or migrations. Run it before the stress test replaces the corpus.
 
+## Custom token-policy highlighting
+
+The [policy-highlight capture](benchmarks/2026-09-17-policy-highlight-plans.json)
+records source-span mapping on TIN 1.0.2 using one synthetic whitespace run per
+case: `a` followed by repeated `b` characters. The analyzer uses
+`max_token_bytes: 4`; the only eligible stored token is `abbb`, and each case
+returned the original source span `[0, 4]`. These inputs exercise the slower
+mapper used by changed token policies and detected long-token splitting.
+
+| Source characters | Stored tokens | Prefix rows | Prefix query execution ms |
+| --- | ---: | ---: | ---: |
+| 64 | 16 | 65 | 1.220 |
+| 256 | 64 | 257 | 12.694 |
+| 1,024 | 256 | 1,025 | 285.655 |
+
+Each complete mapping issued four bound page-text queries. The explained prefix
+query tokenizes original grapheme prefixes and compares them with the final
+native token stream. It returns agreement counts, preserving source offsets even
+when a token is later discarded, normalization changes length, or a boundary
+requires lookahead. The plans read supplied text and `pg_extension`; they do not
+scan model tables or measure search, record loading, or snippet rendering.
+
+These are single warm executions captured at 11:47 UTC on 2026-09-17. The measured
+growth supports the logger warning: prefix analysis can require quadratic work
+within a long matching run. It does not establish a universal runtime bound or
+production latency. The artifact separately records client-observed SQL timings,
+which include this endpoint's round trips and must not be compared directly with
+PostgreSQL execution times. A small `fragment_size` changes returned snippets;
+the mapper still analyzes the supplied field text.
+
+```sh
+direnv exec . bundle exec ruby script/explain_policy_highlights.rb
+```
+
+The [collector](../script/explain_policy_highlights.rb) checks `tinkick_test` and
+TIN, uses synthetic bound values, and performs no database writes or migrations.
+It requires no model fixtures or optional extensions. Re-running it replaces
+the local JSON report; review fresh measurements before changing this document.
+The separate
+[public integration tests](../test/integration/custom_policy_highlight_test.rb)
+verify actual index settings, split/truncate/discard matching, preserved Unicode,
+retained symbols, hidden projection, and HTML encoding. Custom-analysis phrase
+highlighting remains separate adapter work.
+
 ## Reproduce
 
 Load the designated test fixtures through their normal tests, then run the

@@ -1214,12 +1214,17 @@ Native highlighting preserves document HTML. `encoder: "html"` escapes source
 text separately from trusted highlight tags; returned strings are not marked
 HTML-safe. Do not mark untrusted native output `html_safe`.
 
-Custom case/accent settings and whitespace tokenization are supported for word
-and partial-word highlights. Tinkick checks eligible tokens using the field's
+Custom case/accent settings, whitespace tokenization, `max_token_bytes`,
+`long_tokens: split/truncate/discard`, and `graphemes: emoji/retain/discard` are
+supported for word and partial-word highlights. These are
+[TIN index settings](https://planetscale.com/docs/postgres/search/reference/indexes).
+Tinkick checks eligible tokens using the field's
 actual index analysis, verifies their source spans, and shares the normal tag,
 HTML encoding, snippet, and caching behavior. Each field retains its own policy:
 a case-preserving name field does not highlight lowercase variants merely because
-a case-folding description field matched.
+a case-folding description field matched. Matching stored fragments map to the
+original complete graphemes; truncated raw suffixes and discarded words remain
+unmarked.
 
 This path logs its extra page-text analysis work; costs grow with the page's text
 and eligible tokens. Exact custom highlighting needs only TIN. Fuzzy highlighting
@@ -1229,9 +1234,16 @@ the native highlighting path. Explicit native highlighting applies default
 analysis even when an index uses different analysis; merely passing the index's
 query is insufficient.
 
-Custom-analysis phrases and changed token-length/grapheme policies still require
-additional span mapping and currently raise an argument error. They are adapter
-work, not an unsupported-TIN claim.
+Changed token policies and detected long-token splitting use additional native
+prefix analysis within matching whitespace runs and log a cost warning. This can
+be expensive: the recorded prefix query took 285.655 ms for one synthetic
+1,024-character run with a four-byte token limit. See the
+[policy-highlight plans](docs/query-plans.md#custom-token-policy-highlighting)
+for the complete measurements and reproduction command. Bound page and field
+sizes; `fragment_size` limits returned snippets, not the source text analyzed.
+
+Custom-analysis phrases still require additional span mapping and currently
+raise an argument error. This is adapter work, not an unsupported-TIN claim.
 Model declarations such as `tinkick searchable: [:name], highlight: [:name]` are
 accepted. Declared highlight fields are checked when the model is searched, with
 a migration error for missing columns. The declaration does not enable query
