@@ -30,8 +30,13 @@ Throughout this guide:
 - [Getting started](#getting-started)
 - [Migrating alongside Searchkick](#migrating-alongside-searchkick)
 - [Datasource and migrations](#datasource-and-migrations)
+- [Querying](#querying)
+- [Results and metadata](#results-and-metadata)
+- [Filtering](#filtering)
+- [Pagination and large result sets](#pagination-and-large-result-sets)
 - [Models, scopes, and tenancy](#models-scopes-and-tenancy)
 - [Indexing and synchronization](#indexing-and-synchronization)
+- [Advanced SQL and debugging](#advanced-sql-and-debugging)
 - [License](#license)
 
 ## Requirements and installation
@@ -193,6 +198,242 @@ Review generated migrations through the application's normal deployment process.
 For custom names or specialized indexes, write an application Rails migration.
 The current model API requires valid, ready, nonpartial, direct-column TIN indexes.
 
+## Querying
+
+Both keyword options and the implemented fluent modifiers are available:
+
+```ruby
+Product.search("apple", fields: [:name], where: { in_stock: true }, limit: 10)
+Product.search("apple", fields: [:name]).where(in_stock: true).limit(10)
+Product.search("apple", fields: [:name]).operator("or").misspellings(false)
+```
+
+The default query is `"*"`, the default operator is `"and"`, misspellings are
+on, and the default limit is **10,000**. Set a smaller limit for user-facing pages.
+Empty or punctuation-only text matches no records. Only a standalone `*` means
+match all. Ordinary search text is treated literally rather than as raw TINQL;
+quotes, `OR`, wildcard characters, and SQL fragments do not inject operators.
+
+### Fields
+
+Field selection precedence is: the search call's `fields`, model `default_fields`,
+model `searchable`, then eligible `text`/`citext` columns from the datasource.
+Selected fields need TIN indexes; filtering columns do not.
+
+```ruby
+Product.search("apple", fields: [:name])
+Product.search("apple", fields: [:name]).fields(:description)
+```
+
+The fluent `fields` method **appends** fields. Use the keyword form to replace the
+model's defaults. Per-field match hashes, boosted names such as `"name^5"`, nested
+paths, and wildcard field names are not implemented.
+
+### Laziness and modifiers
+
+A `Tinkick::Relation` defers record retrieval until enumeration or loading. Model
+schema validation may execute metadata queries when creating the search.
+
+```ruby
+base = Product.search("apple", fields: [:name])
+filtered = base.where(in_stock: true) # Independent clone
+filtered.load                       # Executes and returns the relation
+filtered.loaded?                    # true
+filtered.first                      # A model or nil
+base.first(3)                       # Retrieves a bounded clone
+```
+
+Non-bang modifiers clone; their bang counterparts mutate an unloaded relation
+and reject mutation after loading. Repeated `where` calls combine constraints;
+`rewhere` replaces them. `order` appends sort terms; `reorder` replaces them.
+`clone` and `dup` produce independent, unloaded relations.
+
+### Ordering and projection
+
+The default is native relevance descending. Explicit ordering accepts real
+column names and `asc`/`desc` directions:
+
+```ruby
+Product.search("apple").order(price: :asc, id: :asc)
+Product.search("apple").order(:name).reorder(created_at: :desc)
+```
+
+`order(_score: :desc)`, arbitrary SQL sort expressions, Elasticsearch missing-value
+rules, and nested sorts are not implemented. Leave `order` unset for relevance.
+`select`, `reselect`, `only`, `except`, and source-filtering options are not yet
+part of the compatible relation API. `map(&:name)` reads the loaded page; it is
+not a database projection. For a narrow SQL projection, use an explicitly
+constructed ActiveRecord query as shown under [advanced SQL](#advanced-sql-and-debugging).
+
+## Results and metadata
+
+By default, results are actual ActiveRecord model instances selected from the
+search query. Tinkick does not fetch external document IDs and then perform a
+second database lookup.
+
+```ruby
+results = Product.search("apple").limit(20)
+results.each { |product| puts product.name }
+results.to_a
+results[0]
+results.first
+results.size
+results.any?
+results.empty?
+results.with_score.each { |product, score| puts [product.name, score] }
+```
+
+`size`, `length`, Enumerable `count`, `slice`, and array access describe the loaded
+page. Use `total_count` or `total_entries` for the complete filtered result count;
+that runs SQL without instantiating every matching record. The count is not capped
+at the default 10,000-row retrieval limit.
+
+Available pagination metadata includes `current_page`, `per_page`/`limit_value`,
+`padding`, `total_pages`/`num_pages`, `offset_value`/`offset`,
+`previous_page`/`prev_page`, `next_page`, `first_page?`, `last_page?`, and
+`out_of_range?`. Supplying `total_entries:` overrides the reported total when the
+application already knows it; an inaccurate override gives inaccurate page metadata.
+
+### Legacy raw-row results
+
+```ruby
+results = Product.search("apple", load: false)
+results = Product.search("apple").load(false)
+row = results.first
+row.name
+row["name"]
+```
+
+This returns `Tinkick::HashWrapper` objects over database values and logs a
+migration warning. Prefer normal model results. Both modes use PostgreSQL through
+ActiveRecord; `load: false` is **not** a performance recommendation or an external
+`_source` document. `load` without an argument executes the relation; it is
+different from `load(false)`.
+
+### Metadata still missing
+
+`took`, `response`, `hits`, `with_hit`, `each_with_hit`, `with_details`, `error`,
+`missing_records`, `model_name`, `entry_name`, `misspellings?`, suggestions,
+aggregation metadata, and public highlight result methods are not implemented.
+Do not expect Elasticsearch `_index`, `_shards`, `_source`, scroll IDs, or JSON
+response envelopes. Use ActiveRecord instrumentation for timing and explicitly
+serialize the visible records for an HTTP response.
+
+## Filtering
+
+Filters use real columns and bound values. These scalar forms are available:
+
+| Operation | Example |
+| --- | --- |
+| Equality / NULL | `where(store_id: 1)`, `where(deleted_at: nil)` |
+| Inequality | `where.not(store_id: 2)` |
+| IN / NOT IN | `where(store_id: [1, 2])`, `where.not(store_id: [1, 2])` |
+| Explicit IN / NOT | `where(store_id: { in: [1, 2] })`, `where(store_id: { not: 2 })` |
+| Comparison | `where(price: { gt: 10, lte: 50 })` |
+| Inclusive / exclusive range | `where(price: 10..50)`, `where(price: 10...50)` |
+| Open-ended range | `where(created_at: 1.week.ago..)`, `where(price: ..50)` |
+| Existence | `where(deleted_at: { exists: false })` |
+| LIKE / ILIKE | `where(name: { like: "App%" })`, `where(name: { ilike: "%apple%" })` |
+| Literal field prefix | `where(name: { prefix: "Apple" })` |
+| Boolean OR | `where(_or: [{ in_stock: true }, { backordered: true }])` |
+| Boolean AND / negation | `where(_and: [{ price: { gt: 10 } }, { price: { lt: 50 } }])`, `where(_not: { store_id: 2 })` |
+| Legacy grouped OR | `where(or: [[{ store_id: 1 }, { store_id: 2 }]])` |
+
+Negation includes SQL NULL values where the corresponding positive condition is
+not true. `_not` negates each supplied field predicate, following the implemented
+Searchkick contract; use explicit `_and`/`_or` grouping for complex expressions.
+`exists` tests NULL, not whether a column name exists. Missing columns raise an
+error. LIKE `%` and `_` are wildcards; use escaped patterns for literal characters.
+Prefix filtering operates on the whole column, not individual search tokens.
+
+The `all` operator is accepted on scalar columns as a conjunction of equalities;
+a scalar cannot equal two distinct values. **PostgreSQL array and JSON columns
+are currently rejected**, including array containment and nested matching. Ruby
+Regexp filters, a `regexp` operator, and geospatial filter hashes are also missing.
+
+Recipe alternatives, returning ordinary ActiveRecord relations:
+
+```ruby
+Product.where("tags @> ARRAY[?]::text[]", ["fruit", "fresh"])
+Product.where("metadata @> ?::jsonb", { origin: "local" }.to_json)
+Product.where("name ~ ?", "^Apple [[:alpha:]]+$")
+```
+
+These require the shown column types and appropriate indexes. PostgreSQL regex
+syntax is not Ruby regex syntax; translate and test patterns rather than passing
+arbitrary Ruby regex objects through. See [PostgreSQL pattern matching](https://www.postgresql.org/docs/current/functions-matching.html).
+
+## Pagination and large result sets
+
+### Page and offset compatibility
+
+```ruby
+results = Product.search("apple").page(2).per_page(20)
+results = Product.search("apple", page: 2, per_page: 20, padding: 3)
+results = Product.search("apple").limit(20).offset(40)
+```
+
+`per` aliases `per_page`. `limit` takes precedence over `per_page`; an explicit
+`offset` takes precedence over calculated page/padding offsets for retrieval.
+Regular `next_page`/`total_pages` use the total count. The basic metadata is
+implemented, but Kaminari and will_paginate view helpers have not been verified
+as complete integrations; do not assume every helper-specific method exists.
+
+Nonzero offsets can bypass TIN's top-k plan and sort matching rows. Tinkick logs
+a warning when fetching such a ranked page. Deep paging is not protected by
+Elasticsearch's 10,000-result window; the default limit is a retrieval default,
+not an invitation to scan arbitrarily large pages.
+
+### Countless pagination: opt in
+
+```ruby
+page = Product.search("apple", limit: 20, countless: true)
+page.to_a
+page.has_next_page?
+page.next_page
+```
+
+Or call `.countless` on an unloaded relation. This fetches at most one extra row
+to answer whether another page exists, without an automatic count. Relevance
+ordering remains available. Calling `total_count` or `total_pages` still explicitly
+requests the count. Countless pagination does not remove offset costs on later
+numbered pages. A positive limit is required.
+
+### Keyset pagination: opt in
+
+```ruby
+first = Product.search("apple", order: { id: :asc }, limit: 20, keyset: true)
+cursor = first.next_cursor
+second = Product.search("apple", order: { id: :asc }, limit: 20,
+  keyset: true, after: cursor) if cursor
+```
+
+The fluent equivalent is `.keyset(after: cursor)`. Keyset pagination uses stable
+column order rather than relevance and implies countless behavior. With no order,
+it uses the primary key ascending; otherwise it appends the single primary key
+as a tiebreaker unless already present. Use `has_next_page?` and `next_cursor`,
+not `next_page`. Do not request another page when the cursor is nil.
+
+Order columns must be nonnullable supported scalars: integer, text/citext/string,
+UUID, date, timestamp, or decimal. Nullable columns, score ordering, repeated
+columns, composite primary keys, offset, page greater than one, and padding are
+rejected. Add appropriate ordinary indexes for the chosen order; arbitrary
+column sorts are not promised TIN top-k performance.
+
+A cursor is an encoded position, not a signature, authorization token, or
+snapshot. Reapply the same query, order, filters, and tenant restrictions on every
+request. Concurrent changes to sort values can affect traversal. Explicit totals
+count the full filtered search, not just rows after the cursor.
+
+### Scroll and exports
+
+Searchkick's `scroll`, `scroll_id`, and `clear_scroll` are excluded backend cursor
+APIs. For application exports, use a bounded keyset loop, or build an ordinary
+ActiveRecord SQL scope and use [Rails batch APIs](https://api.rubyonrails.org/classes/ActiveRecord/Batches.html).
+Batches do not preserve relevance order or create a stable snapshot automatically.
+`deep_paging` and `body_options(track_total_hits: true)` are not required for an
+explicit SQL total, and are not accepted Tinkick options.
+
 ## Models, scopes, and tenancy
 
 ### Default scopes, associations, and inheritance
@@ -274,6 +515,60 @@ settings change or as an operational action. That is distinct from Searchkick's
 Ruby document reindexing. Use reviewed Rails migrations/maintenance procedures;
 TIN documents concurrent creation and rebuilding in its
 [index reference](https://planetscale.com/docs/postgres/search/reference/indexes).
+
+## Advanced SQL and debugging
+
+Elasticsearch/OpenSearch `body`, `body_options`, body-mutating blocks, mappings,
+`merge_mappings`, Painless scripts, `request_params`, and client DSL calls are
+excluded. Tinkick has no `Searchkick.client` substitute. Use the application's
+ActiveRecord connection for deliberate native SQL.
+
+Recipe for a trusted TINQL query with selected columns:
+
+```ruby
+Product.where("name ==> ?", 'apple AND NOT "apple pie"')
+  .select("products.id, products.name, tin.score(products.ctid) AS score")
+  .order(Arel.sql("score DESC")).limit(20)
+```
+
+These return ActiveRecord projections, not `Tinkick::Relation` metadata. Missing
+projected attributes remain missing. TINQL supports proximity, spans, regex,
+wildcards, term ranges, minimum-match groups, and boosts beyond the current public
+compiler. Consult [TINQL](https://planetscale.com/docs/postgres/search/tinql),
+[operator behavior](https://planetscale.com/docs/postgres/search/reference/operator),
+and [supported SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
+Keep identifiers application-controlled and bind values. SQL binding alone does
+not escape TINQL metacharacters.
+
+### Inspect analysis, score terms, and plans
+
+Searchkick's `debug`, `explain`, `search_index.tokens`, and raw `response` methods
+are not implemented. Recipe queries can inspect the native engine:
+
+```sql
+SELECT tin.tokenize('Jalapeño Wi-Fi')
+FROM pg_extension WHERE extname = 'tin';
+
+SELECT (tin.score_inspect('products_name_tin'::regclass, 'apple', 2)).*
+FROM pg_extension WHERE extname = 'tin';
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, tin.score(ctid) AS score
+FROM products
+WHERE name ==> 'apple'
+ORDER BY score DESC
+LIMIT 20;
+```
+
+Use the actual index name. `score_inspect` reports scored terms, not all matching
+terms under every stopword setting. The catalog source is intentional: the tested
+PlanetScale router rejects some standalone helper/SRF SQL shapes. Inspect the
+query actually executed rather than assuming every PostgreSQL expression works
+through the router. See [native functions](https://planetscale.com/docs/postgres/search/reference/functions).
+
+Use `sql.active_record` notifications and your Rails logger for timing and query
+counts. Searchkick-specific Lograge `searchkick_runtime`, `opaque_id`, and profiling
+response hooks are not supplied.
 
 ## License
 
