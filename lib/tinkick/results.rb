@@ -18,6 +18,9 @@ module Tinkick
       @padding = padding
       @total_entries = total_entries
       @load = load
+      unless load
+        @query.model.logger&.warn("Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
+      end
     end
 
     def total_count
