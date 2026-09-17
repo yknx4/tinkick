@@ -36,24 +36,6 @@ module Tinkick
         tag: tag, encoder: encoder, fragment_size: fragment_size, number_of_fragments: number_of_fragments)
     end
 
-    def fragments_from_spans(texts, spans, tag: "<em>", encoder: "default", fragment_size: 0, number_of_fragments: 5)
-      validate_options(encoder, fragment_size, number_of_fragments)
-      opening, closing = markers(texts)
-      # @type var marked: Array[String?]
-      marked = texts.each_with_index.map do |text, index|
-        next unless text
-
-        value = text.dup
-        spans.fetch(index).reverse_each do |first, last|
-          value.insert(last, closing)
-          value.insert(first, opening)
-        end
-        value
-      end
-      render_marked(marked, opening, closing,
-        tag: tag, encoder: encoder, fragment_size: fragment_size, number_of_fragments: number_of_fragments)
-    end
-
     private
 
     def markers(texts)

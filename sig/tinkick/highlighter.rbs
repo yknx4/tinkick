@@ -7,7 +7,6 @@ module Tinkick
     def highlight_many: (Array[String?] texts, String query, ?tag: String, ?encoder: String) -> Array[String?]
     def whole_fields: (Array[String?] texts, ?tag: String, ?encoder: String, ?fragment_size: Integer, ?number_of_fragments: Integer) -> Array[Array[String]]
     def fragments_many: (Array[String?] texts, String query, ?tag: String, ?encoder: String, ?fragment_size: Integer, ?number_of_fragments: Integer) -> Array[Array[String]]
-    def fragments_from_spans: (Array[String?] texts, Array[Array[[ Integer, Integer ]]] spans, ?tag: String, ?encoder: String, ?fragment_size: Integer, ?number_of_fragments: Integer) -> Array[Array[String]]
 
     private
 

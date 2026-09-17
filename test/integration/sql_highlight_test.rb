@@ -23,11 +23,12 @@ class SqlHighlightTest < TinkickIntegrationTest
     assert_equal [{ name: "<em>Rivendell</em>" }, { description: "<em>Rivendell</em> at dawn" }], search.highlights
   end
 
-  def test_sql_fuzzy_highlights_reuse_the_whole_field_match_rules
+  def test_sql_fuzzy_highlights_report_the_native_matching_boundary
     tinkick_test_products(:red_apple).update!(name: "pineapple orchard")
     search = Product.search("papel", fields: [{ name: :text_middle }],
       misspellings: { edit_distance: 2 }, highlight: true)
-    assert_equal [{ name: "<em>pineapple orchard</em>" }], search.highlights
+    error = assert_raises(Tinkick::NotImplementedError) { search.highlights }
+    assert_match(/fuzzy|misspellings/i, error.message)
   end
 
   def test_complete_match_spans_survive_small_snippet_sizes_and_html_encoding
