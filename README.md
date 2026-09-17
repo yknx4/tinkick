@@ -488,6 +488,11 @@ See [TIN index options](https://planetscale.com/docs/postgres/search/reference/i
 **Native difference:** TIN explicitly documents no stemming. Searchkick's English
 stemming, `language`, `stem`, Hunspell dictionaries, `stem_exclusion`, and
 `stemmer_override` therefore have no current Tinkick equivalent.
+Requesting `stem: true`, `language`, `stemmer`, `stem_exclusion`, or
+`stemmer_override` raises `Tinkick::NotImplementedError`, explaining that stemming
+is not yet supported by TIN and how to migrate. `stem: false` is accepted and
+uses native token matching. The exception inherits from `Tinkick::Error` and
+`StandardError`, so ordinary application error handling can rescue it.
 Fuzzy matching a plural is not the same thing as stemming it.
 See the [TIN capability comparison](https://planetscale.com/docs/postgres/search).
 
@@ -1006,11 +1011,14 @@ remote CI run has completed.
 
 ## Reference and unsupported options
 
-The current model declaration accepts `searchable`, `default_fields`, and `match`.
+The current model declaration accepts `searchable`, `default_fields`, `match`, and `stem: false`.
 The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
 `per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
 `countless`, `keyset`, and `after`. Use the detailed sections above for their limits.
 Unknown keywords or methods are not compatibility no-ops.
+Features proven unsupported by TIN raise `Tinkick::NotImplementedError` with an
+explanation naming the backend limitation. Unfinished Tinkick adapters must not
+be mislabeled as TIN limitations; invalid inputs remain validation errors.
 
 The following reference maps less common upstream options to their current status:
 

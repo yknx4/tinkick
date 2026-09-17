@@ -130,6 +130,11 @@ be necessary operationally; Tinkick will not implement the latter as data copy.
 2. **Coexistence:** use distinct Tinkick names and preserve existing `search`
    methods. Verify both gem declaration orders and an application-defined search.
    The user explicitly rejected a Searchkick namespace alias.
+3. **Backend limitations:** features unsupported by TIN must raise
+   `Tinkick::NotImplementedError`, identify that TIN does not yet support the
+   requested feature, and explain the documented reason or replacement.
+   Implementable features belong in the gem; known slow implementations must
+   warn through the model logger. Missing adapter code is not a backend gap.
 
 ## Remaining implementation questions
 
