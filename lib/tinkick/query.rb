@@ -35,7 +35,8 @@ module Tinkick
       @offset = offset.to_i
       @operator = operator.to_s
       @match = match
-      @misspellings = misspellings
+      @misspelling_fields = nil
+      @misspellings = normalize_misspellings(misspellings)
       @exclude = normalize_exclusions(exclude)
       @countless = countless || keyset
       @keyset = keyset
@@ -137,6 +138,28 @@ module Tinkick
 
     private
 
+    def normalize_misspellings(options)
+      return options unless options.is_a?(Hash) && options.key?(:fields)
+
+      names = options[:fields]
+      unless names.is_a?(Array) && names.all? { |name| name.is_a?(String) || name.is_a?(Symbol) }
+        raise ArgumentError, "misspellings fields must be an array of field names"
+      end
+      selected = names.map(&:to_s)
+      unless (selected - @fields.map(&:first)).empty?
+        raise ArgumentError, "All fields in per-field misspellings must also be specified in fields option"
+      end
+      @misspelling_fields = selected
+      normalized = options.dup
+      normalized.delete(:fields)
+      normalized
+    end
+
+    def misspellings_for(name)
+      fields = @misspelling_fields
+      fields && !fields.include?(name) ? false : @misspellings
+    end
+
     def normalize_exclusions(value)
       return [] if value.nil? || value == false
 
@@ -188,16 +211,17 @@ module Tinkick
         native = [] #: Array[filter_predicate]
         exact = [] #: Array[filter_predicate]
         fields.each do |name, field, mode|
+          misspellings = misspellings_for(name)
           if mode == :exact
             exact << field_predicate(field, ["#{field.text_sql}::text COLLATE \"C\" = ?", [@term]])
           elsif [:text_start, :text_middle, :text_end].include?(mode)
-            exact << field_predicate(field, TextMatch.new(@model).predicate(field.text_sql, @term, match: mode, misspellings: @misspellings))
-          elsif two_edit_word?(mode)
-            native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: @misspellings))
+            exact << field_predicate(field, TextMatch.new(@model).predicate(field.text_sql, @term, match: mode, misspellings: misspellings))
+          elsif two_edit_word?(mode, misspellings)
+            native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings))
           else
-            compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: @misspellings)
+            compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings)
             compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded && !compiled.empty?
-            if [:word_start, :word_middle, :word_end].include?(mode) && @misspellings != false && compiled.include?("MATCHES")
+            if [:word_start, :word_middle, :word_end].include?(mode) && misspellings != false && compiled.include?("MATCHES")
               @fuzzy_partial = true
             end
             native << field_predicate(field, ["#{field.text_sql} ==> ?", [compiled]]) unless compiled.empty?
@@ -240,7 +264,7 @@ module Tinkick
         next if phrases.empty?
 
         excluded = phrases.map { |phrase| "(#{phrase})" }.join(" OR ")
-        if fields.length == 1 && @term != "*" && !two_edit_word?(mode)
+        if fields.length == 1 && @term != "*" && !two_edit_word?(mode, misspellings_for(name))
           combined = excluded
           next
         end
@@ -256,8 +280,7 @@ module Tinkick
       [relation, combined]
     end
 
-    def two_edit_word?(mode)
-      options = @misspellings
+    def two_edit_word?(mode, options)
       return false unless options.is_a?(Hash)
 
       distance = options.fetch(:edit_distance, options.fetch(:distance, 1))

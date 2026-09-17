@@ -23,6 +23,7 @@ module Tinkick
     @operator: String
     @match: Symbol
     @misspellings: QueryText::misspellings
+    @misspelling_fields: Array[String]?
     @exclude: Array[String]
     @records: Array[ActiveRecord::Base]?
     @rows: Array[Hash[String, result_value]]?
@@ -61,6 +62,9 @@ module Tinkick
 
     private
 
+    def normalize_misspellings: (QueryText::misspellings options) -> QueryText::misspellings
+    def misspellings_for: (String name) -> QueryText::misspellings
+
     def normalize_exclusions: (exclusion_phrases value) -> Array[String]
 
     def read_rows: (ActiveRecord::Relation relation) -> Array[Hash[String, result_value]]
@@ -71,7 +75,7 @@ module Tinkick
     def scope: () -> ActiveRecord::Relation
     def build_scope: (filter_conditions conditions) -> ActiveRecord::Relation
     def excluding_scope: (ActiveRecord::Relation relation, Array[[ String, SearchField, Symbol ]] fields, QueryText compiler) -> [ ActiveRecord::Relation, String? ]
-    def two_edit_word?: (Symbol mode) -> bool
+    def two_edit_word?: (Symbol mode, QueryText::misspellings options) -> bool
     def field_predicate: (SearchField field, filter_predicate predicate) -> filter_predicate
     def matching_scope: (ActiveRecord::Relation relation, Array[filter_predicate] predicates) -> ActiveRecord::Relation
     def mixed_scope: (ActiveRecord::Relation relation, Array[filter_predicate] native, Array[filter_predicate] exact) -> ActiveRecord::Relation

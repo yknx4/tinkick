@@ -1,6 +1,6 @@
 module Tinkick
   class QueryText
-    type misspellings = bool | { ?transpositions: bool, ?edit_distance: Integer, ?distance: Integer, ?prefix_length: Integer }
+    type misspellings = bool | { ?transpositions: bool, ?edit_distance: Integer, ?distance: Integer, ?prefix_length: Integer, ?fields: Array[String | Symbol] }
 
     @connection: ActiveRecord::ConnectionAdapters::AbstractAdapter
 
