@@ -108,17 +108,22 @@ module Tinkick
     def unicode_phrase_parts(groups, analysis)
       reference = analysis.merge("case_folding" => "fold", "accent_folding" => "fold",
         "long_tokens" => "truncate", "max_token_bytes" => "2692")
-      verify_reference_graphemes(groups, reference)
-      words = analyze_many(groups.map { |candidate, _tokens| candidate.fetch(3) }, reference)
+      sources, offsets = phrase_reference_sources(groups, reference)
+      words = analyze_many(sources, reference)
       indexes = groups.each_index.select { |index| words.fetch(index).any? }
-      selected = indexes.map { |index| [groups.fetch(index).first, words.fetch(index)] } #: Array[[candidate, Array[String]]]
+      selected = indexes.map do |index|
+        text = sources.fetch(index)
+        [[index, 0, text.length, text, ""], words.fetch(index)] #: [candidate, Array[String]]
+      end
       mapped = phrase_group_spans(selected, reference)
       inputs = [] #: Array[[Integer, String]]
       indexes.each_with_index do |index, ordinal|
         text = groups.fetch(index).first.fetch(3)
-        spans = mapped.fetch(ordinal)
-        spans.each_with_index do |(first, _last), offset|
-          finish = spans[offset + 1]&.first || text.length
+        starts = mapped.fetch(ordinal).map(&:first)
+        source_offsets = offsets[index]
+        starts = starts.map { |offset| source_offsets.fetch(offset) } if source_offsets
+        starts.each_with_index do |first, offset|
+          finish = starts[offset + 1] || text.length
           inputs << [index, text[first...finish].to_s]
         end
       end
@@ -132,15 +137,47 @@ module Tinkick
       parts
     end
 
-    def verify_reference_graphemes(groups, analysis)
-      large = groups.flat_map { |candidate, _words| candidate.fetch(3).grapheme_clusters }
-        .select { |grapheme| grapheme.bytesize > 2692 }.uniq
-      return if large.empty?
+    def phrase_reference_sources(groups, analysis)
+      sources = groups.map { |candidate, _words| candidate.fetch(3) }
+      offsets = {} #: Hash[Integer, Array[Integer]]
+      large = sources.flat_map(&:grapheme_clusters).select { |grapheme| grapheme.bytesize > 2692 }.uniq
+      return [sources, offsets] if large.empty?
 
       words = analyze_many(large, analysis.merge("long_tokens" => "split", "graphemes" => "discard"))
-      if words.any? { |tokens| tokens.join.bytesize > 2692 }
-        raise ArgumentError, "Phrase position reconstruction for oversized lexical graphemes hidden by the native reference tokenizer is not implemented yet"
+      replacements = {} #: Hash[String, String]
+      large.each_with_index do |grapheme, index|
+        tokens = words.fetch(index)
+        replacements[grapheme] = tokens.fetch(0)[0].to_s if tokens.join.bytesize > 2692
       end
+      sources.each_with_index do |text, index|
+        next unless text.grapheme_clusters.any? { |grapheme| replacements.key?(grapheme) }
+
+        sources[index], offsets[index] = compact_phrase_reference(text, replacements)
+      end
+      [sources, offsets]
+    end
+
+    def compact_phrase_reference(text, replacements)
+      compacted = +""
+      offsets = [0]
+      original_offset = 0
+      # Only the boundary-discovery copy is shortened. Position accounting and
+      # token eligibility always reanalyze slices of the original source.
+      text.grapheme_clusters.each do |grapheme|
+        replacement = replacements[grapheme]
+        if replacement
+          compacted << replacement
+          original_offset += grapheme.length
+          offsets << original_offset
+        else
+          grapheme.each_char do |character|
+            compacted << character
+            original_offset += 1
+            offsets << original_offset
+          end
+        end
+      end
+      [compacted, offsets]
     end
 
     def phrase_witnesses(stream, query)

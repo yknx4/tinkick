@@ -14,7 +14,8 @@ module Tinkick
 
     def phrase_occurrences: (Array[String?] texts, Hash[String, String] analysis) -> [ Array[[ candidate, Array[String] ]], Array[Array[occurrence]] ]
     def unicode_phrase_parts: (Array[[ candidate, Array[String] ]] groups, Hash[String, String] analysis) -> Array[Array[Array[String]]]
-    def verify_reference_graphemes: (Array[[ candidate, Array[String] ]] groups, Hash[String, String] analysis) -> void
+    def phrase_reference_sources: (Array[[ candidate, Array[String] ]] groups, Hash[String, String] analysis) -> [ Array[String], Hash[Integer, Array[Integer]] ]
+    def compact_phrase_reference: (String text, Hash[String, String] replacements) -> [ String, Array[Integer] ]
     def phrase_witnesses: (Array[occurrence] stream, Array[occurrence] query) -> Array[[ occurrence, occurrence ]]
     def phrase_group_spans: (Array[[ candidate, Array[String] ]] groups, Hash[String, String] analysis) -> Array[Array[span]]
     def configuration: (Hash[String, String] analysis) -> Hash[String, String]

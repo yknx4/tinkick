@@ -67,12 +67,11 @@ class CustomPhraseGapSpansTest < Minitest::Test
     assert_equal [[]], locate([source], "aa bb", **options, long_tokens: "truncate")
   end
 
-  def test_hidden_oversized_lexical_boundaries_fail_before_returning_false_witnesses
+  def test_hidden_oversized_lexical_boundaries_do_not_return_false_witnesses
     source = "aa #{"\u1100" * 1000} bb"
-    error = assert_raises(ArgumentError) { locate([source], "aa bb", max_token_bytes: "2692") }
 
-    assert_match(/oversized lexical graphemes/, error.message)
-    refute_match(/not supported by TIN/i, error.message)
+    assert_equal [[]], locate([source], "aa bb", max_token_bytes: "2692")
+    assert_equal [[[0, source.length]]], locate([source], source, max_token_bytes: "2692")
   end
 
   private
