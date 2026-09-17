@@ -10,7 +10,11 @@ relations, word and phrase queries, distance-one typo matching, scalar filters,
 ordering, model/raw-row results, and pagination. This is a compatibility project,
 not yet a complete drop-in replacement. This guide covers the feature surface of
 the [Searchkick 6.1.2 reference README](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/README.md),
-including features that still need an adapter or a different application design.
+including features that still need native integration or a different application design.
+
+Implementation stays within TIN, PostgreSQL, and available extensions. Backend
+differences are part of the API contract: unsupported explicit controls raise
+clear errors instead of invoking custom Lucene or Elasticsearch emulation.
 
 Throughout this guide:
 
@@ -626,13 +630,12 @@ as literal user input; underscores do not become positional wildcards.
 
 ### Misspellings
 
-Public searches default to distance one, prefix length zero, with adjacent
-transpositions enabled:
+Public searches use native TIN Levenshtein distance one and prefix length zero:
 
 ```ruby
-Product.search("aplpe")
+Product.search("appl")
 Product.search("appl").misspellings(false)
-Product.search("aplpe", misspellings: { prefix_length: 2 })
+Product.search("appl", misspellings: { prefix_length: 2 })
 Product.search("appl", misspellings: { edit_distance: 0 })
 Product.search("aplpe", misspellings: { edit_distance: 2, transpositions: false })
 Product.search("mithrl", fields: [:name, :description],
@@ -640,52 +643,31 @@ Product.search("mithrl", fields: [:name, :description],
 ```
 
 `distance` is an alias for `edit_distance`. Native TIN edits handle insertion,
-deletion, and substitution; Tinkick adds exact adjacent swaps for distance one.
+deletion, and substitution. An adjacent swap needs two native edits.
 The prefix protects the specified number of Unicode codepoints. Options must
 use nonnegative integer distances and prefixes.
 
 `misspellings: {fields: [...]}` enables fuzzy matching only on those selected
 fields. Other searched fields still match exactly; `fields: []` disables
 fuzziness on every field. Names must belong to the search's selected fields,
-including any dotted JSON paths. This also works through `.misspellings(...)`,
-with partial token and whole-field modes. Exact and phrase modes remain exact.
+including any dotted JSON paths. This also works through `.misspellings(...)`.
+Exact and phrase modes remain exact. Partial token and whole-field modes require
+`misspellings: false` or `edit_distance: 0`.
 
 The default deliberately uses **uncapped native expansion**, rather than
 Searchkick's implicit three expansions. It may return additional valid typo
 matches. This choice favors TIN performance; numerical scores and tied ordering
 are also allowed to differ. Explicit controls must not be silently ignored.
 
-`max_expansions`, including an explicitly requested value of three, remains
-adapter work and currently raises.
+When fuzzy matching is used, `max_expansions` and `transpositions: true` raise
+`Tinkick::NotImplementedError`: TIN does not provide those Elasticsearch fuzzy
+controls. `transpositions: false` accepts native Levenshtein behavior. Tinkick
+does not install a custom edit-distance function or generate fuzzy alternatives.
+Phrase and exact modes ignore unused misspelling settings.
 
-Whole-word `edit_distance: 2` with transpositions uses native TIN candidates plus
-bounded SQL verification. Install its optional helper only if this feature is
-needed:
-
-```sh
-bin/rails generate tinkick:functions
-bin/rails db:migrate
-```
-
-```ruby
-Product.search("paelp", misspellings: {edit_distance: 2})
-```
-
-The helper checks the actual index tokenization settings, preserves fixed
-prefixes, and avoids constructing exponentially large regexes for long words.
-It logs a warning because token verification can bypass native top-k ranking;
-broad candidates and long text can increase cost. Scores come from the native
-candidate query and can differ from Searchkick. Normal distance-one search and
-gem loading do not require this helper. A missing helper raises migration
-guidance only when the corresponding feature is used.
-
-Tokens containing literal TINQL delimiters use escaped token patterns for short
-one-edit searches. Longer analyzed tokens, or larger nontransposition distances,
-use indexed TIN candidates followed by bounded SQL verification and a cost
-warning. This path requires `tinkick.edit_distance`; install the optional
-functions migration or generate its `--upgrade` migration for an existing
-installation. The decision uses analyzed Unicode length, since case folding can
-expand a token. Ordinary native queries keep their existing fast path.
+Native fuzzy terms cannot contain TINQL delimiters such as parentheses, brackets,
+quotes, tildes, or carets. If a custom tokenizer retains these characters in a
+token, use `misspellings: false`; a fuzzy request raises a clear error.
 
 Use `below` to enable fuzzy matching only when the exact filtered search has
 fewer than the requested number of matches:
@@ -703,8 +685,8 @@ integer conversion; zero or negative thresholds keep exact matching, while nil
 or false disables the threshold. There is no retry expansion cap or added
 database snapshot. `misspellings?` describes the selected pass, so it can be true
 for exact/phrase modes or `fields: []`; a plain match-all search returns false.
-There is not yet a verified public replacement for an explicit expansion cap;
-retain the old search path if that cap is required for match eligibility.
+Explicit expansion caps are an unsupported Elasticsearch control; use native
+uncapped matching or retain the old search path when that cap is required.
 
 Literal keycap emoji such as `*️⃣` and `#️⃣` support literal and distance-one
 fuzzy matching without interpreting their analyzed punctuation as match-all. See the
@@ -717,8 +699,8 @@ fuzzy matching without interpreting their analyzed punctuation as match-all. See
 | --- | --- | --- |
 | `:word` | Available | Disable misspellings for exact token matching. |
 | `:phrase` | Available | Ordered adjacent tokens. |
-| `:word_start`, `:word_middle`, `:word_end` | Available | Native token wildcards; dictionary patterns for one edit; SQL refinement for two edits. |
-| `:text_start`, `:text_middle`, `:text_end` | Available | Whole-field SQL matching; requires `unaccent` when used. Supports zero, one, or two edits. |
+| `:word_start`, `:word_middle`, `:word_end` | Available without misspellings | Native token wildcards. |
+| `:text_start`, `:text_middle`, `:text_end` | Available without misspellings | Whole-field PostgreSQL `LIKE`; requires `unaccent` for accent folding. |
 | `:exact` | Available globally and per field | Case-sensitive, accent-sensitive whole-field SQL equality; ignores misspellings. |
 | Mixed per-field match modes | Available | Each field keeps its own mode; SQL/TIN branches are combined and deduplicated in PostgreSQL. |
 
@@ -730,7 +712,7 @@ class Product < ApplicationRecord
 end
 
 Product.search("app", fields: [:name], match: :word_start, misspellings: false)
-Product.search("fresh orchard", fields: [:description], match: :text_start)
+Product.search("fresh orchard", fields: [:description], match: :text_start, misspellings: false)
 Product.search("Red Apple", fields: [{ name: :exact }, { description: :phrase }])
 ```
 
@@ -738,45 +720,15 @@ Token modes use existing TIN indexes; separate ngram indexes are unnecessary.
 Partial model declarations are accepted without opening a database connection.
 Whole-field modes preserve whitespace and fold case/accents with PostgreSQL
 `unaccent`; the extension is needed only when such a query executes. They use
-SQL scans and log a warning. Partial matches retain Searchkick's 1–50 character
-gram range; exact whole-field equality has no gram-length restriction.
+SQL scans and log a warning. Native wildcard and `LIKE` matching do not impose
+Searchkick's 50-character ngram limit.
 
 SQL-only matching returns constant scores and needs no TIN index on those fields.
 Mixed SQL/TIN matching adds native TIN scores and SQL-match scores, then groups
 record IDs before pagination. It logs a warning because grouping/sorting can cost
-more than native top-k search. Fuzzy token partial matching also warns about
-dictionary expansion. Use `misspellings: false` when typo matching is unnecessary.
-
-Two-edit token partial matching enumerates bounded grams from native TIN
-candidates. It warns because broad candidates and middle-position enumeration
-can be expensive and bypass native top-k ranking. A fixed `prefix_length` can
-reduce candidates. This path needs the optional SQL helper for transpositions,
-or `fuzzystrmatch` when `transpositions: false`; ordinary token searches do not.
-
-Two-edit whole-field queries enumerate candidate substrings in PostgreSQL and log
-an additional warning. With transpositions they need the optional SQL helper:
-
-```sh
-bin/rails generate tinkick:functions
-bin/rails db:migrate
-```
-
-With `transpositions: false`, install `fuzzystrmatch` instead. These dependencies
-are checked only for the paths that use them; basic search, exact matching, and
-one-edit native token matching do not require them. The helper migration installs
-`tinkick.osa_distance` and `tinkick.edit_distance` and leaves extensions untouched.
-The latter supports bounded Unicode edit distance with optional transpositions,
-including tokens beyond `fuzzystrmatch`'s 255-character limit. Neither helper is
-required at gem load or model registration. To add it to an existing helper
-installation without changing the original migration:
-
-```sh
-bin/rails generate tinkick:functions --upgrade
-bin/rails db:migrate
-```
-
-The upgrade migration adds only `tinkick.edit_distance`; rolling it back preserves
-`tinkick.osa_distance` and ordinary TIN search.
+more than native top-k search. Fuzzy wildcard and whole-field substring matching
+have no corresponding native TIN primitive and raise `Tinkick::NotImplementedError`.
+Use `misspellings: false` for these modes, or `match: :word` for native fuzzy search.
 
 ### Case, accents, whitespace, and emoji
 
@@ -817,10 +769,9 @@ differences as edits. Unicode normalization is not identical across all engines.
 Custom Elasticsearch analyzer mappings are not accepted. Native literal, phrase,
 and partial queries read the selected
 index's actual analysis settings, including preserved case/accents and whitespace
-tokenization. Each selected field uses its own configuration. One-edit fuzzy
-queries also escape short preserved punctuation tokens through native dictionary
-patterns; longer delimiter tokens and larger edit distances still need SQL
-refinement. Index metadata is cached per model
+tokenization. Each selected field uses its own configuration. Fuzzy queries use
+native term syntax; tokens containing unsupported TINQL delimiters require
+exact matching instead. Index metadata is cached per model
 and connection pool; after rebuilding an index with changed tokenization, call
 `Product.reset_column_information` or restart application processes to refresh
 it. Multiple indexes for the same source must agree on analysis.
@@ -867,7 +818,7 @@ word modes exclude adjacent partial-token phrases, while text and exact modes
 use their whole-field matching rules. Tinkick escapes literal input and follows
 the indexed field's tokenizer options. A single native field combines the
 negative phrase in the TIN query and retains top-k ranking. Multi-field,
-match-all, and refined fuzzy paths use matching-ID subqueries to preserve
+and match-all paths use matching-ID subqueries to preserve
 NULL/missing fields and log their additional cost. Use `boost_where` with a
 fractional factor to demote matching records without excluding them.
 
@@ -877,7 +828,7 @@ Native word, phrase, and partial-word fields accept caret weights:
 
 ```ruby
 Product.search("coffee", fields: ["name^10", :description])
-Product.search("coffee").fields({"name^2.5" => :word_start}, :description)
+Product.search("coffee", misspellings: false).fields({"name^2.5" => :word_start}, :description)
 ```
 
 Weights from zero through 10,000 use native TIN boosts. Zero preserves matching
@@ -888,7 +839,7 @@ selector and match mode; an unweighted duplicate does not reset it. Per-field
 
 Explicit `^1` pins terms that TIN might otherwise omit from scoring as too common,
 so it can change scores even with a factor of one. Native single-field queries
-retain the top-k path; existing multi-field/refinement cost warnings still apply.
+retain the top-k path; multi-field and SQL-scoring cost warnings still apply.
 Scores use TIN's ranking without synthetic exact-versus-fuzzy boosts or forced
 primary-key tie order.
 
@@ -1028,8 +979,9 @@ Date scales and offsets use integer `nanos`, `micros`, `ms`, `s`, `m`, `h` or `d
 units. Submillisecond durations truncate to milliseconds; the resulting scale
 must be positive. Bare nonzero numeric date durations, fractional durations,
 weeks and months are rejected, following the Elasticsearch time-value parser.
-Origins accept dates, times, epoch milliseconds and supported date math such as
-`"now-1d"`. Date scoring uses millisecond precision. Numeric columns also accept
+Origins accept dates, times, ISO8601 strings and epoch milliseconds. Compute
+relative origins in the application, for example `1.day.ago`; Elasticsearch date
+math strings raise `Tinkick::NotImplementedError`. Date scoring uses millisecond precision. Numeric columns also accept
 these functions with explicit numeric `origin` and `scale`. JSONB recency paths
 still require a date/numeric type contract; use a typed stored or generated
 column in the meantime.
@@ -1175,44 +1127,25 @@ explicit input filters when a value range must restrict matching records.
 
 Date ranges accept `Date`, `Time`, ISO8601 strings, or epoch-millisecond bounds.
 `time_zone` accepts an IANA name, a fixed ISO offset, or numeric hours (truncated
-toward zero); UTC is the
-default. Output strings include milliseconds and the selected zone. Explicit
-input offsets and epoch values preserve their instant.
+toward zero); UTC is the default. Explicit input offsets and epoch values preserve
+their instant. Numbers and integer strings always mean epoch milliseconds.
 
 ```ruby
+zone = Time.find_zone!("America/Vancouver")
 Product.search("coffee", aggs: {
   created_at: {
-    date_ranges: [{from: "now-7d/d", to: "now/d"}],
+    date_ranges: [{from: zone.now.beginning_of_day - 7.days, to: zone.now.beginning_of_day}],
     time_zone: "America/Vancouver"
   }
 })
 ```
 
-Date math uses `now` or an ISO date followed by `||` as its anchor. Add/subtract
-`y`, `M`, `w`, `d`, `h`/`H`, `m`, or `s`; round down with `/unit`. Weeks start on
-Monday. Calendar-day arithmetic follows DST; adding 24 hours advances exactly
-24 elapsed hours. One captured `now` is shared across an aggregation evaluator.
-
-Date ranges also accept `format:`. The default is
-`strict_date_optional_time||epoch_millis`; alternatives separated by `||` are
-tried in order, and the first format renders bucket keys and bound strings.
-Custom formats support `yyyy`/`uuuu`, `MM`, `dd`, `HH`, `mm`, `ss`, `S`/`SS`/`SSS`,
-`XXX` offsets, punctuation, and quoted literals:
-
-```ruby
-Product.search("coffee", aggs: {
-  created_at: {
-    format: "yyyy/MM/dd||epoch_millis",
-    date_ranges: [{from: "2026/01/01", to: "2026/02/01"}]
-  }
-})
-```
-
-Numeric bounds are truncated and passed through the configured formatter. With
-the default formatter, `2026` is a year; explicitly use `format: "epoch_millis"`
-when small numbers must mean milliseconds. Missing custom date components use
-1970-01-01 and midnight. Locale names, week/era tokens, optional pattern sections,
-and fractions beyond three custom digits remain adapter work.
+Output labels default to ISO8601 with milliseconds. `format: "epoch_millis"`
+returns epoch-millisecond labels; `"strict_date_optional_time"` explicitly selects
+the default. Elasticsearch date math (`now-7d/d`, `date||/M`), Java date patterns,
+and format alternatives raise `Tinkick::NotImplementedError`. Compute boundaries
+with Ruby/Rails and format returned dates in the application. Use PostgreSQL
+`to_char` in an explicit SQL query when database-side custom labels are required.
 
 Calendar date histograms count matching records independently of result
 pagination and fill intervening empty buckets by default:
@@ -1234,54 +1167,27 @@ milliseconds and must be at least one millisecond. Fractional quantities and
 calendar units such as months are invalid fixed durations.
 
 Date histograms default to UTC and accept fixed `time_zone` offsets, such as
-`"+01:30"`, `"-05:00"`, or numeric `-5`, inside `date_histogram:`. Buckets round
-on that local time grid; `key` remains UTC epoch milliseconds and
-`key_as_string` displays the local boundary. Calendar gaps advance in local
-calendar time, preserving month starts across February. Offsets may include
-seconds, though the upstream-compatible default label prints only offset hours
-and minutes. Fixed offsets are limited to ±18 hours. IANA zones such as
-`"America/New_York"` work with calendar and fixed intervals. Local days can span 23
-or 25 hours. Repeated midnights use the earliest instant; missing midnights use
-the first valid instant. Entirely skipped dates do not produce duplicate buckets.
-Hour buckets preserve both occurrences of a repeated hour with distinct UTC
-keys and offset-bearing labels. Half-hour transitions, such as Lord Howe's,
-follow the changed local grid instead of assuming every day has 24 hour buckets.
+`"+01:30"`, `"-05:00"`, or numeric `-5`, and IANA names such as
+`"America/New_York"`. Fixed offsets are limited to ±18 hours. Calendar buckets
+use PostgreSQL's three-argument `date_trunc`; fixed buckets use `date_bin` with
+local midnight on 1970-01-01 as the origin. Fixed intervals always measure elapsed
+time, including across daylight-saving transitions. Calendar days can span 23 or
+25 hours. Historical offsets and ambiguous or missing local times follow native
+PostgreSQL rules; Tinkick does not reconstruct Elasticsearch timezone behavior.
+The numeric `key` remains UTC epoch milliseconds and `key_as_string` displays the
+local boundary. Offset labels include hours and minutes.
 
-PostgreSQL groups matching records and generates empty buckets without loading
-models. Subday intervals use PostgreSQL's timezone data for both keys and labels;
-historical boundaries can differ from Elasticsearch when the installed timezone
-databases differ. Explicit subday bounds add one query to round four scalar
-endpoints; unbounded histograms need no bounds query. Dense subday ranges use
-recursive SQL and can be expensive: prefer `min_doc_count: 1` when empty buckets
-are unnecessary.
-
-IANA fixed intervals use the local epoch grid within each UTC-offset period.
-Repeated local boundaries retain distinct UTC keys; a forward clock jump can
-create a bucket at the transition instant. For example, a `"90m"` grid can
-contain both occurrences of `01:30` when New York clocks fall back. Records,
-explicit bounds and empty buckets use the same SQL rounding rules.
-
-The fixed-interval path discovers PostgreSQL offset transitions using daily
-samples and a binary search within changed days. This relies on the audited
-IANA 1850–2050 data having no two transitions within one UTC day (the smallest
-observed separation was 601,200 seconds); the lookback also allows two days for
-the observed offset range. Wide matching or bound ranges increase discovery
-work and log a warning. Apply selective date filters and avoid dense empty
-grids when they are unnecessary. No optional extension is needed.
-
-The [measured IANA fixed-interval plans](docs/iana-fixed-plans.md) include the
-SQL, binds, rollback-only Tolkien dataset and reproduction command. With 1,000
-matching records over one year, one warm sparse run took 8.628 ms; generating
-5,842 buckets took 24.062 ms. These establish the query shape and additional
-work, not production latency or throughput.
+PostgreSQL groups matching records and fills empty buckets with `generate_series`
+without loading models. Populated buckets are retained even when a timezone
+transition changes the calendar series. Explicit bounds add one query to round
+four scalar endpoints. See PostgreSQL's [date/time functions](https://www.postgresql.org/docs/18/functions-datetime.html)
+and [series generators](https://www.postgresql.org/docs/18/functions-srf.html).
 
 Put `min_doc_count`, `order`, `keyed`, and `format` inside `date_histogram:`;
 only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
-avoid generating empty buckets. The default logs a warning for small intervals
-over wide date ranges. A custom `format`, such as `"yyyy/MM/dd"` or
-`"epoch_millis"`, controls `key_as_string` and keyed bucket names while numeric
-`key` remains UTC milliseconds. It uses the same supported patterns as date
-ranges, including format alternatives; the first format prints the label.
+avoid generating empty buckets. The default logs a warning because small
+intervals over wide date ranges can produce many buckets. `format: "epoch_millis"`
+changes labels and keyed bucket names while numeric keys remain UTC milliseconds.
 
 Use `offset: "+6h"` inside `date_histogram:` to shift bucket boundaries. Signed
 fixed durations or numeric milliseconds are accepted; numeric fractions truncate
@@ -1304,9 +1210,9 @@ Product.search("coffee", aggs: {
 
 Bounds expand the output without filtering matching records. Either endpoint may
 be omitted; an empty result set needs both to create buckets. Empty buckets are
-generated only with `min_doc_count: 0`. Strings use the configured `format`,
-`time_zone`, and date math. Numeric bounds are integral epoch milliseconds,
-regardless of `format` (unlike date-range numeric bounds). Bounds round on the
+generated only with `min_doc_count: 0`. Bounds accept Date/Time values, ISO8601
+strings and integral epoch milliseconds. Timezone-free ISO strings use
+`time_zone`; integer strings mean epoch milliseconds. Bounds round on the
 configured time grid before the aggregation offset is added. Wide bounds with
 small intervals can generate many buckets and retain the empty-bucket warning.
 
@@ -1320,14 +1226,11 @@ Date arrays count each record once per eligible bucket; null and empty arrays
 contribute no bucket counts.
 
 When combining bounds, extended endpoints must fit within the rounded hard
-endpoints. Elasticsearch's subsequent
-[empty-bucket expansion](https://github.com/elastic/elasticsearch/blob/v8.19.0/server/src/main/java/org/elasticsearch/search/aggregations/bucket/histogram/InternalDateHistogram.java#L396-L465)
-does not reapply hard bounds. For example, a one-hour interval with `offset: "+30m"` and both
-bounds set to `{min: 0, max: 7_200_000}` can emit an empty bucket at 02:30 UTC,
-beyond the hard maximum of 02:00 UTC. Explicit `where:` filters remain available
+endpoints. Extended bounds describe the empty output grid; hard bounds restrict
+which populated buckets collect records. Explicit `where:` filters are available
 when the input timestamps themselves must fall within a range.
 
-Advanced formats, nested aggregations, and additional aggregate options remain adapter
+Nested aggregations and additional aggregate options remain adapter
 implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
 for scripted calculations. Check representative plans against TIN's
@@ -1365,10 +1268,7 @@ original value when no span matches. Match-all queries have empty highlight maps
 Existing model `search_highlights` methods are preserved for backend coexistence.
 
 Highlighting batches the bounded page in one native call per field and caches the
-result. Refined fuzzy searches first run one additional page-token eligibility
-query per field, preserving edit-distance, fixed-prefix, and partial-gram rules.
-Only eligible tokens are highlighted; broad candidate-only tokens are excluded.
-This path warns about extra SQL and long-field/partial-middle costs.
+result. Native TIN identifies the matched spans, including native fuzzy matches.
 Highlighting does not count matches or alter search ranking. Raw projections fetch
 only selected columns plus required highlight inputs; hidden inputs stay out of
 the source and raw result attributes. Large pages or long fields increase transfer
@@ -1378,75 +1278,22 @@ and presentation work, so set a suitable page limit.
 They mark the complete matching field, reflecting Searchkick's whole-field
 analysis. A small fragment size does not split that complete match span. Each
 SQL field is checked against the same search predicate in a bound page batch,
-so a record matching another field does not create a false highlight. Fuzzy
-whole-field highlighting retains the matching path's optional dependencies and
-cost warnings.
-
-The [captured highlight plans](docs/benchmarks/2026-09-17-highlight-plans.json)
-measure 20 supplied texts totaling 8,840 characters on PostgreSQL 18.6 / TIN 1.0.2:
-
-| Page operation | Database execution time |
-| --- | --- |
-| Two-edit token eligibility | 2.038 ms |
-| Native marking of eligible tokens | 2.704 ms |
-| Exact `text_middle` field eligibility | 0.273 ms |
-
-The refinement processed 1,360 token occurrences, deduplicated them to 36 terms,
-and retained two eligible terms. These helper plans read supplied page text and
-`pg_extension`, without scanning model tables. They are single warm executions,
-excluding record retrieval, network time, Ruby snippet rendering, and application
-latency. Reproduce them with `direnv exec . bundle exec ruby script/explain_highlights.rb`
-after preparing the integration test database; larger or less repetitive fields
-will have different costs.
+so a record matching another field does not create a false highlight. These SQL
+modes require `misspellings: false`; fuzzy whole-field matching is unavailable.
 
 Native highlighting preserves document HTML. `encoder: "html"` escapes source
 text separately from trusted highlight tags; returned strings are not marked
 HTML-safe. Do not mark untrusted native output `html_safe`.
 
-Custom case/accent settings, whitespace tokenization, `max_token_bytes`,
-`long_tokens: split/truncate/discard`, and `graphemes: emoji/retain/discard` are
-supported for word and partial-word highlights. These are
-[TIN index settings](https://planetscale.com/docs/postgres/search/reference/indexes).
-Tinkick checks eligible tokens using the field's
-actual index analysis, verifies their source spans, and shares the normal tag,
-HTML encoding, snippet, and caching behavior. Each field retains its own policy:
-a case-preserving name field does not highlight lowercase variants merely because
-a case-folding description field matched. Matching stored fragments map to the
-original complete graphemes; truncated raw suffixes and discarded words remain
-unmarked.
-
-This path logs its extra page-text analysis work; costs grow with the page's text
-and eligible tokens. Exact custom highlighting needs only TIN. Fuzzy highlighting
-checks its SQL edit-distance helper or extension only when that feature is used;
-see [installation](#getting-started). Default-analysis fields keep
-the native highlighting path. Explicit native highlighting applies default
-analysis even when an index uses different analysis; merely passing the index's
-query is insufficient.
-
-Changed token policies and detected long-token splitting use additional native
-prefix analysis within matching whitespace runs and log a cost warning. This can
-be expensive: the recorded prefix query took 285.655 ms for one synthetic
-1,024-character run with a four-byte token limit. See the
-[policy-highlight plans](docs/query-plans.md#custom-token-policy-highlighting)
-for the complete measurements and reproduction command. Bound page and field
-sizes; `fragment_size` limits returned snippets, not the source text analyzed.
-
-Custom phrases reconstruct complete matching spans from cached page text.
-Whitespace tokenization supports split, truncate and discard policies, including
-preserved or collapsed position gaps. Unicode tokenization supports custom
-case/accent, token length, grapheme, and removed-token gap policies. Repeated and overlapping
-phrases are merged with word highlights without nested tags. A phrase span includes
-source text between its first and last matched token, including discarded internal
-context; discarded terms at the query's edges do not extend the highlight.
-
-Phrase reconstruction logs its additional tokenization cost, and complex source
-mapping can use the expensive prefix-analysis path described above. Preserved
-Unicode gaps require extra queries to map and reanalyze original source slices.
-Oversized lexical graphemes use a shortened reference copy to discover word
-boundaries, then map those boundaries back to the original text. Token eligibility
-and position accounting still analyze the original slices. Hangul, Indic,
-neighboring scripts, punctuation, and oversized emoji have native-position and
-highlight regressions; this path does not replace the document's actual tokens.
+Lexical highlighting with non-default index tokenization raises
+`Tinkick::NotImplementedError`. This includes custom case/accent settings,
+whitespace tokenization, token-length policies, and grapheme policies. Native
+implicit `tin.highlight(indexed_column)` rejects non-default tokenization, while
+the explicit-query form uses default analysis. Tinkick does not reconstruct token
+positions or silently highlight using a different analyzer. Query matching remains
+available; omit highlighting for that field, select a default-analysis field in
+`highlight: {fields: [...]}`, or use SQL whole-field matching where appropriate.
+See [TIN highlighting](https://planetscale.com/docs/postgres/search/highlighting).
 
 Model declarations such as `tinkick searchable: [:name], highlight: [:name]` are
 accepted. Declared highlight fields are checked when the model is searched, with
@@ -1799,8 +1646,8 @@ provide a single-index path if its matching semantics fit the application.
 
 Explicit boosts, full scoring, custom SQL ranking, multiple fields, and offset
 pagination can cost more than the native single-field top-k shape. Log warnings
-identify implemented compatibility paths with known costs. Native fuzzy matching
-and adjacent-swap alternatives also add work; uncapped defaults avoid a separate
+identify native SQL paths with known costs. Native fuzzy matching
+also adds work; uncapped defaults avoid a separate
 candidate-enumeration pipeline but are not free. Disable misspellings when the
 product requires exact lexical matching.
 
@@ -1889,7 +1736,7 @@ direnv exec . bundle exec ruby -Itest test/rails_app_test.rb --fail-fast
 ```
 
 The HTTP tests exercise real stored values, rendered and JSON output, filters,
-bounded pages, injection-like search text, transpositions, and visibility after
+bounded pages, injection-like search text, native typo matching, and visibility after
 writes, plus countless navigation and cursor traversal. The development matrix
 uses Ruby 4.0.1, Rails 8.0.5.1 and 8.1.3.1, with JSON 2.21.2. Remote CI has not
 been run. See the tests and [development guide](docs/development.md) for current

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Keep matching and date bucketing native to TIN/PostgreSQL; remove custom Lucene
+  regex, fuzzy-distance, highlight-span, and Elasticsearch date-parser emulation.
+- Accept PostgreSQL string regex patterns directly and report unsupported backend
+  controls with explicit errors.
+
 - Add the Ruby 4 / Rails 8+ gem scaffold, development checks, and compatibility research.
 - Add a fixture-backed test harness against the dedicated PostgreSQL/TIN database.
 - Compile literal/phrase terms and scalar filters against actual model columns.

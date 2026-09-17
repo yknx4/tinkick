@@ -73,9 +73,9 @@ Source: [query.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a251016
 | Boolean filters | Equality, negation, arrays/`in`, `all`, ranges, `gt/gte/lt/lte`, `exists`, `_and`, `_or`, `_not`, and legacy `or` have real database coverage, including NULL/missing semantics. Nested JSON correlation and additional scalar types remain adapter work. |
 | String filters | `like`, `ilike`, prefix, and native PostgreSQL `~` filters are implemented. `regexp` accepts strings passed unchanged; use PostgreSQL syntax and embedded flags. Ruby Regexp inputs raise `Tinkick::NotImplementedError`; no source/flag adapter is provided. Lucene operators are not emulated: compose `_and`/`_or`/`_not` filters instead. Regex scans warn about cost; matching requires no optional extension. |
 | Matching | Whole-word, phrase, exact, word start/middle/end, text start/middle/end, mixed modes, and exclusions are implemented; token boundaries differ from whole-field boundaries. |
-| Misspellings | Native and SQL refinement paths cover distance, stable prefixes, per-field selection, below-count retry, and transpositions. Explicit expansion caps remain adapter work; native uncapped default eligibility is intentional. |
+| Misspellings | Native TIN Levenshtein distance and stable prefixes, per-field selection, and below-count retry. Native expansion is uncapped. Explicit Elasticsearch caps and `transpositions: true` raise `Tinkick::NotImplementedError` when fuzzy matching is used; phrase and exact modes ignore unused misspelling settings. No custom distance engine is installed. |
 | Ranking | Native field boosts and SQL field weights are tested; [captured plans](query-plans.md#native-and-sql-field-weights) show native top-k versus SQL grouping/sorting. Public numeric boosts over table columns, numeric arrays and JSONB numeric paths are tested, including modifiers and missing values. `boost_where`, recency, conversions and model boosts remain adapter work. |
-| Aggregations | Terms, numeric/date ranges and histograms, metrics, per-aggregation filters, limits/order, minimum counts, smart facets, and numeric/date bounds are implemented in SQL. All IANA calendar units include transition-aware subday keys and empty buckets. IANA fixed intervals, advanced formats and nested shapes remain adapter work. |
+| Aggregations | Terms, numeric/date ranges and histograms, metrics, per-aggregation filters, limits/order, minimum counts, smart facets, and numeric/date bounds are implemented in SQL. Date buckets use native PostgreSQL date_trunc/date_bin and generate_series with fixed offsets or IANA zones. Date math and Java date formats are Elasticsearch-specific and rejected; compute boundaries and labels in the application. Nested shapes remain adapter work. |
 | Analysis | `stem: false` uses native matching; requests for stemming or language analyzers raise `Tinkick::NotImplementedError` with migration guidance. Synonyms and emoji-name expansion remain adapter work; native absence does not prove an adapter implementation impossible. |
 | Beyond lexical search | Suggestions, similar items, geospatial, KNN, semantic/hybrid search and RRF need separate implementation designs. No absence claim follows from an unimplemented adapter. TIN's overview describes pgvector composition for hybrid retrieval. |
 
@@ -92,10 +92,10 @@ These classifications supersede a broad “gap” label for the families above.
 | Feature | Documented TIN foundation | Classification / remaining work |
 | --- | --- | --- |
 | Phrases | Adjacency, one-word gaps, position alternatives and tolerance. [Phrases](https://planetscale.com/docs/postgres/search/tinql#phrases) | Native support; translate requests and test analyzer/slop semantics. |
-| Fuzzy/prefix/infix/suffix matching | `term~P:N`, `*` and `?`. [TINQL](https://planetscale.com/docs/postgres/search/tinql) | Native support; explicit prefix/distance and token wildcards verified on TIN 1.0.2. Adjacent transpositions differ from Searchkick's default; expansion limits and faithful adapter translation remain open. Whole-field match modes need separate work. |
+| Fuzzy/prefix/infix/suffix matching | `term~P:N`, `*` and `?`. [TINQL](https://planetscale.com/docs/postgres/search/tinql) | Native whole-token fuzzy matching and nonfuzzy token wildcards are verified on TIN 1.0.2. Combining a wildcard with a fuzzy suffix does not retain wildcard semantics. Fuzzy partials, expansion caps, and single-edit transpositions are not emulated. Nonfuzzy whole-field modes use PostgreSQL `LIKE`. |
 | Cross-field relevance | Per-column predicates, combined scores and query boosts. [SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes) | Native support; one-column indexes do not prevent multi-field search. |
 | Numeric/recency/personalized boosts | SQL expressions can accompany ranked TIN queries. [SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes) | Adapter formulas and performance tests, not a proven missing capability. |
-| Full-field highlights/custom tags | `tin.highlight` with explicit tags and optional query. [Highlighting](https://planetscale.com/docs/postgres/search/highlighting) | Public default-analysis highlighting, custom tags, HTML encoding, page batches, snippets and result helpers are tested. Refined fuzzy modes verify eligible page tokens; SQL modes verify and mark the complete field. Custom case/accent and whitespace word/partial modes verify source spans with a cost warning. Custom phrases and token-length/grapheme policies use verified source spans, including oversized lexical boundaries mapped back from a compact reference. Default encoding preserves source HTML; returned strings are not marked HTML-safe. |
+| Full-field highlights/custom tags | `tin.highlight` with explicit tags and optional query. [Highlighting](https://planetscale.com/docs/postgres/search/highlighting) | Default-analysis native highlighting, tags, HTML encoding, page batches, snippets and result helpers are tested. SQL modes verify and mark the complete field. Non-default index tokenization raises `Tinkick::NotImplementedError`: native implicit highlighting rejects it, and explicit highlighting uses default analysis. No token-position reconstruction is performed. Default encoding preserves source HTML; returned strings are not marked HTML-safe. |
 | Case/accent controls | Configurable folding, token boundaries, gaps and emoji policy. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes) | Native support; map options and document migrations. |
 | Nested stored JSON text | Text-producing expression indexes. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes) | Native primitive; field-path validation and nested-object semantics need design. |
 | Filters/counts/aggregations | Boolean predicates combine with SQL and counts. [Operator](https://planetscale.com/docs/postgres/search/reference/operator) | Adapter SQL and smart-facet semantics. |
@@ -109,16 +109,16 @@ also documents full scoring, normalization, inspection and term-set overrides.
 These are translation tools; they do not prove identical Searchkick ranking.
 “Not tested” must remain distinct from “not supported.”
 
-The compiler supports default distance-one misspellings, including adjacent
-transpositions, and explicit native distance/prefix controls. Native fuzzy terms
-combine with exact swapped terms for distance-one transpositions. Scores remain
-native, without synthetic exact/fuzzy boosts. The user approved omitting the
-implicit Searchkick expansion cap: default TIN results may include additional
-valid typo matches. Exact-first below-threshold retry, per-field fuzzy selection, and two-edit word/partial
-transpositions are implemented; two-edit paths use optional SQL refinement with
-cost warnings. Explicit expansion limits and transpositions
-above two edits remain adapter work. Literal and distance-one fuzzy keycap emoji
-are covered by real TIN tests.
+The compiler uses native TIN distance-one misspellings by default, with native
+distance/prefix controls. Adjacent swaps consume two Levenshtein edits. Scores
+and expansion eligibility remain native: no generated swap alternatives,
+Lucene dictionary rewrite, or SQL edit-distance engine is provided. Exact-first
+below-threshold retry and per-field fuzzy selection remain available. Explicit
+expansion caps and `transpositions: true` raise `Tinkick::NotImplementedError`
+when fuzzy matching is used;
+`transpositions: false` selects the already-native behavior. Nonfuzzy partial
+matching has no Elasticsearch ngram-length ceiling. Literal and native fuzzy
+keycap emoji are covered by real TIN tests.
 
 For highlighting, Searchkick passes through the `encoder` option. The
 [Elasticsearch encoder contract](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/highlighting-settings)
@@ -155,7 +155,7 @@ and requested highlights. Cached `response` includes those hits, page timing,
 requested aggregations, and ordinary exact totals; countless/keyset responses omit
 unknown totals without counting. Public highlight helpers, HTML encoding,
 per-field options, and Unicode-safe snippets have integration coverage.
-Custom-analysis highlighting remains adapter work. Elasticsearch shard/transport
+Custom-analysis lexical highlighting raises `Tinkick::NotImplementedError` at the native TIN boundary. Elasticsearch shard/transport
 metadata and scroll IDs are excluded. Numeric scores differ across engines.
 
 ## Global APIs, lifecycle and integrations

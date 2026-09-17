@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.name = "tinkick"
   spec.version = Tinkick::VERSION
   spec.authors = ["yknx4"]
-  spec.summary = "Searchkick-compatible search for Rails using PlanetScale TIN."
+  spec.summary = "Searchkick-style search for Rails using PlanetScale TIN."
   spec.description = "A Ruby 4 and Rails 8+ search gem using PostgreSQL TIN, with Searchkick-style queries and a separate namespace for side-by-side migration. Alpha implementation."
   spec.homepage = "https://github.com/yknx4/tinkick"
   spec.license = "MIT"
