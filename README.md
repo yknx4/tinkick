@@ -285,10 +285,27 @@ Product.search("apple").order(:name).reorder(created_at: :desc)
 
 `order(_score: :desc)`, arbitrary SQL sort expressions, Elasticsearch missing-value
 rules, and nested sorts are not implemented. Leave `order` unset for relevance.
-`select`, `reselect`, `only`, `except`, and source-filtering options are not yet
-part of the compatible relation API. `map(&:name)` reads the loaded page; it is
-not a database projection. For a narrow SQL projection, use an explicitly
-constructed ActiveRecord query as shown under [advanced SQL](#advanced-sql-and-debugging).
+
+For raw results, `select` limits source columns in SQL and `reselect` replaces
+the selection:
+
+```ruby
+Product.search("apple", load: false, select: [:name, :price])
+Product.search("apple").load(false).select(:name).select(:price).reselect(:name)
+Product.search("apple", load: false, select: {includes: ["name", "meta*"], excludes: "metadata_private"})
+```
+
+Source filters support top-level column names and `*` patterns. The primary key
+remains available as result identity; extra keyset ordering columns stay hidden.
+PostgreSQL arrays and complete JSONB columns retain their Ruby values. Nested
+JSON source pruning remains adapter work. An empty list returns identity only;
+`select: nil`, `true`, or `false` keeps all raw fields, following Searchkick's
+request behavior. Normal model results retain complete attributes and association
+preloading. `select { |record| ... }` performs Enumerable selection on the page.
+
+`only` and `except` query-option operations remain adapter work. `map(&:name)`
+reads the loaded page; it is not a database projection. `load: false` still logs
+its migration warning.
 
 ## Results and metadata
 
@@ -1313,7 +1330,7 @@ The following reference maps less common upstream options to their current statu
 | `timeout`, `search_timeout`, `client_options` | Not implemented; configure database timeouts/pooling. |
 | `includes`, `model_includes` | Available; preload only visible model results. |
 | `scope_results` | Available; filters the ranked page with an extra query and warning. |
-| `select`, source filtering, `reselect` | Projection adapter remains implementation work. |
+| `select`, source filtering, `reselect` | Available for top-level raw source columns; model loading remains complete. |
 | `only`, `except` | Query-option selection/removal remains implementation work; these do not select model columns. |
 | `body`, `body_options`, query-mutating blocks | Excluded Elasticsearch DSL; use reviewed native SQL. |
 | `search_index`/`searchkick_index` inspection | Not implemented; use PostgreSQL catalogs and TIN helpers. |
