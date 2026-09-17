@@ -11,7 +11,7 @@ module Tinkick
     def compile(term, operator: "and", match: :word, misspellings: false)
       raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(operator)
       raise ArgumentError, "Unsupported match mode: #{match.inspect}" unless [:word, :phrase, :word_start, :word_middle, :word_end].include?(match)
-      settings = fuzzy_settings(misspellings)
+      settings = match == :phrase ? nil : fuzzy_settings(misspellings)
 
       return "*" if term == "*"
 
