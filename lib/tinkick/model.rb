@@ -27,7 +27,10 @@ module Tinkick
       @tinkick_options = { searchable: searchable, default_fields: default_fields, match: match,
                           word_start: word_start, word_middle: word_middle, word_end: word_end,
                           text_start: text_start, text_middle: text_middle, text_end: text_end }
-      singleton_class.alias_method(:search, :tinkick_search) unless respond_to?(:search, true)
+      method_name = Tinkick.search_method_name
+      if method_name && !respond_to?(method_name, true)
+        singleton_class.alias_method(method_name, :tinkick_search)
+      end
     end
 
     def tinkick_options
