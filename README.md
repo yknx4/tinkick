@@ -1218,6 +1218,9 @@ produce zero-count buckets. It logs a warning because broad dictionaries cost
 more. Array aggregation and exact `COUNT(DISTINCT)` cardinality also warn about
 workload-dependent cost. Aggregations group and sort in PostgreSQL; terms also
 apply their bucket limit there. They do not group Ruby model records.
+The [captured aggregation plans](docs/aggregation-options-plans.md) verify
+native filtering and missing-value results on a varied Faker Tolkien corpus
+and show the array expansion, grouping, and sorting work.
 
 Use `include` and `exclude` to filter bucket values without changing matching
 records. Exact arrays use bound SQL comparisons; exclusion takes precedence.
