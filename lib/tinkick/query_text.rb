@@ -11,7 +11,7 @@ module Tinkick
     def compile(term, operator: "and", match: :word, misspellings: false)
       raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(operator)
       raise ArgumentError, "Unsupported match mode: #{match.inspect}" unless [:word, :phrase].include?(match)
-      raise ArgumentError, "Misspellings are not implemented yet" unless misspellings == false
+      settings = fuzzy_settings(misspellings)
 
       return "*" if term == "*"
 
@@ -19,7 +19,19 @@ module Tinkick
       return "" if words.empty?
       return quote(term) if match == :phrase
 
-      words.map { |word| literal(word) }.join(" #{operator.upcase} ")
+      separator = " #{operator.upcase} "
+      exact = words.map { |word| literal(word) }.join(separator)
+      return exact unless settings
+
+      distance, prefix = settings
+      return exact if distance.zero?
+
+      if words.any? { |word| ["*", "#"].include?(word) }
+        raise ArgumentError, "Fuzzy keycap matching is not supported yet; use misspellings: false"
+      end
+
+      fuzzy = words.map { |word| "#{word}~#{prefix}:#{distance}" }.join(separator)
+      "((#{exact})^10 OR (#{fuzzy})^1)"
     end
 
     private
@@ -46,6 +58,25 @@ module Tinkick
       return "MATCHES #{Regexp.escape(word)}" if ["*", "#"].include?(word)
 
       quote(word)
+    end
+
+    def fuzzy_settings(options)
+      return if options == false
+
+      unless options.is_a?(Hash) && options[:transpositions] == false
+        raise ArgumentError, "Searchkick transpositions are not supported yet; specify misspellings: { transpositions: false } for native TIN edits"
+      end
+
+      unknown = options.keys - [:transpositions, :edit_distance, :distance, :prefix_length]
+      raise ArgumentError, "Unsupported misspellings options: #{unknown.join(', ')}" unless unknown.empty?
+
+      distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
+      prefix = options.fetch(:prefix_length, 0)
+      unless distance.is_a?(Integer) && distance >= 0 && prefix.is_a?(Integer) && prefix >= 0
+        raise ArgumentError, "Misspellings distance and prefix_length must be nonnegative integers"
+      end
+
+      [distance, prefix]
     end
   end
 end

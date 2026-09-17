@@ -1,10 +1,12 @@
 module Tinkick
   class QueryText
+    type misspellings = bool | { ?transpositions: bool, ?edit_distance: Integer, ?distance: Integer, ?prefix_length: Integer }
+
     @connection: ActiveRecord::ConnectionAdapters::AbstractAdapter
 
     def initialize: (ActiveRecord::ConnectionAdapters::AbstractAdapter connection) -> void
 
-    def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: bool) -> String
+    def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: misspellings) -> String
 
     private
 
@@ -13,5 +15,7 @@ module Tinkick
     def quote: (String term) -> String
 
     def literal: (String word) -> String
+
+    def fuzzy_settings: (misspellings options) -> [ Integer, Integer ]?
   end
 end
