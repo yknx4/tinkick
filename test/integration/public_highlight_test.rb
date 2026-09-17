@@ -98,6 +98,22 @@ class PublicHighlightTest < TinkickIntegrationTest
     assert_equal({ existing: "from the other search backend" }, record.search_highlights)
   end
 
+  def test_json_inputs_stay_hidden_while_per_field_snippets_override_global_options
+    title = "Rivendell beside the river #{'distant roads and hills ' * 8}Rivendell under the moon"
+    tinkick_test_products(:red_apple).update!(metadata: { title: title, private_note: "do not include" })
+    search = Tinkick.search("rivendell", model: Product, fields: ["metadata.title"],
+      misspellings: false, load: false, select: [:name],
+      highlight: { fragment_size: 0, fields: { "metadata.title" => { fragment_size: 25, number_of_fragments: 2 } } })
+
+    fragments = search.highlights(multiple: true).first.fetch(:"metadata.title")
+    assert_equal 2, fragments.length
+    assert fragments.all? { |fragment| fragment.include?("<em>Rivendell</em>") }
+    assert fragments.all? { |fragment| fragment.length < title.length }
+    assert_equal ["name"], search.hits.first.fetch("_source").keys
+    assert_nil search.to_a.first["metadata"]
+    assert_equal fragments.first, search.to_a.first["highlighted_metadata.title"]
+  end
+
   private
 
   def capture_queries
