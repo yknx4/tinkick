@@ -4,6 +4,10 @@ require_relative "../../lib/tinkick/relation"
 require_relative "../integration_helper"
 
 class RelationTest < TinkickIntegrationTest
+  class RawProjectionProduct < SearchProduct
+    after_find { raise "raw projection must not instantiate a model" }
+  end
+
   def test_construction_and_respond_to_are_lazy
     statements = []
     callback = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
@@ -191,7 +195,71 @@ class RelationTest < TinkickIntegrationTest
     assert_equal([1.0, 1.0], search.with_score.map { |_record, score| score })
   end
 
+  def test_pluck_returns_scalar_and_tuple_shapes_from_the_bounded_page
+    search = relation.order(:name).limit(1)
+    expected_id = tinkick_test_products(:green_pear).id
+
+    assert_equal(["Green Pear"], search.pluck(:name))
+    assert(search.loaded?)
+    statements = capture_queries do
+      assert_equal([[expected_id, "Green Pear"]], search.pluck("id", :name))
+    end
+    assert_empty(statements)
+    assert_equal(["Red Apple"], relation.order(:name).limit(1).page(2).pluck(:name))
+  end
+
+  def test_unloaded_raw_pluck_projects_columns_without_loading_the_original
+    search = Tinkick::Relation.new(RawProjectionProduct, "*", fields: [:name], misspellings: false,
+      load: false, order: :name, limit: 1)
+    statements = capture_queries do
+      assert_equal(["Green Pear"], search.pluck(:name))
+    end
+
+    refute(search.loaded?)
+    sql = statements.find { |statement| statement.include?("AS _tinkick_score") }
+    assert_includes(sql.split(" FROM ").first, '"name"')
+    refute_includes(sql.split(" FROM ").first, ".*")
+    assert_equal([[tinkick_test_products(:green_pear).id, "Green Pear"]], search.pluck(:id, "name"))
+  end
+
+  def test_raw_pluck_preserves_search_filters_pagination_and_probe_limits
+    product = tinkick_test_products(:red_apple)
+    search = relation("fruit", fields: [:description], load: false, order: :name, page: 2, per_page: 1)
+
+    assert_equal(["Red Apple"], search.pluck(:name))
+    assert_equal([product.id], relation("apple", load: false, where: { id: product.id }).pluck(:id))
+    assert_equal(["Green Pear"], relation(load: false, countless: true, order: :name, limit: 1).pluck(:name))
+    assert_empty(relation("unfindablezzzz", load: false).pluck(:name))
+    assert_raises(Tinkick::MissingFieldError) { relation(load: false).pluck("name; SELECT 1") }
+  end
+
+  def test_loaded_raw_pluck_reuses_the_existing_page
+    search = relation(load: false).order(:name).limit(1).load
+
+    assert_empty(capture_queries { assert_equal(["Green Pear"], search.pluck(:name)) })
+    assert(search.loaded?)
+  end
+
+  def test_raw_pluck_warns_about_migrating_to_model_results
+    original_logger = SearchProduct.logger
+    output = StringIO.new
+    SearchProduct.logger = Logger.new(output)
+
+    relation(load: false).pluck(:name)
+    assert_includes(output.string, "Migrate to model results")
+    assert_includes(output.string, "both modes query PostgreSQL through Active Record")
+  ensure
+    SearchProduct.logger = original_logger
+  end
+
   private
+
+  def capture_queries
+    statements = []
+    callback = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    statements
+  end
 
   def relation(term = "*", **options)
     Tinkick::Relation.new(SearchProduct, term, fields: [:name], misspellings: false, **options)

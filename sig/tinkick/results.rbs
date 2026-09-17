@@ -49,6 +49,7 @@ module Tinkick
     def out_of_range?: () -> bool
     def with_score: () -> Enumerator[[ result_record, Float ], Array[[ result_record, Float ]]]
                   | () { (result_record, Float) -> void } -> Array[[ result_record, Float ]]
+    def pluck: (*String | Symbol keys) -> Array[result_value]
 
     private
 

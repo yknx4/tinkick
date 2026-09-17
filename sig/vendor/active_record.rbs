@@ -1,5 +1,10 @@
 # Rails 8 interfaces missing from the collection's generated signatures.
 module ActiveRecord
+  class Base
+    def []: (String attribute_name) -> Tinkick::result_value
+          | ...
+  end
+
   module ModelSchema
     module ClassMethods
       # Ruby 4 / Rails 8 permits a type lookup without a fallback block.

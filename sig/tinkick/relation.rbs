@@ -68,6 +68,7 @@ module Tinkick
     def total_entries!: (Integer? value) -> Relation
     def first: () -> result_record?
              | (Integer limit) -> Array[result_record]
+    def pluck: (*String | Symbol keys) -> Array[result_value]
 
     def each: () -> Enumerator[result_record, Array[result_record]]
             | () { (result_record) -> void } -> Array[result_record]

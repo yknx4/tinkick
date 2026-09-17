@@ -39,6 +39,15 @@ module Tinkick
       @rows ||= trim_page(@model.with_connection { |connection| connection.select_all(record_scope).to_a })
     end
 
+    def pluck_rows(columns)
+      fields = columns.map { |field| field.to_s }
+      projection = fields.map { |field| Arel.sql(quoted_column(field)) }
+      relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
+      values = @model.with_connection { |connection| connection.select_all(relation).to_a }
+      values = values.first(@limit) if countless?
+      values.map { |row| row.slice(*fields) }
+    end
+
     def countless?
       @countless
     end
@@ -103,15 +112,7 @@ module Tinkick
       primary_key = @model.primary_key
       raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
 
-      # Native scoring permits dense-term elision and the index's top-k path.
-      score = if @compiled_query == "*" || @compiled_query == ""
-        "1.0"
-      elsif @fields.length > 1
-        # Native dense-term elision can lose matches in TIN's multi-index plan.
-        "tin.full_score(#{quoted_table}.ctid)"
-      else
-        "tin.score(#{quoted_table}.ctid)"
-      end
+      score = score_sql
       if @offset.positive? && score != "1.0"
         @model.logger&.warn("Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Consider keyset pagination on stable indexed columns to avoid large offsets. Countless pagination avoids automatic counts but does not remove offset costs.")
       end
@@ -148,6 +149,18 @@ module Tinkick
         end
       else
         ["#{quoted_column(value.to_s)} ASC"]
+      end
+    end
+
+    def score_sql
+      # Native scoring permits dense-term elision and the index's top-k path.
+      if @compiled_query == "*" || @compiled_query == ""
+        "1.0"
+      elsif @fields.length > 1
+        # Native dense-term elision can lose matches in TIN's multi-index plan.
+        "tin.full_score(#{quoted_table}.ctid)"
+      else
+        "tin.score(#{quoted_table}.ctid)"
       end
     end
 

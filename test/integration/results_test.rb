@@ -162,6 +162,23 @@ class ResultsTest < TinkickIntegrationTest
     assert_equal 1, search.total_count
   end
 
+  test "pluck returns one field or tuples and reuses the page" do
+    search = results(limit: 1)
+    expected_id = tinkick_test_products(:green_pear).id
+
+    assert_equal ["Green Pear"], search.pluck(:name)
+    assert_empty(capture_queries do
+      assert_equal [[expected_id, "Green Pear"]], search.pluck("id", :name)
+    end)
+    assert_empty results(term: "unfindablezzzz").pluck(:name)
+  end
+
+  test "pluck from raw results preserves nil fields" do
+    tinkick_test_products(:green_pear).update!(description: nil)
+
+    assert_equal [["Green Pear", nil]], results(load: false, limit: 1).pluck(:name, :description)
+  end
+
   private
 
   def results(model: SearchProduct, term: "*", limit: 10, page: 1, padding: 0, total_entries: nil, load: true, order: :name)

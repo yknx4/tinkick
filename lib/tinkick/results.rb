@@ -97,6 +97,15 @@ module Tinkick
       record_pairs.each { |record, score| yield record, score }
     end
 
+    def pluck(*keys)
+      if keys.length > 1
+        results.map { |record| keys.map { |key| record[key.to_s] } }
+      else
+        key = keys.first.to_s
+        results.map { |record| record[key] }
+      end
+    end
+
     private
 
     def results

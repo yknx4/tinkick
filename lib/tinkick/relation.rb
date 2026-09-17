@@ -257,6 +257,19 @@ module Tinkick
       single ? records.first : records.first(requested)
     end
 
+    def pluck(*keys)
+      return execute.pluck(*keys) if loaded? || @options[:load] != false
+
+      @model.logger&.warn("Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
+      rows = query.pluck_rows(keys)
+      if keys.length > 1
+        rows.map { |row| keys.map { |key| row[key.to_s] } }
+      else
+        key = keys.first.to_s
+        rows.map { |row| row[key] }
+      end
+    end
+
     private
 
     def initialize_copy(other)

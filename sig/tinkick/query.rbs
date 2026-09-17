@@ -32,6 +32,8 @@ module Tinkick
 
     def rows: () -> Array[Hash[String, result_value]]
 
+    def pluck_rows: (Array[String | Symbol] columns) -> Array[Hash[String, result_value]]
+
     def total_count: () -> Integer
     def countless?: () -> bool
     def keyset?: () -> bool
@@ -48,6 +50,8 @@ module Tinkick
     def record_scope: () -> ActiveRecord::Relation
 
     def order_clauses: (query_order value) -> Array[String]
+
+    def score_sql: () -> String
 
     def validate_column: (String field) -> void
 
