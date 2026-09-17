@@ -82,14 +82,23 @@ module Tinkick
     private
 
     def date_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :calendar_interval, :min_doc_count, :order, :keyed]
+      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed]
       raise ArgumentError, "Unknown date histogram options: #{unknown.join(", ")}" unless unknown.empty?
+      unless [:calendar_interval, :fixed_interval].count { |kind| options.key?(kind) } == 1
+        raise ArgumentError, "Date histogram requires exactly one calendar_interval or fixed_interval"
+      end
 
-      interval = options[:calendar_interval].to_s
-      aliases = { "1s" => "second", "1m" => "minute", "1h" => "hour", "1d" => "day", "1w" => "week", "1M" => "month", "1q" => "quarter", "1y" => "year", "months" => "month", "years" => "year" }
-      unit = aliases.fetch(interval, interval)
-      unless ["second", "minute", "hour", "day", "week", "month", "quarter", "year"].include?(unit)
-        raise ArgumentError, "calendar_interval must be one second, minute, hour, day, week, month, quarter, or year"
+      unit = nil
+      if options.key?(:fixed_interval)
+        step = "#{fixed_interval_milliseconds(options.fetch(:fixed_interval))} milliseconds"
+      else
+        interval = options[:calendar_interval].to_s
+        aliases = { "1s" => "second", "1m" => "minute", "1h" => "hour", "1d" => "day", "1w" => "week", "1M" => "month", "1q" => "quarter", "1y" => "year", "months" => "month", "years" => "year" }
+        unit = aliases.fetch(interval, interval)
+        unless ["second", "minute", "hour", "day", "week", "month", "quarter", "year"].include?(unit)
+          raise ArgumentError, "calendar_interval must be one second, minute, hour, day, week, month, quarter, or year"
+        end
+        step = unit == "quarter" ? "3 months" : "1 #{unit}"
       end
       minimum = options.fetch(:min_doc_count, 0)
       raise ArgumentError, "Date histogram min_doc_count must be a nonnegative integer" unless minimum.is_a?(Integer) && minimum >= 0
@@ -102,15 +111,19 @@ module Tinkick
         raise InvalidQueryError, "date_histogram requires a date or datetime aggregation column"
       end
       value = column.sql_type.include?("with time zone") ? "_tinkick_value AT TIME ZONE 'UTC'" : "_tinkick_value::timestamp"
+      rounding = if unit
+        Arel.sql("date_trunc(?, #{value}) AS _tinkick_date, _tinkick_document_id", unit)
+      else
+        Arel.sql("date_bin(?::interval, #{value}, TIMESTAMP '1970-01-01') AS _tinkick_date, _tinkick_document_id", step)
+      end
       dates = @model.unscoped.from(values, :tinkick_values)
         .where(Arel.sql("_tinkick_value IS NOT NULL"))
-        .select(Arel.sql("date_trunc(?, #{value}) AS _tinkick_date, _tinkick_document_id", unit))
+        .select(rounding)
       counts = @model.unscoped.from(dates, :tinkick_dates)
         .group(Arel.sql("_tinkick_date"))
         .select(Arel.sql("_tinkick_date, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count"))
       query = if minimum.zero?
         @model.logger&.warn("Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the matching date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
-        step = unit == "quarter" ? "3 months" : "1 #{unit}"
         bounds = @model.unscoped.from("tinkick_date_counts")
           .select(Arel.sql("MIN(_tinkick_date) AS lower, MAX(_tinkick_date) AS upper, ?::interval AS step", step))
         @model.unscoped.with(tinkick_date_counts: counts)
@@ -135,6 +148,28 @@ module Tinkick
       result = { "buckets" => options[:keyed] ? buckets.to_h { |bucket| [bucket.fetch("key_as_string"), bucket] } : buckets }
       result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
       result
+    end
+
+    def fixed_interval_milliseconds(value)
+      text = value.to_s
+      match = /\A(\+?[0-9]+)\s*(nanos|micros|ms|s|m|h|d)\z/.match(text.strip.downcase)
+      unless match && (match[2] != "m" || text.end_with?("m"))
+        raise ArgumentError, "fixed_interval must use an integer quantity and ms, s, m, h, d, micros, or nanos"
+      end
+
+      quantity = match[1].to_s.to_i
+      unless quantity.positive? && quantity <= (2**63 - 1)
+        raise ArgumentError, "fixed_interval quantity must be a positive 64-bit integer"
+      end
+      unit = match[2].to_s
+      milliseconds = case unit
+      when "nanos" then quantity / 1_000_000
+      when "micros" then quantity / 1_000
+      else quantity * { "ms" => 1, "s" => 1_000, "m" => 60_000, "h" => 3_600_000, "d" => 86_400_000 }.fetch(unit)
+      end
+      raise ArgumentError, "fixed_interval must be at least one millisecond" unless milliseconds.positive?
+
+      milliseconds
     end
 
     def numeric_histogram(field, options, conditions)

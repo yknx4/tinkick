@@ -94,6 +94,41 @@ class DateHistogramsTest < TinkickIntegrationTest
     assert_raises(ArgumentError) { Tinkick::Aggregations.new(DateHistogramValue, @scope).call(events: { date_histogram: { field: :recorded_at, calendar_interval: :month }, ranges: [{}] }) }
   end
 
+  def test_fixed_subsecond_intervals_floor_pre_epoch_boundaries_and_fill_gaps
+    [-250_001, -250_000, -1, 0, 249_999, 250_000, 1_000_000].each_with_index do |microseconds, index|
+      instant = Time.at(Rational(microseconds, 1_000_000)).utc
+      DateHistogramValue.create!(name: 'Fixed boundary', code: format('00000000-0000-0000-0000-%012d', 100 + index),
+        recorded_on: instant.to_date, recorded_at: instant, price: index)
+    end
+    search = Tinkick::Relation.new(DateHistogramValue, 'fixed', fields: [:name], misspellings: false,
+      aggs: { events: { date_histogram: { field: :recorded_at, fixed_interval: '250ms' } } })
+    buckets = search.aggs.fetch('events').fetch('buckets')
+
+    assert_equal [-500, -250, 0, 250, 500, 750, 1_000], buckets.map { |bucket| bucket.fetch('key') }
+    assert_equal [1, 2, 2, 1, 0, 0, 1], buckets.map { |bucket| bucket.fetch('doc_count') }
+    assert_equal '1969-12-31T23:59:59.500Z', buckets.first.fetch('key_as_string')
+    assert_equal '1970-01-01T00:00:00.250Z', buckets.fetch(3).fetch('key_as_string')
+  end
+
+  def test_fixed_intervals_accept_multiple_units_and_truncate_microsecond_durations
+    scope = @scope.where(recorded_on: Date.new(2024, 2, 29))
+    { '90m' => Time.utc(2024, 2, 29, 22, 30), '2h' => Time.utc(2024, 2, 29, 22), '2d' => Time.utc(2024, 2, 29), '30s' => Time.utc(2024, 2, 29, 23, 59, 30) }.each do |interval, instant|
+      assert_equal instant.to_i * 1_000, histogram(scope: scope, fixed_interval: interval).fetch('buckets').first.fetch('key')
+    end
+    baseline = histogram(scope: scope, fixed_interval: '1ms', min_doc_count: 1)
+    ['1500micros', '1999999nanos', '1MS', '+1ms', ' 1 ms '].each do |interval|
+      assert_equal baseline, histogram(scope: scope, fixed_interval: interval, min_doc_count: 1)
+    end
+  end
+
+  def test_fixed_intervals_validate_integer_quantities_units_and_exclusive_configuration
+    [nil, 1_000, '', '1.5h', '0ms', '-1s', '1M', '1w', '999micros', '999999nanos', '1ms); SELECT 1', '9223372036854775808ms'].each do |interval|
+      assert_raises(ArgumentError) { histogram(fixed_interval: interval) }
+    end
+    error = assert_raises(ArgumentError) { histogram(calendar_interval: :day, fixed_interval: '24h') }
+    assert_includes error.message, 'exactly one'
+  end
+
   private
 
   def histogram(scope: @scope, **options)
