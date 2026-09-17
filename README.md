@@ -980,7 +980,16 @@ over wide date ranges. A custom `format`, such as `"yyyy/MM/dd"` or
 `"epoch_millis"`, controls `key_as_string` and keyed bucket names while numeric
 `key` remains UTC milliseconds. It uses the same supported patterns as date
 ranges, including format alternatives; the first format prints the label.
-Bucket `offset`, bounds, advanced formats, nested aggregations, and additional aggregate options remain adapter
+
+Use `offset: "+6h"` inside `date_histogram:` to shift bucket boundaries. Signed
+fixed durations or numeric milliseconds are accepted; numeric fractions truncate
+toward zero. Rounding subtracts this elapsed offset before applying the time zone
+and adds it back to the UTC boundary afterward. Consequently, `+6h` daily buckets
+in New York can start at 07:00 on the spring transition day. This is elapsed-time
+offset behavior, not a promise of the same local wall-clock boundary every day.
+Large offsets also retain calendar-month spacing across February.
+
+Bounds, advanced formats, nested aggregations, and additional aggregate options remain adapter
 implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
 for scripted calculations. Check representative plans against TIN's
