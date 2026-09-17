@@ -7,14 +7,16 @@ module Tinkick
     def initialize: (singleton(ActiveRecord::Base) model) -> void
     def predicate: (String field_name, String term, misspellings: QueryText::misspellings, ?operator: String, ?match: Symbol, ?excluded: String?, ?boost: Float?) -> filter_predicate
     def highlight_query: (String field_name, String term, texts: Array[String?], match: Symbol, misspellings: QueryText::misspellings) -> String
+    def highlight_tokens: (String field_name, String term, texts: Array[String?], match: Symbol, misspellings: QueryText::misspellings) -> Array[String]
     def index_analysis: (String field_name, SearchField field) -> Hash[String, String]
 
     private
 
     def tokenizer_options: (ActiveRecord::ConnectionAdapters::AbstractAdapter connection, Hash[String, String] analysis) -> String
     def distance_function: (ActiveRecord::ConnectionAdapters::AbstractAdapter connection, Symbol match, Integer distance, bool transpositions) -> String
+    def highlight_settings: (QueryText::misspellings options, Symbol match) -> [ Integer, Integer, bool ]
 
-    def settings: (QueryText::misspellings options, Symbol match) -> [ Integer, Integer, bool ]
+    def settings: (QueryText::misspellings options, Symbol match, ?allow_zero: bool) -> [ Integer, Integer, bool ]
     def candidate: (String word, Integer prefix, Symbol match, Integer distance, bool transpositions) -> String
     def partial_lengths: (String word, Integer prefix) -> [ Integer, Integer ]
     def refinement: (String column_sql, String options, String word, Integer prefix, Symbol match, String function, Integer distance, bool transpositions) -> String

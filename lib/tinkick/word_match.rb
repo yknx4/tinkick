@@ -61,23 +61,28 @@ module Tinkick
     end
 
     def highlight_query(field_name, term, texts:, match:, misspellings:)
-      return "" if texts.all?(&:nil?)
+      highlight_tokens(field_name, term, texts: texts, match: match, misspellings: misspellings)
+        .map { |token| "(MATCHES #{Regexp.escape(token)})" }.join(" OR ")
+    end
+
+    def highlight_tokens(field_name, term, texts:, match:, misspellings:)
+      return [] if texts.all?(&:nil?)
 
       unless [:word, :word_start, :word_middle, :word_end].include?(match)
         raise ArgumentError, "Unsupported token match mode: #{match.inspect}"
       end
-      distance, prefix, transpositions = settings(misspellings, match)
+      distance, prefix, transpositions = highlight_settings(misspellings, match)
       field = SearchField.new(@model, field_name)
       analysis = index_analysis(field_name, field)
       @model.with_connection do |connection|
         options = tokenizer_options(connection, analysis)
-        function = distance_function(connection, match, distance, transpositions)
+        function = distance_function(connection, match, distance, transpositions) unless distance.zero?
         fixed = "LEAST(#{prefix}, char_length(tinkick_query_tokens.value))"
         value = "tinkick_page_tokens.value"
         joins = ""
         if match != :word
-          minimum = "GREATEST(1, char_length(tinkick_query_tokens.value) - 2, #{fixed})"
-          maximum = "LEAST(50, char_length(tinkick_query_tokens.value) + 2, char_length(tinkick_page_tokens.value))"
+          minimum = "GREATEST(1, char_length(tinkick_query_tokens.value) - #{distance}, #{fixed})"
+          maximum = "LEAST(50, char_length(tinkick_query_tokens.value) + #{distance}, char_length(tinkick_page_tokens.value))"
           joins = "CROSS JOIN LATERAL generate_series(#{minimum}, #{maximum}) AS tinkick_lengths(length)"
           if match == :word_middle
             joins += " CROSS JOIN LATERAL generate_series(1, char_length(tinkick_page_tokens.value) - tinkick_lengths.length + 1) AS tinkick_offsets(position)"
@@ -91,10 +96,15 @@ module Tinkick
         end
         arguments = "substring(#{value} FROM #{fixed} + 1), substring(tinkick_query_tokens.value FROM #{fixed} + 1), #{distance}"
         arguments += ", #{transpositions}" if function == "tinkick.edit_distance"
+        comparison = if distance.zero?
+          "#{value} COLLATE \"C\" = tinkick_query_tokens.value COLLATE \"C\""
+        else
+          "#{function}(#{arguments}) <= #{distance}"
+        end
         binds = [term, JSON.generate(texts)].map do |text|
           ActiveRecord::Relation::QueryAttribute.new("highlight", text, ActiveRecord::Type::String.new)
         end
-        @model.logger&.warn("Tinkick: refined highlighting tokenizes returned page text and applies SQL edit distance. This adds one eligibility query before highlighting; long fields and word_middle matching can be expensive.")
+        @model.logger&.warn("Tinkick: refined highlighting tokenizes returned page text and checks token or gram eligibility in SQL. This adds one eligibility query before highlighting; fuzzy matching, long fields and word_middle can be expensive.")
         tokens = connection.select_values(<<~SQL, "Tinkick Refined Highlight", binds)
           WITH tinkick_query_tokens AS MATERIALIZED (
             SELECT tin.tokenize($1#{options}) AS value
@@ -109,9 +119,9 @@ module Tinkick
           FROM tinkick_page_tokens CROSS JOIN tinkick_query_tokens
           #{joins}
           WHERE left(#{value}, #{fixed}) COLLATE "C" = left(tinkick_query_tokens.value, #{fixed}) COLLATE "C"
-            AND #{function}(#{arguments}) <= #{distance}
+            AND #{comparison}
         SQL
-        tokens.map(&:to_s).sort.map { |token| "(MATCHES #{Regexp.escape(token)})" }.join(" OR ")
+        tokens.map(&:to_s).sort
       end
     end
 
@@ -135,7 +145,17 @@ module Tinkick
       end
     end
 
-    def settings(options, match)
+    def highlight_settings(options, match)
+      return [0, 0, false] if options == false
+
+      distance, prefix, transpositions = settings(options, :word, allow_zero: true)
+      if match != :word && distance > 2
+        raise ArgumentError, "Partial token highlighting supports edit_distance: 0, 1 or 2"
+      end
+      [distance, prefix, transpositions]
+    end
+
+    def settings(options, match, allow_zero: false)
       options = { transpositions: true } if options == true
       unless options.is_a?(Hash)
         raise ArgumentError, "Token refinement requires true or a misspellings options hash"
@@ -144,7 +164,7 @@ module Tinkick
       raise ArgumentError, "Unsupported misspellings options: #{unknown.join(', ')}" unless unknown.empty?
       distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
       transpositions = options.fetch(:transpositions, true)
-      unless distance.is_a?(Integer) && distance.positive? && (match == :word || distance == 2)
+      unless distance.is_a?(Integer) && (distance.positive? || (allow_zero && distance.zero?)) && (match == :word || distance == 2)
         raise ArgumentError, "Token refinement requires a positive edit_distance, or edit_distance: 2 for partial matching"
       end
       unless transpositions == true || transpositions == false
