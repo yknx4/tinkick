@@ -261,6 +261,25 @@ The [collector](../script/explain_field_weights.rb) checks `tinkick_test` and th
 268-row corpus, captures actual query binds and version metadata, and performs
 no writes or migrations. Run it before the stress test replaces the corpus.
 
+## Native highlighting
+
+The [native highlight capture](benchmarks/2026-09-17-highlight-plans.json) uses
+20 supplied page fields totaling 8,840 characters on PostgreSQL 18.6 / TIN 1.0.2.
+Native fuzzy marking took 0.776 ms; the native SQL substring check used for
+whole-field highlighting took 0.279 ms. Both plans return 20 rows from bound page
+text and `pg_extension`; they do not scan model tables or reconstruct token
+positions. The collector verifies that native fuzzy marking finds both supplied
+spellings, `Aragorn` and `Argaorn`, in every field.
+
+These are single warm database executions, excluding query compilation, record
+retrieval, network time, and Ruby snippet rendering. They are not application
+latency or throughput measurements. Larger pages and fields require fresh
+measurement. Reproduce the read-only capture after preparing the test database:
+
+```sh
+direnv exec . bundle exec ruby script/explain_highlights.rb
+```
+
 ## Reproduce
 
 Load the designated test fixtures through their normal tests, then run the

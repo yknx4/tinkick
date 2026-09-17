@@ -4,7 +4,7 @@ require "active_record"
 require "json"
 require_relative "../lib/tinkick"
 
-# Read-only: the integration tests own the table, indexes, and optional helpers.
+# Read-only: the integration tests own the table and indexes.
 ActiveRecord::Base.establish_connection(adapter: "postgresql", database: "tinkick_test")
 
 class HighlightPlanProduct < ActiveRecord::Base
@@ -21,15 +21,18 @@ HighlightPlanProduct.with_connection do |connection|
   statements = []
   listener = lambda do |*arguments|
     event = arguments.last
-    if ["Tinkick Refined Highlight", "Tinkick Highlight", "Tinkick Text Highlight"].include?(event[:name])
+    if ["Tinkick Highlight", "Tinkick Text Highlight"].include?(event[:name])
       statements << event.slice(:name, :sql, :binds)
     end
   end
   ActiveSupport::Notifications.subscribed(listener, "sql.active_record") do
-    query = Tinkick::WordMatch.new(HighlightPlanProduct).highlight_query("name", "argaorn", texts: texts,
-      match: :word, misspellings: { edit_distance: 2 })
-    Tinkick::Highlighter.new(connection).fragments_many(texts, query, fragment_size: 80)
-    Tinkick::TextMatch.new(HighlightPlanProduct).highlight_matches(texts, "argaorn", match: :text_middle, misspellings: false)
+    query = Tinkick::QueryText.new(connection).compile("argaorn", misspellings: { edit_distance: 2 })
+    highlighted = Tinkick::Highlighter.new(connection).fragments_many(texts, query, fragment_size: 80)
+    unless highlighted.length == texts.length && highlighted.all? { |fragments| ["<em>Aragorn</em>", "<em>Argaorn</em>"].all? { |match| fragments.join.include?(match) } }
+      raise "Expected native fuzzy highlights for both supplied spellings in every page row"
+    end
+    matching = Tinkick::TextMatch.new(HighlightPlanProduct).highlight_matches(texts, "argaorn", match: :text_middle, misspellings: false)
+    raise "Expected each supplied page field to match the native SQL substring" unless matching == texts
   end
   plans = statements.map do |event|
     raw = connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{event.fetch(:sql)}", "Tinkick Highlight Plan", event.fetch(:binds))
