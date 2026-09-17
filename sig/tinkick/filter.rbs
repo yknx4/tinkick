@@ -25,11 +25,11 @@ module Tinkick
 
     def json_equality: (String column, Array[String] path, filter_value value) -> filter_predicate
 
-    def json_match: (String column, Array[String] path, String condition) -> filter_predicate
+    def json_match: (String column, Array[String] path, String condition, ?descendants: bool) -> filter_predicate
 
     def json_text_predicate: (String column, Array[String] path, :like | :ilike | :prefix | :regexp operator, filter_value value) -> filter_predicate
 
-    def json_values: (String column, Array[String] path) -> filter_predicate
+    def json_values: (String column, Array[String] path, ?descendants: bool) -> filter_predicate
 
     def warn_json_scan: (String column) -> void
 

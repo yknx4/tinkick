@@ -140,7 +140,7 @@ module Tinkick
         combine(value.map { |entry| json_equality(column, path, entry) }, "OR")
       elsif value.nil?
         warn_json_scan(column)
-        negate(json_match(column, path, '@.type() != "null" && @.type() != "array" && @.type() != "object"'))
+        negate(json_match(column, path, '@.type() != "null" && @.type() != "array" && @.type() != "object"', descendants: true))
       else
         condition = "@ == #{JSON.generate(scalar(value))}"
         # @type var candidate: filter_predicate
@@ -149,8 +149,8 @@ module Tinkick
       end
     end
 
-    def json_match(column, path, condition)
-      values, binds = json_values(column, path)
+    def json_match(column, path, condition, descendants: false)
+      values, binds = json_values(column, path, descendants: descendants)
       ["EXISTS (SELECT 1 FROM (#{values}) AS tinkick_filter_element(value) WHERE value @@ ?::jsonpath)",
         [*binds, "strict exists($ ? (#{condition}))"]]
     end
@@ -162,24 +162,27 @@ module Tinkick
       ["EXISTS (SELECT 1 FROM (#{values}) AS tinkick_filter_element(value) WHERE jsonb_typeof(tinkick_filter_element.value) = 'string' AND #{sql})", [*path_binds, *binds]]
     end
 
-    def json_values(column, path)
+    def json_values(column, path, descendants: false)
       @model.logger&.warn("Tinkick: JSONB filters verify recursive array paths per candidate row. A jsonb_ops GIN index can narrow equality candidates; jsonb_path_ops cannot index recursive descent. Consider indexed persisted or generated scalar columns for frequent filters.")
       keys = path.map { "?" }.join(", ")
+      object_values = "WHEN jsonb_typeof(parent.value) = 'object' THEN jsonb_path_query_array(parent.value, '$.*')" if descendants
       # Arrays retain their path depth; only the requested object key advances it.
       sql = <<~SQL.squish
         WITH RECURSIVE tinkick_filter_json(value, depth) AS (
           SELECT #{column}, 0
           UNION ALL
           SELECT element.value,
-            parent.depth + CASE WHEN jsonb_typeof(parent.value) = 'array' THEN 0 ELSE 1 END
+            parent.depth + CASE WHEN parent.depth < #{path.length} AND jsonb_typeof(parent.value) = 'object' THEN 1 ELSE 0 END
           FROM tinkick_filter_json AS parent
           CROSS JOIN LATERAL jsonb_array_elements(
             CASE WHEN jsonb_typeof(parent.value) = 'array' THEN parent.value
               WHEN parent.depth < #{path.length} AND jsonb_typeof(parent.value) = 'object'
                 THEN jsonb_build_array(parent.value -> (ARRAY[#{keys}]::text[])[parent.depth + 1])
+              #{object_values}
               ELSE '[]'::jsonb END
           ) AS element(value)
           WHERE parent.depth < #{path.length} OR jsonb_typeof(parent.value) = 'array'
+            #{"OR jsonb_typeof(parent.value) = 'object'" if descendants}
         )
         SELECT value FROM tinkick_filter_json
         WHERE depth = #{path.length} AND jsonb_typeof(value) <> 'array'
