@@ -406,8 +406,21 @@ filters. Separate conditions on an object array may match different objects,
 following flattened Searchkick object semantics. Arbitrarily nested arrays are
 not yet covered. Use JSONB rather than PostgreSQL's `json` type.
 
-Ruby Regexp filters, a `regexp` operator, and geospatial filter hashes remain
-implementation work.
+Ruby Regexp values work on scalar, PostgreSQL array, and dotted JSONB text fields:
+
+```ruby
+Product.search("coffee", where: { name: /\Aorganic/i })
+Product.search("*", where: { "metadata.code" => /\d{2}\z/ })
+```
+
+These preserve Searchkick's Lucene pattern rules: matching is unanchored unless
+the source uses `\A`/`\z`; `^`/`$` are literal characters. The `i` flag folds
+ASCII literal characters, but does not fold character ranges or accented letters.
+Other Ruby options do not change matching. Unsupported Lucene escapes such as
+`\b` raise `InvalidQueryError`. Patterns are bound SQL values. This path logs a
+scan warning; an optional `pg_trgm` expression index may help suitable patterns,
+but is not required. The raw string `regexp` operator and geospatial filter
+hashes remain implementation work.
 
 Recipe alternatives, returning ordinary ActiveRecord relations:
 
