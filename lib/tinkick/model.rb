@@ -78,9 +78,6 @@ module Tinkick
         boost = boosts[[name, mode]]
         if boost
           raise ArgumentError, "Field boost must be finite and nonnegative" unless boost.finite? && boost >= 0
-          if boost > 10_000
-            raise ArgumentError, "Field boosts above 10000 require the weighted SQL scoring path"
-          end
         end
         selector = boost ? "#{name}^#{boost}" : name
         next [{ selector => mode }] if mode == :exact || !(name == "*" || name.start_with?("*."))

@@ -13,6 +13,7 @@ module Tinkick
     @model: singleton(ActiveRecord::Base)
     @term: String
     @fields: Array[[ String, Symbol, Float? ]]
+    @weighted_scoring: bool
     @where: filter_conditions
     @aggregation_spec: aggregation_spec?
     @smart_aggs: bool
@@ -90,6 +91,7 @@ module Tinkick
     def field_predicate: (SearchField field, filter_predicate predicate) -> filter_predicate
     def matching_scope: (ActiveRecord::Relation relation, Array[filter_predicate] predicates) -> ActiveRecord::Relation
     def mixed_scope: (ActiveRecord::Relation relation, Array[filter_predicate] native, Array[filter_predicate] exact) -> ActiveRecord::Relation
+    def scored_scope: (ActiveRecord::Relation relation, Array[[ Array[filter_predicate], String ]] scores) -> ActiveRecord::Relation
 
     def record_scope: () -> ActiveRecord::Relation
 

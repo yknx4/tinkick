@@ -29,6 +29,9 @@ module Tinkick
           [parts.fetch(0), match, parts[1]&.to_f]
         end
       end
+      @weighted_scoring = @fields.any? do |_name, mode, boost|
+        boost && (boost > 10_000 || [:exact, :text_start, :text_middle, :text_end].include?(mode))
+      end
       @where = where
       @aggregation_spec = aggs
       @smart_aggs = smart_aggs
@@ -313,31 +316,42 @@ module Tinkick
 
         native = [] #: Array[filter_predicate]
         exact = [] #: Array[filter_predicate]
+        scored = [] #: Array[[Array[filter_predicate], String]]
         fields.each do |name, field, mode, boost|
           misspellings = misspellings_for(name)
-          if boost && [:exact, :text_start, :text_middle, :text_end].include?(mode)
-            raise ArgumentError, "SQL field weights require the weighted SQL scoring path"
-          end
-          if mode == :exact
-            exact << field_predicate(field, ["#{field.text_sql}::text COLLATE \"C\" = ?", [@term]])
-          elsif [:text_start, :text_middle, :text_end].include?(mode)
-            exact << field_predicate(field, TextMatch.new(@model).predicate(field.text_sql, @term, match: mode, misspellings: misspellings))
+          if [:exact, :text_start, :text_middle, :text_end].include?(mode)
+            predicate = if mode == :exact
+              field_predicate(field, ["#{field.text_sql}::text COLLATE \"C\" = ?", [@term]])
+            else
+              field_predicate(field, TextMatch.new(@model).predicate(field.text_sql, @term, match: mode, misspellings: misspellings))
+            end
+            exact << predicate
+            score = "#{boost || 1.0}::double precision"
           else
             analysis = @model.tinkick_index_analysis(name, field)
+            native_boost = boost && boost > 10_000 ? 1.0 : boost
             if two_edit_word?(mode, misspellings) || (mode == :word && compiler.refinement_required?(@term, misspellings: misspellings, analysis: analysis))
-              native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings, excluded: excluded, boost: boost))
+              predicate = field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings, excluded: excluded, boost: native_boost))
             else
               compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
-              compiled = "(#{compiled})^#{boost}" if boost && !compiled.empty?
-              compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded && !compiled.empty?
+              next if compiled.empty?
+
+              compiled = "(#{compiled})^#{native_boost}" if native_boost
+              compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded
               if [:word_start, :word_middle, :word_end].include?(mode) && misspellings != false && compiled.include?("MATCHES")
                 @fuzzy_partial = true
               end
-              native << field_predicate(field, ["#{field.text_sql} ==> ?", [compiled]]) unless compiled.empty?
+              predicate = field_predicate(field, ["#{field.text_sql} ==> ?", [compiled]])
             end
+            native << predicate
+            score = "tin.full_score(#{quoted_table}.ctid)"
+            score = "#{score}::double precision * #{boost}" if boost && boost > 10_000
           end
+          scored << [[predicate], score] if @weighted_scoring
         end
-        if native.empty?
+        if @weighted_scoring
+          scored_scope(relation, scored)
+        elsif native.empty?
           matching_scope(relation, exact)
         elsif exact.empty?
           @scoring = native.length > 1 ? "tin.full_score(#{quoted_table}.ctid)" : "tin.score(#{quoted_table}.ctid)"
@@ -414,15 +428,21 @@ module Tinkick
     end
 
     def mixed_scope(relation, native, exact)
+      scored_scope(relation, [[native, "tin.full_score(#{quoted_table}.ctid)"], [exact, "1.0"]])
+    end
+
+    def scored_scope(relation, scores)
+      return relation.none if scores.empty?
+
       primary_key = @model.primary_key
       raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
 
       identifier = quoted_column(primary_key)
       projection = Arel.sql("#{identifier} AS _tinkick_id")
-      branches = [
-        matching_scope(relation, native).reselect(projection, Arel.sql("tin.full_score(#{quoted_table}.ctid) AS _tinkick_branch_score")),
-        matching_scope(relation, exact).reselect(projection, Arel.sql("1.0 AS _tinkick_branch_score")),
-      ].map { |branch| branch.except(:order, :limit, :offset) }
+      branches = scores.map do |predicates, score|
+        matching_scope(relation, predicates).reselect(projection, Arel.sql("#{score} AS _tinkick_branch_score"))
+          .except(:order, :limit, :offset)
+      end
       @scoring = "_tinkick_ranked.score"
       @mixed_matching = true
       @model.all.with(_tinkick_matches: branches).joins(<<~SQL)
@@ -442,7 +462,9 @@ module Tinkick
       if @fuzzy_partial
         @model.logger&.warn("Tinkick: Fuzzy partial matching expands patterns in TIN's token dictionary. Broad prefixes or infixes can increase query cost; use misspellings: false when typo matching is unnecessary and inspect EXPLAIN ANALYZE with representative data.")
       end
-      if @mixed_matching
+      if @weighted_scoring && @mixed_matching
+        @model.logger&.warn("Tinkick: weighted SQL scoring runs separate matching field queries, then can group and sort matching rows. SQL match modes and field boosts above 10000 require this path; native-only field boosts up to 10000 keep TIN scoring. Inspect EXPLAIN ANALYZE for your workload.")
+      elsif @mixed_matching
         @model.logger&.warn("Tinkick: mixed TIN and SQL match modes combine and group matching rows before sorting. This can be slower than native TIN top-k ranking; use a single native match mode where its semantics fit and check EXPLAIN ANALYZE for your workload.")
       end
       if @offset.positive? && score != "1.0"
