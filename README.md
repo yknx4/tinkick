@@ -765,10 +765,28 @@ remains adapter work.
 
 ## Boosting, conversions, and personalization
 
-`fields("title^10")`, `boost_by`, `boost_where`, `boost_by_recency`,
-`boost_by_distance`, `indices_boost`, and `conversions`/`conversions_v2` are not
-implemented. Default scores come from TIN, without synthetic exact-versus-fuzzy
-boosts or a forced primary-key tie order.
+Native word, phrase, and partial-word fields accept caret weights:
+
+```ruby
+Product.search("coffee", fields: ["name^10", :description])
+Product.search("coffee").fields({"name^2.5" => :word_start}, :description)
+```
+
+Weights from zero through 10,000 use native TIN boosts. Zero preserves matching
+rows while suppressing that field's score. `default_fields` and wildcard selectors
+also accept weights. Repeated selectors use the last explicit weight for that
+selector and match mode; an unweighted duplicate does not reset it. Per-field
+`misspellings: {fields: [...]}` uses names without caret weights.
+
+Explicit `^1` pins terms that TIN might otherwise omit from scoring as too common,
+so it can change scores even with a factor of one. Native single-field queries
+retain the top-k path; existing multi-field/refinement cost warnings still apply.
+Scores use TIN's ranking without synthetic exact-versus-fuzzy boosts or forced
+primary-key tie order. SQL-mode weights and factors above 10,000 still require
+the weighted SQL scoring adapter.
+
+`boost_by`, `boost_where`, `boost_by_recency`, `boost_by_distance`, `indices_boost`,
+and `conversions`/`conversions_v2` remain adapter work.
 
 Recipe: rank a bounded SQL search with application-owned numeric weights:
 
