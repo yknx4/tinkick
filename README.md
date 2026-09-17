@@ -965,8 +965,13 @@ on that local time grid; `key` remains UTC epoch milliseconds and
 `key_as_string` displays the local boundary. Calendar gaps advance in local
 calendar time, preserving month starts across February. Offsets may include
 seconds, though the upstream-compatible default label prints only offset hours
-and minutes. Fixed offsets are limited to ±18 hours. IANA histogram zones and
-their daylight-saving transitions remain adapter work.
+and minutes. Fixed offsets are limited to ±18 hours. IANA zones such as
+`"America/New_York"` work with day, week, month, quarter, and year calendar
+intervals. Local days can span 23 or 25 hours. Repeated midnights use the earliest
+instant; missing midnights use the first valid instant. Entirely skipped dates
+do not produce duplicate buckets. PostgreSQL groups the records; Ruby converts
+only returned bucket boundaries, without extra queries or model loading.
+IANA subday calendar units and fixed intervals remain adapter work.
 
 Put `min_doc_count`, `order`, and `keyed` inside `date_histogram:`;
 only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
