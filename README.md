@@ -495,12 +495,20 @@ Product.search("appl").misspellings(false)
 Product.search("aplpe", misspellings: { prefix_length: 2 })
 Product.search("appl", misspellings: { edit_distance: 0 })
 Product.search("aplpe", misspellings: { edit_distance: 2, transpositions: false })
+Product.search("mithrl", fields: [:name, :description],
+  misspellings: { fields: [:name], prefix_length: 2 })
 ```
 
 `distance` is an alias for `edit_distance`. Native TIN edits handle insertion,
 deletion, and substitution; Tinkick adds exact adjacent swaps for distance one.
 The prefix protects the specified number of Unicode codepoints. Options must
 use nonnegative integer distances and prefixes.
+
+`misspellings: {fields: [...]}` enables fuzzy matching only on those selected
+fields. Other searched fields still match exactly; `fields: []` disables
+fuzziness on every field. Names must belong to the search's selected fields,
+including any dotted JSON paths. This also works through `.misspellings(...)`,
+with partial token and whole-field modes. Exact and phrase modes remain exact.
 
 The default deliberately uses **uncapped native expansion**, rather than
 Searchkick's implicit three expansions. It may return additional valid typo
@@ -511,10 +519,6 @@ These controls are **not implemented and currently raise**:
 
 - `max_expansions`, including an explicitly requested value of three.
 - `below`, which needs an exact-first search and conditional fuzzy retry.
-- `fields` inside `misspellings`, which needs per-field fuzzy selection.
-- Partial-token transpositions with `edit_distance: 2`; this adapter path remains
-  implementation work. Ordinary whole-word distance-two matching is available
-  through the optional SQL helper described below.
 
 Whole-word `edit_distance: 2` with transpositions uses native TIN candidates plus
 bounded SQL verification. Install its optional helper only if this feature is
@@ -548,7 +552,6 @@ end
 
 Keep the same filters and fields on both calls. This recipe is not the missing
 fluent `below` option and does not reproduce Searchkick's retry expansion cap.
-Per-field typo rules can likewise use separately compiled native SQL predicates.
 There is not yet a verified public replacement for an explicit expansion cap;
 retain the old search path if that cap is required for match eligibility.
 
