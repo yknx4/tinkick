@@ -1526,10 +1526,12 @@ explicit SQL total, and are not accepted Tinkick options.
 ### Default scopes, associations, and inheritance
 
 Search queries start from the model's ActiveRecord scope, including default
-scopes. Registration is inherited by subclasses. Searchkick's `inheritance:` and
-query `type` options are not implemented; STI-specific behavior still needs its
-own compatibility coverage rather than an assertion that all inheritance cases
-are equivalent.
+scopes. Registration is inherited by subclasses. Native ActiveRecord STI is
+tested for parent, child, and grandchild queries: a child searches its own rows
+and descendants, and model results retain their concrete classes. Counts,
+terms/dictionaries, metrics, ranges, and histograms keep those STI restrictions.
+Searchkick's `inheritance:` and query `type` options are not implemented; these
+native model queries do not claim Elasticsearch document-type parity.
 
 Call search on the model, not an ActiveRecord relation or association:
 
