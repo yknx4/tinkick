@@ -4,6 +4,16 @@ require_relative "../../lib/tinkick/extensions"
 require_relative "../integration_helper"
 
 class ExtensionsTest < TinkickIntegrationTest
+  class RemoveOptionalExtensions < ActiveRecord::Migration[8.0]
+    def up
+      raise "Expected tinkick_test" unless connection.select_value("SELECT current_database()") == "tinkick_test"
+
+      %w[unaccent fuzzystrmatch pg_trgm].each do |name|
+        execute "DROP EXTENSION #{connection.quote_column_name(name)} RESTRICT"
+      end
+    end
+  end
+
   def test_returns_the_installed_extension_schema
     schema = Tinkick::Extensions.require!(SearchProduct, "tin")
 
@@ -45,5 +55,27 @@ class ExtensionsTest < TinkickIntegrationTest
     )
 
     assert_predicate status, :success?, output
+  end
+
+  def test_native_search_and_filters_work_without_optional_extensions
+    # The fixture transaction restores extensions after this test. RESTRICT
+    # refuses to remove anything with an unexpected dependent application object.
+    capture_io { RemoveOptionalExtensions.new.migrate(:up) }
+    model = Class.new(SearchProduct) { tinkick searchable: [:name] }
+
+    %w[unaccent fuzzystrmatch pg_trgm].each do |name|
+      refute SearchProduct.connection.extension_enabled?(name)
+    end
+    assert_equal ["Red Apple"], model.search("apple", misspellings: false).map(&:name)
+    assert_equal ["Red Apple"], model.search("aplpe").map(&:name)
+    assert_equal ["Red Apple"], model.search("*", where: { name: /Apple\z/ }).map(&:name)
+    assert_equal ["Red Apple"], model.search("Red Apple", match: :exact).map(&:name)
+
+    error = assert_raises(Tinkick::Error) { model.search("red", match: :text_start).to_a }
+    assert_includes error.message, 'enable_extension "unaccent"'
+    error = assert_raises(Tinkick::Error) do
+      model.search("apple", match: :word_middle, misspellings: { edit_distance: 2, transpositions: false }).to_a
+    end
+    assert_includes error.message, 'enable_extension "fuzzystrmatch"'
   end
 end
