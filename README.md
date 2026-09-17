@@ -662,7 +662,19 @@ bin/rails db:migrate
 With `transpositions: false`, install `fuzzystrmatch` instead. These dependencies
 are checked only for the paths that use them; basic search, exact matching, and
 one-edit native token matching do not require them. The helper migration installs
-`tinkick.osa_distance` and leaves other extensions untouched.
+`tinkick.osa_distance` and `tinkick.edit_distance` and leaves extensions untouched.
+The latter supports bounded Unicode edit distance with optional transpositions,
+including tokens beyond `fuzzystrmatch`'s 255-character limit. Neither helper is
+required at gem load or model registration. To add it to an existing helper
+installation without changing the original migration:
+
+```sh
+bin/rails generate tinkick:functions --upgrade
+bin/rails db:migrate
+```
+
+The upgrade migration adds only `tinkick.edit_distance`; rolling it back preserves
+`tinkick.osa_distance` and ordinary TIN search.
 
 ### Case, accents, whitespace, and emoji
 
