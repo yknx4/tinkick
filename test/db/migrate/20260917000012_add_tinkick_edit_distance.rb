@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-class InstallTinkickFunctions < ActiveRecord::Migration[8.0]
+class AddTinkickEditDistance < ActiveRecord::Migration[8.0]
   def up
     create_schema "tinkick", if_not_exists: true
 
     execute <<~SQL
-      CREATE OR REPLACE FUNCTION tinkick.osa_distance(source text, target text, max_distance integer)
+      CREATE OR REPLACE FUNCTION tinkick.edit_distance(source text, target text, max_distance integer, transpositions boolean)
       RETURNS integer
       LANGUAGE plpgsql
       IMMUTABLE STRICT PARALLEL SAFE SECURITY INVOKER
@@ -79,7 +79,7 @@ class InstallTinkickFunctions < ActiveRecord::Migration[8.0]
               outside_limit
             );
             -- Consuming both adjacent characters once gives OSA, not unrestricted Damerau distance.
-            IF row_number > 1 AND column_number > 1
+            IF transpositions AND row_number > 1 AND column_number > 1
               AND left_chars[row_number] COLLATE "C" = right_chars[column_number - 1] COLLATE "C"
               AND left_chars[row_number - 1] COLLATE "C" = right_chars[column_number] COLLATE "C"
             THEN
@@ -98,14 +98,9 @@ class InstallTinkickFunctions < ActiveRecord::Migration[8.0]
       END;
       $tinkick$;
     SQL
-
-    execute <<~SQL
-<%= edit_distance_sql.lines.map { |line| line.strip.empty? ? line : "      #{line}" }.join -%>
-    SQL
   end
 
   def down
-    execute "DROP FUNCTION IF EXISTS tinkick.osa_distance(text, text, integer)"
     execute "DROP FUNCTION IF EXISTS tinkick.edit_distance(text, text, integer, boolean)"
   end
 end

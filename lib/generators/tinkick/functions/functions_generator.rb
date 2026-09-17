@@ -10,9 +10,17 @@ module Tinkick
 
       source_root File.expand_path("templates", File.dirname(__FILE__))
       desc "Creates an optional migration for bounded Unicode edit-distance compatibility functions."
+      class_option :upgrade, type: :boolean, default: false, desc: "Add four-argument edit distance without rewriting an existing installation"
 
       def create_migration_file
-        migration_template "install_tinkick_functions.rb.tt", "db/migrate/install_tinkick_functions.rb"
+        name = options["upgrade"] ? "add_tinkick_edit_distance" : "install_tinkick_functions"
+        migration_template "#{name}.rb.tt", "db/migrate/#{name}.rb"
+      end
+
+      private
+
+      def edit_distance_sql
+        File.read(File.expand_path("templates/edit_distance.sql.tt", File.dirname(__FILE__)))
       end
     end
   end

@@ -20,6 +20,21 @@ module Tinkick
 
         "tinkick.osa_distance"
       end
+
+      def require_edit_distance!(model)
+        installed = model.with_connection do |connection|
+          connection.select_value(<<~SQL)
+            SELECT 1 FROM pg_catalog.pg_proc
+            WHERE oid = pg_catalog.to_regprocedure('tinkick.edit_distance(text,text,integer,boolean)')
+              AND prorettype = 'integer'::regtype
+          SQL
+        end
+        unless installed
+          raise Error, "The tinkick.edit_distance function is required for this search feature. Run bin/rails generate tinkick:functions --upgrade and bin/rails db:migrate to add the optional SQL compatibility function without rewriting an existing installation."
+        end
+
+        "tinkick.edit_distance"
+      end
     end
   end
 end
