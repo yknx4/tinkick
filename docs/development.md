@@ -65,6 +65,33 @@ types nor type errors should be suppressed as a workaround.
 
 ## Verified environment
 
+Native scoring and JSONB conversions checkpoint (`083a11b`, 2026-09-17):
+Ruby 4.0.1 / Rails 8.1.3.1 passed **103 tests / 590 assertions** in 83 seconds
+for conversion queries, fluent controls, model defaults, existing query/relation
+behavior and the real Rails HTTP app. The native JSONB helper separately passed
+**18 tests / 145 assertions**, including zero-factor SQL identity, nulls, invalid
+counts and literal keys. Rails 8.0.5.1 / JSON 2 passed **103 tests / 599 assertions**
+in 95 seconds for all tests changed since the native cleanup checkpoint plus
+the Rails HTTP app. All these targeted runs had no failures, errors or skips.
+
+```sh
+direnv exec . bundle exec ruby -Itest -e 'ARGV.replace(["--fail-fast", "--seed", "2086"]); %w[integration/conversion_search_test integration/conversion_relation_test integration/model_test integration/model_defaults_test integration/query_test integration/query_options_test integration/relation_test rails_app_test].each { |name| require_relative "test/#{name}" }'
+direnv exec . bundle exec ruby -Itest test/integration/conversion_scores_test.rb --fail-fast
+direnv exec . env BUNDLE_GEMFILE=/private/tmp/tinkick-rails-8.0.Gemfile JSON_VERSION='< 3' bundle exec ruby -Itest -e 'ARGV.replace(["--fail-fast", "--seed", "2086"]); paths = IO.popen(["git", "diff", "--name-only", "6aad0be..083a11b", "--", "test"], &:read).lines.map(&:strip).grep(/_test\.rb\z/); (paths + ["test/rails_app_test.rb"]).uniq.each { |path| require_relative path }'
+direnv exec . bundle exec rake rbs:format rbs:quality steep rubocop build
+```
+
+RBS and Steep passed; RuboCop checked 160 Ruby files without offenses. The built
+`pkg/tinkick-0.1.0.alpha.1.gem` contains 76 files, including the conversion source
+and signature and both migration templates, with no environment, test or coverage
+files. The [recency](recency-plans.md) and [conversion](conversion-plans.md)
+collectors verified unchanged membership, expected winners/scores and transaction
+cleanup before recording real plans. README and local feature documentation are
+updated; no Outline publication or remote CI run was performed.
+
+The full coverage suite was not rerun for this checkpoint. Coverage percentages
+below apply to their recorded earlier code states, not these new features.
+
 Native-backend cleanup checkpoint (2026-09-17, through `f394548`): Ruby 4.0.1 /
 Rails 8.1.3.1 exercised **835 tests / 4,925 assertions** in 1,319 seconds, with
 **97.97% line coverage** (2,466 / 2,517 executable lines). The run included the
