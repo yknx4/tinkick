@@ -122,7 +122,7 @@ Distinguish database `REINDEX` (physical index maintenance after analysis
 changes, for example) from Searchkick's data-import `.reindex`. The former may
 be necessary operationally; Tinkick will not implement the latter as data copy.
 
-## Decisions before implementation
+## Settled decisions
 
 1. **Field schema:** validate `search_data` keys on a new instance, including an
    empty table. The user approved this policy. Methods that cannot run on a new
@@ -130,21 +130,24 @@ be necessary operationally; Tinkick will not implement the latter as data copy.
 2. **Coexistence:** use distinct Tinkick names and preserve existing `search`
    methods. Verify both gem declaration orders and an application-defined search.
    The user explicitly rejected a Searchkick namespace alias.
-3. **Removed lifecycle calls:** decide whether legacy `.reindex`, callback
+
+## Remaining implementation questions
+
+1. **Removed lifecycle calls:** decide whether legacy `.reindex`, callback
    controls and refresh calls raise migration guidance or selected calls are
    documented no-ops. There is no reindexing implementation in either case.
-4. **Analysis contract:** determine the supported policy for default stemming,
+2. **Analysis contract:** determine the supported policy for default stemming,
    language/synonyms and fuzzy controls that have no proven native equivalent.
    Never silently accept an option that changes intended retrieval semantics.
-5. **Visibility:** direct SQL cannot evaluate an arbitrary Ruby `should_index?`.
+3. **Visibility:** direct SQL cannot evaluate an arbitrary Ruby `should_index?`.
    Specify its migration to SQL scopes/columns and reconcile default-scope,
    inheritance, tenant and `unscope` behavior before exposing it.
-6. **Index ownership and results:** settle index naming/lookup, schema validation
+4. **Index ownership and results:** settle index naming/lookup, schema validation
    cache invalidation, the portable `response`/`hits` shape, and `load(false)`
    projections without any external documents.
 
-These are implementation questions, not additional work included in the
-initial scaffold. Resolve them before exposing the dependent public behavior.
+These remaining questions do not reopen the field-schema or coexistence
+decisions above. Resolve them before exposing the dependent public behavior.
 
 ## Implementation progress
 
