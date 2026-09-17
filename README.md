@@ -175,6 +175,11 @@ empty arrays. Defaults pass through the same validation as model declarations;
 they do not add database connections during class registration. Replacing the
 global defaults hash affects subsequent declarations.
 
+`Tinkick.models` lists the loaded classes that successfully declared `tinkick`,
+in declaration order. It is independent of `Searchkick.models`. Subclasses that
+inherit a declaration do not add duplicate entries, and inspecting the registry
+does not query PostgreSQL or eager-load application models.
+
 Audit the features below before changing callers. Existing Searchkick callbacks,
 queues, Redis dependencies, and reindex jobs still belong to Searchkick; retire
 them when the old backend is no longer needed. See the
