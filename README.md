@@ -313,9 +313,12 @@ JSON source pruning remains adapter work. An empty list returns identity only;
 request behavior. Normal model results retain complete attributes and association
 preloading. `select { |record| ... }` performs Enumerable selection on the page.
 
-`only` and `except` query-option operations remain adapter work. `map(&:name)`
-reads the loaded page; it is not a database projection. `load: false` still logs
-its migration warning.
+`only(:where, :limit)` retains those query options; `except(:order, :fields)`
+removes them. Both return an unloaded search with the same model and term,
+restoring omitted options to their model or query defaults. They work on loaded
+relations too and preserve the original. These methods filter options; use
+`select` for source projection. `map(&:name)` reads the loaded page. `load: false`
+still logs its migration warning.
 
 ## Results and metadata
 

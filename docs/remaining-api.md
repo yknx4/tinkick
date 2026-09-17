@@ -13,7 +13,7 @@ Baseline: Searchkick 6.1.2 / commit93e901a75b11a25101668a616e006b158251b16e, cur
 
 1. **Finish core result metadata.** scope_results, missing_records, and model_name/entry_name are implemented and tested. Remaining: misspellings? after exact-first retry policy; measured took and error semantics. No native TIN gap here.
 
-2. **Projection and query option operations.** Top-level select/reselect source filtering, Enumerable block selection, hidden cursor-key preservation, and explicit _score/compound ordering are implemented. Remaining: nested JSON source pruning; only/except on options; wildcard search-field expansion. Model results retain complete attributes according to pinned Searchkick behavior.
+2. **Projection and query option operations.** Top-level select/reselect source filtering, Enumerable block selection, hidden cursor-key preservation, only/except on options, and explicit _score/compound ordering are implemented. Remaining: nested JSON source pruning; wildcard search-field expansion. Model results retain complete attributes according to pinned Searchkick behavior.
 
 3. **Highlight public surface and portable hits.** Wire the existing tested Highlighter into highlight keyword/fluent options, per-field configuration, highlights/with_highlights, record search_highlights, raw highlighted_* values, custom tags, HTML encoding, and snippets/fragment_size. hits/with_hit/response need a documented portable envelope and identity contract first: use durable model PK, never ctid or invented Elasticsearch shard/alias metadata. Full-field native support is proven; snippet compatibility and alternate SQL match highlighting still require adapter work.
 
