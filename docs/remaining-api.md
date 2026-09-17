@@ -11,7 +11,7 @@ Baseline: Searchkick 6.1.2 / commit93e901a75b11a25101668a616e006b158251b16e, cur
 
 ## Dependency-ordered feasible adapter work
 
-1. **Finish page loading and core result metadata.** scope_results (tests staged only in /private/tmp/tinkick-scope-results-tests.rb): filter already-ranked IDs, preserve ordering/scores and totals, avoid refilling pages, preload surviving visible rows, ignore for load:false, warn about extra page-bounded query. Add model_name/entry_name for Rails pagination; misspellings? after exact-first retry policy; measured took and error/missing_records semantics. No native TIN gap here.
+1. **Finish core result metadata.** scope_results and model_name/entry_name are implemented and tested. Remaining: misspellings? after exact-first retry policy; measured took and error/missing_records semantics. No native TIN gap here.
 
 2. **Projection and query option operations.** select/reselect with raw source include/exclude patterns and Enumerable block overload; only/except on options; wildcard field expansion; explicit _score ordering. These need preservation of primary-key/cursor/preloader keys internally without leaking hidden fields into projected raw results. Model projection behavior must follow pinned source, not inferred SQL conventions.
 

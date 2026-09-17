@@ -324,6 +324,8 @@ Available pagination metadata includes `current_page`, `per_page`/`limit_value`,
 `previous_page`/`prev_page`, `next_page`, `first_page?`, `last_page?`, and
 `out_of_range?`. Supplying `total_entries:` overrides the reported total when the
 application already knows it; an inaccurate override gives inaccurate page metadata.
+`model_name` returns the model's `ActiveModel::Name`; `entry_name` supports Rails
+translations, `count:`, and `locale:` for pagination labels without running SQL.
 
 ### Legacy raw-row results
 
@@ -344,7 +346,7 @@ different from `load(false)`.
 ### Metadata still missing
 
 `took`, `response`, `hits`, `with_hit`, `error`,
-`missing_records`, `model_name`, `entry_name`, `misspellings?`, suggestions,
+`missing_records`, `misspellings?`, suggestions,
 and public highlight result methods are not implemented. Aggregation metadata
 is available through `aggs` and `aggregations`. Searchkick 6 removed
 `each_with_hit` and `with_details`; use `with_hit.each` and `with_highlights` when
@@ -513,7 +515,7 @@ fuzzy matching without interpreting their analyzed punctuation as match-all. See
 | --- | --- | --- |
 | `:word` | Available | Disable misspellings for exact token matching. |
 | `:phrase` | Available | Ordered adjacent tokens. |
-| `:word_start`, `:word_middle`, `:word_end` | Available | Native token wildcards; escaped dictionary patterns for distance-one typos. |
+| `:word_start`, `:word_middle`, `:word_end` | Available | Native token wildcards; dictionary patterns for one edit; SQL refinement for two edits. |
 | `:text_start`, `:text_middle`, `:text_end` | Available | Whole-field SQL matching with optional `unaccent`; zero, one, or two edits. |
 | `:exact` | Available globally and per field | Case-sensitive, accent-sensitive whole-field SQL equality; ignores misspellings. |
 | Mixed per-field match modes | Available | Each field keeps its own mode; SQL/TIN branches are combined and deduplicated in PostgreSQL. |
@@ -542,6 +544,12 @@ Mixed SQL/TIN matching adds native TIN scores and SQL-match scores, then groups
 record IDs before pagination. It logs a warning because grouping/sorting can cost
 more than native top-k search. Fuzzy token partial matching also warns about
 dictionary expansion. Use `misspellings: false` when typo matching is unnecessary.
+
+Two-edit token partial matching enumerates bounded grams from native TIN
+candidates. It warns because broad candidates and middle-position enumeration
+can be expensive and bypass native top-k ranking. A fixed `prefix_length` can
+reduce candidates. This path needs the optional SQL helper for transpositions,
+or `fuzzystrmatch` when `transpositions: false`; ordinary token searches do not.
 
 Two-edit whole-field queries enumerate candidate substrings in PostgreSQL and log
 an additional warning. With transpositions they need the optional SQL helper:
@@ -910,8 +918,21 @@ Product.search("coffee", model_includes: {Product => [:store]})
 Their bang forms mutate only an unloaded relation. `model_includes` entries for
 other model classes are ignored by a single-model search. Generic and applicable
 model-specific associations are combined. `load: false`, count-only access, and
-empty result pages do not preload associations. `scope_results` remains adapter
-implementation work.
+empty result pages do not preload associations.
+
+`scope_results` filters the already-ranked visible page through an ActiveRecord
+scope, keeping hit order and scores:
+
+```ruby
+Product.search("coffee", scope_results: ->(scope) { scope.where(in_stock: true) })
+Product.search("coffee").scope_results(->(scope) { scope.where(in_stock: true) })
+```
+
+This logs a warning about an extra page-bounded query. Prefer search `where:`
+when possible: `scope_results` does not refill a shortened page or change the
+original total. Associations preload only surviving records. It is ignored for
+`load: false` and count-only access; cursor progression follows the original
+ranked page even when the callback removes all its records.
 
 ### Multiple models and multi-search
 
@@ -1227,7 +1248,7 @@ The following reference maps less common upstream options to their current statu
 | Routing, request parameters, opaque IDs | Excluded transport API; use SQL filters, database routing, and Rails instrumentation. |
 | `timeout`, `search_timeout`, `client_options` | Not implemented; configure database timeouts/pooling. |
 | `includes`, `model_includes` | Available; preload only visible model results. |
-| `scope_results` | Result-loading callback adapter remains implementation work. |
+| `scope_results` | Available; filters the ranked page with an extra query and warning. |
 | `select`, source filtering, `reselect` | Projection adapter remains implementation work. |
 | `only`, `except` | Query-option selection/removal remains implementation work; these do not select model columns. |
 | `body`, `body_options`, query-mutating blocks | Excluded Elasticsearch DSL; use reviewed native SQL. |
