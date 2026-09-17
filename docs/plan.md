@@ -16,9 +16,12 @@
   Supply Rails migrations that consuming applications can import.
 - Preserve the existing `.envrc` and `dev.ejson` development/test setup.
 - Prefer native TIN query performance over identical Searchkick scores or tie
-  ordering. Preserve public options and result interfaces; distinguish ranking
-  differences from changes to matching eligibility. Known slow compatibility
-  paths must warn through the model logger.
+  ordering. Preserve useful public options and result interfaces through direct
+  native operations. Do not recreate Lucene/Elasticsearch engines, analysis,
+  regex syntax, edit-distance algorithms, date formats, or date-math parsers.
+  Document native matching differences and reject unsupported explicit controls
+  with a clear Tinkick::NotImplementedError. Native SQL paths with known costs
+  must warn through the model logger.
 - Retain `load: false` for compatibility, with a logger warning recommending
   migration to normal model results. Both modes query through Active Record.
 - Add opt-in keyset pagination over stable columns and countless pagination
@@ -164,7 +167,7 @@ RBS uses a pinned maintained Rails signature collection with concrete correction
 for the Rails 8 APIs used by these features.
 
 Ranked query execution, per-column index migrations, an internal full-field
-highlighting helper, and distance-one fuzzy transpositions are implemented.
+highlighting helper, and native TIN fuzzy matching are implemented.
 Native `tin.score` preserves
 dense-term elision. Single-field first-page queries retain top-k; forced tie sorts,
 multiple field predicates, and even explicit `OFFSET 0` can change that plan.
