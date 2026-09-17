@@ -359,9 +359,31 @@ error. LIKE `%` and `_` are wildcards; use escaped patterns for literal characte
 Prefix filtering operates on the whole column, not individual search tokens.
 
 The `all` operator is accepted on scalar columns as a conjunction of equalities;
-a scalar cannot equal two distinct values. **PostgreSQL array and JSON columns
-are currently rejected**, including array containment and nested matching. Ruby
-Regexp filters, a `regexp` operator, and geospatial filter hashes are also missing.
+a scalar cannot equal two distinct values. PostgreSQL array equality means
+element membership; `in` accepts any supplied element and `all` requires every
+supplied element. These use native containment predicates compatible with GIN.
+Ranges require one element to satisfy all bounds. NULL, empty arrays, and arrays
+containing only NULL have no searchable value. Pattern and range checks expand
+elements and log a performance warning.
+
+JSONB filters accept dotted paths, typed scalar values, scalar arrays, and arrays
+of objects:
+
+```ruby
+Product.search("*", where: { tags: { all: ["fruit", "fresh"] } })
+Product.search("*", where: { "metadata.origin" => "local" })
+Product.search("*", where: { "metadata.variants.price" => { gte: 10, lt: 50 } })
+```
+
+JSONB equality uses bound JSONPath predicates compatible with GIN. Missing paths,
+JSON null, and empty arrays match `nil`/`exists: false`. Range, pattern, and missing
+checks log a scan warning; indexed generated columns are often better for frequent
+filters. Separate conditions on an object array may match different objects,
+following flattened Searchkick object semantics. Arbitrarily nested arrays are
+not yet covered. Use JSONB rather than PostgreSQL's `json` type.
+
+Ruby Regexp filters, a `regexp` operator, and geospatial filter hashes remain
+implementation work.
 
 Recipe alternatives, returning ordinary ActiveRecord relations:
 
@@ -782,12 +804,11 @@ routing design. [PostgreSQL row security](https://www.postgresql.org/docs/curren
 can provide another boundary where correctly configured; Tinkick does not install
 policies or verify an Apartment integration.
 
-Nested paths such as `store.city`, nested-object filters, and JSON search field
-mapping are not implemented. TIN supports text expression indexes, but the current
-model API requires direct columns. A generated text column can expose a same-row
-JSON property, or application SQL can use a matching expression index. Flattening
-an array of objects loses nested-object correlation; use `EXISTS`/joins or JSON
-predicates when that distinction matters.
+JSONB filter paths such as `store.city` are supported as described under
+[filtering](#filtering). Text search through a JSONB expression index is still
+implementation work. A generated text column can already expose a same-row JSON
+property. Flattened array-of-object filters do not preserve same-object correlation;
+use explicit `EXISTS`/joins or JSON predicates when that distinction matters.
 
 ## Indexing and synchronization
 
