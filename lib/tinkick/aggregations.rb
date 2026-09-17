@@ -222,15 +222,15 @@ module Tinkick
           .select(Arel.sql("LEAST(MIN(_tinkick_date), ?::timestamptz) AS _tinkick_date, GREATEST(MAX(_tinkick_date), ?::timestamptz) AS upper", lower_date, upper_date))
         seed = @model.unscoped.from(bounds, :tinkick_bounds).where("_tinkick_date IS NOT NULL AND upper IS NOT NULL")
           .select(Arel.sql("_tinkick_date, upper"))
-        first = subday_rounding_sql("_tinkick_date + CAST(:step AS interval)")
-        second = subday_rounding_sql("_tinkick_date + 2 * CAST(:step AS interval)")
-        candidates = @model.unscoped.from("tinkick_date_grid").where("_tinkick_date < upper")
-          .select(Arel.sql("_tinkick_date AS previous, upper, #{first} AS first, #{second} AS second", **binds))
-        next_key = "CASE WHEN first > previous THEN first ELSE second END"
-        following = @model.unscoped.from(candidates, :tinkick_next).where("#{next_key} <= upper")
-          .select(Arel.sql("#{next_key} AS _tinkick_date, upper"))
+        first = subday_rounding_sql("_tinkick_date + CAST(:step AS interval)", inline: true)
+        second = subday_rounding_sql("_tinkick_date + 2 * CAST(:step AS interval)", inline: true)
+        next_key = "CASE WHEN #{first} > _tinkick_date THEN #{first} ELSE #{second} END"
+        # A recursive self-reference must stay in this term's top-level FROM.
+        following = @model.unscoped.from("tinkick_date_grid").where("_tinkick_date < upper")
+          .select(Arel.sql("#{next_key} AS _tinkick_date, upper", **binds))
         @model.unscoped.with_recursive(tinkick_date_counts: counts, tinkick_date_grid: [seed, following])
           .from("tinkick_date_grid").joins("LEFT JOIN tinkick_date_counts USING (_tinkick_date)")
+          .where("_tinkick_date <= upper")
       else
         @model.unscoped.from(counts, :tinkick_date_counts).where(Arel.sql("_tinkick_count >= ?", minimum))
       end
@@ -252,18 +252,26 @@ module Tinkick
       result
     end
 
-    def subday_rounding_sql(value)
+    def subday_rounding_sql(value, inline: false)
       # PostgreSQL keeps the input UTC offset for subday truncation. Re-truncate
       # across a small rollback; a rollback >= one unit keeps the original key.
       # Across a forward gap, use the last valid old boundary (Athens 1916 needs
       # the next boundary after the second truncation). All inputs remain bound.
+      instant = inline ? "(#{value})" : "instant"
+      raw = inline ? "date_trunc(:unit, #{instant}, :zone)" : "raw"
+      rounded = inline ? "date_trunc(:unit, #{raw}, :zone)" : "rounded"
+      expression = <<~SQL.squish
+        CASE
+          WHEN (#{raw} AT TIME ZONE :zone) - (#{raw} AT TIME ZONE 'UTC') - ((#{instant} AT TIME ZONE :zone) - (#{instant} AT TIME ZONE 'UTC')) >= CAST(:step AS interval) THEN #{raw}
+          WHEN (#{instant} AT TIME ZONE :zone) - (#{instant} AT TIME ZONE 'UTC') > (#{raw} AT TIME ZONE :zone) - (#{raw} AT TIME ZONE 'UTC')
+            AND #{rounded} + CAST(:step AS interval) <= #{instant}
+            AND date_trunc(:unit, #{rounded} + CAST(:step AS interval), :zone) = #{rounded} + CAST(:step AS interval)
+          THEN #{rounded} + CAST(:step AS interval) ELSE #{rounded} END
+      SQL
+      return "(#{expression})" if inline
+
       <<~SQL.squish
-        (SELECT CASE
-          WHEN (raw AT TIME ZONE :zone) - (raw AT TIME ZONE 'UTC') - ((instant AT TIME ZONE :zone) - (instant AT TIME ZONE 'UTC')) >= CAST(:step AS interval) THEN raw
-          WHEN (instant AT TIME ZONE :zone) - (instant AT TIME ZONE 'UTC') > (raw AT TIME ZONE :zone) - (raw AT TIME ZONE 'UTC')
-            AND rounded + CAST(:step AS interval) <= instant
-            AND date_trunc(:unit, rounded + CAST(:step AS interval), :zone) = rounded + CAST(:step AS interval)
-          THEN rounded + CAST(:step AS interval) ELSE rounded END
+        (SELECT #{expression}
         FROM (SELECT (#{value}) AS instant) AS tinkick_input
         CROSS JOIN LATERAL (SELECT date_trunc(:unit, instant, :zone) AS raw) AS tinkick_raw
         CROSS JOIN LATERAL (SELECT date_trunc(:unit, raw, :zone) AS rounded) AS tinkick_rounded)
