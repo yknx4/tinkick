@@ -536,8 +536,10 @@ cannot index its recursive descent. Recursive verification logs a cost warning.
 Range, pattern, and missing checks additionally warn that they cannot extract
 selective GIN equality keys. Indexed persisted or generated scalar columns are
 often better for frequent filters. Missing paths, JSON null, and empty/null-only
-arrays match `nil`/`exists: false`; object-container existence remains adapter
-work. See the [recursive JSONB plans](docs/recursive-json-plans.md) for measured
+arrays or objects match `nil`/`exists: false`. Object containers are present when
+any descendant has a non-null scalar value, including `false`, zero, or an empty
+string. Equality, range, and pattern checks still use the exact requested path.
+See the [recursive JSONB plans](docs/recursive-json-plans.md) for measured
 candidate pruning and its limits.
 
 Ruby Regexp values work on scalar, PostgreSQL array, and dotted JSONB text fields:
