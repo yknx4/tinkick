@@ -8,12 +8,13 @@ module Tinkick
   module Model
     def tinkick(searchable: Tinkick.model_options[:searchable], default_fields: Tinkick.model_options[:default_fields],
       match: Tinkick.model_options.fetch(:match, :word), stem: Tinkick.model_options.fetch(:stem, false),
-      highlight: Tinkick.model_options[:highlight], word_start: Tinkick.model_options[:word_start],
+      highlight: Tinkick.model_options[:highlight], filterable: Tinkick.model_options[:filterable],
+      word_start: Tinkick.model_options[:word_start],
       word_middle: Tinkick.model_options[:word_middle], word_end: Tinkick.model_options[:word_end],
       text_start: Tinkick.model_options[:text_start], text_middle: Tinkick.model_options[:text_middle],
       text_end: Tinkick.model_options[:text_end], **options)
       # @type self: singleton(ActiveRecord::Base)
-      options = Tinkick.model_options.except(:searchable, :default_fields, :match, :stem, :highlight,
+      options = Tinkick.model_options.except(:searchable, :default_fields, :match, :stem, :highlight, :filterable,
         :word_start, :word_middle, :word_end, :text_start, :text_middle, :text_end).merge(options)
       raise ArgumentError, "stem must be true or false" unless stem == true || stem == false
 
@@ -25,8 +26,10 @@ module Tinkick
       raise ArgumentError, "unknown keywords: #{options.keys.join(', ')}" unless options.empty?
       raise ArgumentError, "Only call tinkick once per model" if tinkick_options
 
-      unless !highlight || (highlight.is_a?(Array) && highlight.all? { |field| field.is_a?(String) || field.is_a?(Symbol) })
-        raise ArgumentError, "highlight must be an array of field names, false, or nil"
+      { highlight: highlight, filterable: filterable }.each do |option, declaration|
+        unless !declaration || (declaration.is_a?(Array) && declaration.all? { |field| field.is_a?(String) || field.is_a?(Symbol) })
+          raise ArgumentError, "#{option} must be an array of field names, false, or nil"
+        end
       end
 
       [word_start, word_middle, word_end, text_start, text_middle, text_end].each do |fields|
@@ -34,7 +37,7 @@ module Tinkick
           raise ArgumentError, "Partial match declarations must be arrays of field names"
         end
       end
-      @tinkick_options = { searchable: searchable, default_fields: default_fields, match: match, highlight: highlight,
+      @tinkick_options = { searchable: searchable, default_fields: default_fields, match: match, highlight: highlight, filterable: filterable,
                           word_start: word_start, word_middle: word_middle, word_end: word_end,
                           text_start: text_start, text_middle: text_middle, text_end: text_end }
       method_name = Tinkick.search_method_name
@@ -56,6 +59,7 @@ module Tinkick
 
       schema = tinkick_schema
       (options[:highlight] || []).each { |field| SearchField.new(self, field.to_s, match: :exact) }
+      tinkick_validate_filterable(schema, options[:filterable] || [])
       fields ||= options[:default_fields] || options[:searchable] || tinkick_default_fields(schema)
       match ||= options[:match]
       selected = tinkick_expand_fields(fields, match: match)
@@ -128,6 +132,24 @@ module Tinkick
     end
 
     private
+
+    def tinkick_validate_filterable(schema, fields)
+      # @type self: singleton(ActiveRecord::Base)
+      fields.each do |field|
+        root, *path = field.to_s.split(".", -1)
+        column = schema[:columns][root.to_s]
+        unless column
+          raise MissingFieldError, "#{name} has no column #{root.inspect}; add it with a Rails migration before declaring it filterable"
+        end
+        next if path.empty?
+
+        array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+        unless column.type == :jsonb && !array
+          raise InvalidQueryError, "#{name}.#{root} requires a nonarray JSONB column for dotted filterable fields; add or convert the column with a Rails migration"
+        end
+        raise ArgumentError, "filterable JSONB paths require nonempty components" if path.any?(&:empty?)
+      end
+    end
 
     def tinkick_default_fields(schema)
       schema[:data_fields].select do |field|
