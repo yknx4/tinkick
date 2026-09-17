@@ -1121,7 +1121,7 @@ on that local time grid; `key` remains UTC epoch milliseconds and
 calendar time, preserving month starts across February. Offsets may include
 seconds, though the upstream-compatible default label prints only offset hours
 and minutes. Fixed offsets are limited to ±18 hours. IANA zones such as
-`"America/New_York"` work with every calendar interval. Local days can span 23
+`"America/New_York"` work with calendar and fixed intervals. Local days can span 23
 or 25 hours. Repeated midnights use the earliest instant; missing midnights use
 the first valid instant. Entirely skipped dates do not produce duplicate buckets.
 Hour buckets preserve both occurrences of a repeated hour with distinct UTC
@@ -1134,7 +1134,21 @@ historical boundaries can differ from Elasticsearch when the installed timezone
 databases differ. Explicit subday bounds add one query to round four scalar
 endpoints; unbounded histograms need no bounds query. Dense subday ranges use
 recursive SQL and can be expensive: prefer `min_doc_count: 1` when empty buckets
-are unnecessary. IANA `fixed_interval` support remains adapter work.
+are unnecessary.
+
+IANA fixed intervals use the local epoch grid within each UTC-offset period.
+Repeated local boundaries retain distinct UTC keys; a forward clock jump can
+create a bucket at the transition instant. For example, a `"90m"` grid can
+contain both occurrences of `01:30` when New York clocks fall back. Records,
+explicit bounds and empty buckets use the same SQL rounding rules.
+
+The fixed-interval path discovers PostgreSQL offset transitions using daily
+samples and a binary search within changed days. This relies on the audited
+IANA 1850–2050 data having no two transitions within one UTC day (the smallest
+observed separation was 601,200 seconds); the lookback also allows two days for
+the observed offset range. Wide matching or bound ranges increase discovery
+work and log a warning. Apply selective date filters and avoid dense empty
+grids when they are unnecessary. No optional extension is needed.
 
 Put `min_doc_count`, `order`, `keyed`, and `format` inside `date_histogram:`;
 only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
