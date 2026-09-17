@@ -480,6 +480,10 @@ appropriate indexes in Rails migrations for the application's actual queries.
 
 Filters use real columns and bound values. These scalar forms are available:
 
+The `id` filter refers to the model's primary key, including custom names and
+UUID keys. This also applies when the table has a separate physical `id` column;
+use the primary key's actual name for an explicit equivalent filter.
+
 | Operation | Example |
 | --- | --- |
 | Equality / NULL | `where(store_id: 1)`, `where(deleted_at: nil)` |
