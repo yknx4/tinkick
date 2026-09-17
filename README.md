@@ -859,8 +859,29 @@ matching scope. Source projection, highlights, countless pagination, and stable
 column cursors remain available. Add real numeric columns with Rails migrations
 for counters or application-owned scores; Ruby `search_data` values are not stored.
 
-JSONB numeric paths, `boost_where`, `boost_by_recency`, `boost_by_distance`,
-`indices_boost`, and `conversions`/`conversions_v2` remain adapter work.
+JSONB dotted paths also work without a separate numeric index:
+
+```ruby
+Product.search("coffee", boost_by: {"metadata.offers.rating" => {modifier: "sqrt", missing: 1}})
+```
+
+An explicitly boosted JSONB path is interpreted as numeric. Numbers and numeric
+strings are coerced through PostgreSQL double precision; arrays are flattened
+and their minimum numeric value is used. Paths can traverse arrays of objects,
+following only the named keys. Missing values, JSON null, empty strings and empty
+arrays use the same `missing:` behavior as columns. This follows Elasticsearch's
+[numeric coercion](https://www.elastic.co/guide/en/elasticsearch/reference/8.19/coerce.html)
+and [array conventions](https://www.elastic.co/guide/en/elasticsearch/reference/8.19/array.html),
+without inferring an integer mapping from the first stored value.
+
+Tinkick does not validate JSONB when it is written: malformed, boolean, object or
+nonfinite leaf values raise when a matching row is scored. Filtered-out invalid
+rows are not scored, and counts do not evaluate the boost. Recursive traversal
+adds work per row; persist frequently used ranking values in typed columns when
+that improves the measured plan. Updates are visible immediately without reindexing.
+
+`boost_where`, `boost_by_recency`, `boost_by_distance`, `indices_boost`, and
+`conversions`/`conversions_v2` remain adapter work.
 
 Recipe: rank a bounded SQL search with application-owned numeric weights:
 
