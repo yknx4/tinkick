@@ -36,6 +36,7 @@ module Tinkick
       @operator = operator.to_s
       @match = match
       @misspelling_fields = nil
+      @misspellings_below = nil
       @misspellings = normalize_misspellings(misspellings)
       @exclude = normalize_exclusions(exclude)
       @countless = countless || keyset
@@ -107,11 +108,17 @@ module Tinkick
       @total_count ||= scope.except(:order, :limit, :offset).count
     end
 
+    def misspellings?
+      resolve_misspellings
+      @misspellings != false && !(@term == "*" && @exclude.empty?)
+    end
+
     def aggs
       spec = @aggregation_spec
       return unless spec
       return @aggs if @aggs
 
+      resolve_misspellings
       specifications = if spec.is_a?(Array)
         spec.to_h do |field|
           empty_options = {} #: aggregation_options
@@ -139,9 +146,19 @@ module Tinkick
     private
 
     def normalize_misspellings(options)
-      return options unless options.is_a?(Hash) && options.key?(:fields)
+      return options unless options.is_a?(Hash)
 
-      names = options[:fields]
+      normalized = options.dup
+      below = normalized.delete(:below)
+      if below
+        unless below.is_a?(Integer) || below.is_a?(String) || (below.is_a?(Float) && below.finite?)
+          raise ArgumentError, "misspellings below must be a finite number or numeric string"
+        end
+        @misspellings_below = below.to_i
+      end
+      return normalized unless normalized.key?(:fields)
+
+      names = normalized.delete(:fields)
       unless names.is_a?(Array) && names.all? { |name| name.is_a?(String) || name.is_a?(Symbol) }
         raise ArgumentError, "misspellings fields must be an array of field names"
       end
@@ -150,9 +167,35 @@ module Tinkick
         raise ArgumentError, "All fields in per-field misspellings must also be specified in fields option"
       end
       @misspelling_fields = selected
-      normalized = options.dup
-      normalized.delete(:fields)
       normalized
+    end
+
+    def resolve_misspellings
+      threshold = @misspellings_below
+      return unless threshold
+      return if @term == "*" && @exclude.empty?
+
+      if threshold <= 0
+        @misspellings = false
+        @misspellings_below = nil
+        return
+      end
+
+      original = [@misspellings, @scoring, @mixed_matching, @fuzzy_partial] #: [QueryText::misspellings, String, bool, bool]
+      @misspellings = false
+      begin
+        @model.logger&.warn("Tinkick: misspellings: { below: #{threshold} } runs an extra bounded exact-match count before choosing the search mode. Omit below to use the native fuzzy search directly.")
+        exact = build_scope(@where)
+        if exact.except(:order, :limit, :offset).limit(threshold).count < threshold
+          @misspellings, @scoring, @mixed_matching, @fuzzy_partial = original
+        else
+          @scope = exact
+        end
+        @misspellings_below = nil
+      rescue StandardError
+        @misspellings, @scoring, @mixed_matching, @fuzzy_partial = original
+        raise
+      end
     end
 
     def misspellings_for(name)
@@ -196,6 +239,7 @@ module Tinkick
     end
 
     def scope
+      resolve_misspellings
       @scope ||= build_scope(@where)
     end
 

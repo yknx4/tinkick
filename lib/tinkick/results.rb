@@ -68,7 +68,12 @@ module Tinkick
       @missing_records
     end
 
+    def misspellings?
+      @query.misspellings?
+    end
+
     def total_count
+      @query.misspellings?
       @total_entries || @query.total_count
     end
     alias_method :total_entries, :total_count

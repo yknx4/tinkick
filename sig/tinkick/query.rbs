@@ -24,6 +24,7 @@ module Tinkick
     @match: Symbol
     @misspellings: QueryText::misspellings
     @misspelling_fields: Array[String]?
+    @misspellings_below: Integer?
     @exclude: Array[String]
     @records: Array[ActiveRecord::Base]?
     @rows: Array[Hash[String, result_value]]?
@@ -55,6 +56,7 @@ module Tinkick
     def aggs: () -> Hash[String, aggregation_result]?
 
     def total_count: () -> Integer
+    def misspellings?: () -> bool
     def countless?: () -> bool
     def keyset?: () -> bool
     def has_next_page?: () -> bool
@@ -63,6 +65,7 @@ module Tinkick
     private
 
     def normalize_misspellings: (QueryText::misspellings options) -> QueryText::misspellings
+    def resolve_misspellings: () -> void
     def misspellings_for: (String name) -> QueryText::misspellings
 
     def normalize_exclusions: (exclusion_phrases value) -> Array[String]

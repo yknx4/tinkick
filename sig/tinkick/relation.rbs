@@ -110,6 +110,7 @@ module Tinkick
     def model_name: () -> ActiveModel::Name
     def entry_name: (?Hash[Symbol, Object?] options) -> String
     def missing_records: () -> Array[missing_record]
+    def misspellings?: () -> bool
     def total_count: () -> Integer
     def current_page: () -> Integer
     def limit_value: () -> Integer
