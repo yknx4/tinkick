@@ -35,6 +35,9 @@ for reproduction, caching, and the current exclusions.
 - Ask when intent, architecture, requirements, or rollout choices are unclear.
 - Implement the simplest complete solution. Do not add speculative flexibility,
   abstractions, or unrelated cleanup.
+- Prioritize reliable main search features over obscure compatibility options.
+  The target is good enough for practical search, not perfect Searchkick parity;
+  keep secondary features documented as follow-up work.
 - Match nearby patterns and keep logic in the layer that owns it. Classes
   stay thin.
 - State material uncertainty before acting.

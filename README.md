@@ -1192,7 +1192,7 @@ aggregations were requested. Array terms count a document once per distinct
 value; numeric metrics use every non-null array value. Numeric ranges count each
 matching document once per bucket. Null values do not create buckets.
 
-Terms, metrics, numeric ranges, and numeric histograms accept `missing:` defaults:
+Terms, metrics, numeric/date ranges, and histograms accept `missing:` defaults:
 
 ```ruby
 Product.search("coffee", aggs: {
@@ -1214,7 +1214,12 @@ PostgreSQL casts the fallback to the column type; incompatible values raise a
 database error. The physical column must exist. Matching rows and filtered
 aggregation `doc_count` do not change. Numeric ranges/histograms count a document
 once per bucket, including duplicate array values and fallback collisions.
-Date range/histogram defaults are not implemented yet.
+For date ranges, put `missing` beside `date_ranges`; for date histograms, put it
+inside `date_histogram`. Timestamp replacements accept Date/Time, ISO8601, or
+epoch milliseconds and use the aggregation time zone for inputs without an
+explicit offset. DATE columns preserve the supplied calendar date; numeric
+epoch replacements use the UTC calendar date. Time zones still control bucket
+boundaries. Elasticsearch date math remains unsupported.
 
 `min_doc_count: 0` reads the model's scoped dictionary so unmatched values can
 produce zero-count buckets. It logs a warning because broad dictionaries cost
@@ -1387,8 +1392,8 @@ not translate that Elasticsearch request body. Use ActiveRecord `group` and
 aggregate queries, explicit SQL subqueries/window functions, or a reviewed
 persisted/generated column for those calculations. This is an API boundary,
 not a claim that PostgreSQL cannot perform grouped or nested calculations.
-Portable options still awaiting implementation are date range/histogram
-`missing` defaults and scalar JSONB aggregation paths.
+Scalar JSONB aggregation paths remain follow-up work. JSONB filtering and scalar
+text search are available independently.
 Check representative plans against TIN's
 [SQL shape guidance](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
 
