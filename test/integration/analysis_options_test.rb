@@ -27,12 +27,6 @@ class AnalysisOptionsTest < TinkickIntegrationTest
     end
   end
 
-  class EnableCitext < ActiveRecord::Migration[8.0]
-    def up
-      enable_extension :citext
-    end
-  end
-
   setup do
     @previous = Tinkick.model_options
     Tinkick.model_options = {}
@@ -153,7 +147,8 @@ class AnalysisOptionsTest < TinkickIntegrationTest
   end
 
   def test_case_sensitive_sql_casts_citext_before_like_and_regex_matching
-    capture_io { EnableCitext.new.migrate(:up) }
+    # CITEXT is installed by a committed test migration: the router cannot
+    # resolve a type created inside this fixture transaction when preparing SQL.
     model = build_model(case_sensitive: true, special_characters: false)
     matcher = Tinkick::TextMatch.new(model)
     @first.update!(name: "JALAPEÑO")
