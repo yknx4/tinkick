@@ -21,14 +21,15 @@ module Tinkick
 
       separator = " #{operator.upcase} "
       if [:word_start, :word_middle, :word_end].include?(match)
-        if settings && settings.first.positive?
-          raise ArgumentError, "Fuzzy partial-word matching is not implemented yet; use misspellings: false"
+        queries = if settings && settings.first.positive?
+          distance, prefix, transpositions = settings
+          words.map { |word| fuzzy_partial(word, match, distance, prefix, transpositions) }
+        else
+          words.map { |word| partial(word, match) }
         end
-        # Searchkick indexes word ngrams from 1 through 50 Unicode characters.
-        return "" if operator == "and" && words.any? { |word| word.length > 50 }
+        return "" if operator == "and" && queries.any?(&:empty?)
 
-        words = words.reject { |word| word.length > 50 }
-        return words.map { |word| partial(word, match) }.join(separator)
+        return queries.reject(&:empty?).join(separator)
       end
 
       exact = words.map { |word| literal(word) }.join(separator)
@@ -71,6 +72,9 @@ module Tinkick
     end
 
     def partial(word, match)
+      # Searchkick indexes word ngrams from 1 through 50 Unicode characters.
+      return "" if word.length > 50
+
       if ["*", "#"].include?(word)
         prefix = match == :word_start ? "" : ".*"
         suffix = match == :word_end ? "" : ".*"
@@ -81,6 +85,42 @@ module Tinkick
       prefix = match == :word_start ? "" : "*"
       suffix = match == :word_end ? "" : "*"
       "#{prefix}#{escaped}#{suffix}"
+    end
+
+    def fuzzy_partial(word, match, distance, prefix, transpositions)
+      unless distance == 1
+        raise ArgumentError, "Partial-word misspellings currently support edit_distance: 0 or 1"
+      end
+
+      characters = word.chars.map { |character| Regexp.escape(character) }
+      alternatives = [characters]
+      fixed = [prefix, characters.length].min
+      (fixed...characters.length).each do |index|
+        substituted = characters.dup
+        substituted[index] = "."
+        alternatives << substituted
+
+        deleted = characters.dup
+        deleted.delete_at(index)
+        alternatives << deleted
+
+        if transpositions && index + 1 < characters.length
+          swapped = characters.dup
+          swapped[index] = characters.fetch(index + 1)
+          swapped[index + 1] = characters.fetch(index)
+          alternatives << swapped
+        end
+      end
+      (fixed..characters.length).each do |index|
+        alternatives << characters.dup.insert(index, ".")
+      end
+
+      patterns = alternatives.select { |candidate| candidate.length.between?(1, 50) }.map(&:join).uniq
+      return "" if patterns.empty?
+
+      leading = match == :word_start ? "" : ".*"
+      trailing = match == :word_end ? "" : ".*"
+      "MATCHES #{leading}(#{patterns.join('|')})#{trailing}"
     end
 
     def fuzzy(word, distance, prefix, transpositions)
