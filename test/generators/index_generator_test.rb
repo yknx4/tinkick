@@ -6,6 +6,10 @@ require "rails/generators/test_case"
 require "generators/tinkick/index/index_generator"
 
 class IndexGeneratorTest < Rails::Generators::TestCase
+  # Declare this locally even when Rails' fixture helpers load after this file.
+  # The schema test commits its migrations and removes its table in ensure.
+  class_attribute :use_transactional_tests, default: false
+
   tests Tinkick::Generators::IndexGenerator
   destination File.expand_path("../../tmp/index_generator", __dir__)
   setup :prepare_destination
@@ -91,6 +95,7 @@ class IndexGeneratorTest < Rails::Generators::TestCase
       raise "Refusing to run tests against #{database.inspect}; expected tinkick_test" unless database == "tinkick_test"
 
       assert connection.extension_enabled?("tin"), "tinkick_test must already have TIN enabled"
+      assert_equal 0, connection.open_transactions, "schema generator tests require committed migrations outside fixture transactions"
 
       schema_migration = Class.new(ActiveRecord::Migration[8.0]) do
         define_method(:change) do
@@ -129,6 +134,7 @@ class IndexGeneratorTest < Rails::Generators::TestCase
       ensure
         capture(:stdout) { schema_migration.migrate(:down) } if table_created
       end
+      refute connection.table_exists?(table_name)
     end
   end
 
