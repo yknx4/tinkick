@@ -176,6 +176,39 @@ class QueryTest < TinkickIntegrationTest
     SearchProduct.logger = original_logger
   end
 
+  def test_multiple_ranked_fields_warn_when_records_are_fetched
+    original_logger = SearchProduct.logger
+    output = StringIO.new
+    SearchProduct.logger = Logger.new(output)
+    search = query("fruit", fields: [:name, :description])
+
+    search.total_count
+    refute_includes(output.string, "Tinkick:")
+    search.records
+    assert_includes(output.string, "multiple fields")
+    assert_includes(output.string, "generated")
+    assert_includes(output.string, "TIN index")
+    assert_includes(output.string, "full scoring")
+
+    output.truncate(0)
+    output.rewind
+    search.records
+    query("apple").records
+    query("*", fields: [:name, :description]).records
+    refute_includes(output.string, "Tinkick:")
+  ensure
+    SearchProduct.logger = original_logger
+  end
+
+  def test_multiple_fields_preserve_matches_with_full_scoring
+    search = query("apple ripe", fields: [:name, :description], operator: "or", order: :name)
+    statements = capture_queries do
+      assert_equal(["Green Pear", "Red Apple"], search.records.map(&:name))
+      assert_equal(search.total_count, search.records.length)
+    end
+    assert(statements.any? { |entry| entry[:sql].include?("tin.full_score(") })
+  end
+
   private
 
   def query(term, **options)

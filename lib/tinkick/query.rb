@@ -67,9 +67,19 @@ module Tinkick
       raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
 
       # Native scoring permits dense-term elision and the index's top-k path.
-      score = @compiled_query == "*" || @compiled_query == "" ? "1.0" : "tin.score(#{quoted_table}.ctid)"
+      score = if @compiled_query == "*" || @compiled_query == ""
+        "1.0"
+      elsif @fields.length > 1
+        # Native dense-term elision can lose matches in TIN's multi-index plan.
+        "tin.full_score(#{quoted_table}.ctid)"
+      else
+        "tin.score(#{quoted_table}.ctid)"
+      end
       if @offset.positive? && score != "1.0"
         @model.logger&.warn("Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Large offsets may be slow.")
+      end
+      if @fields.length > 1 && score != "1.0"
+        @model.logger&.warn("Tinkick: ranking across multiple fields uses full scoring to preserve matching rows and can sort matches instead of using TIN's native top-k path. Consider a stored or generated combined text column with one TIN index when ranking performance matters.")
       end
       order = @order
       ordering = order.nil? ? ["_tinkick_score DESC"] : order_clauses(order)
