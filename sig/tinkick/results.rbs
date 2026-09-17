@@ -43,6 +43,8 @@ module Tinkick
     def aggs: () -> Hash[String, aggregation_result]?
     def aggregations: () -> Hash[String, aggregation_result | Hash[String, Integer | aggregation_result]]?
 
+    def model_name: () -> ActiveModel::Name
+    def entry_name: (?Hash[Symbol, Object?] options) -> String
     def total_count: () -> Integer
     alias total_entries total_count
     def per_page: () -> Integer

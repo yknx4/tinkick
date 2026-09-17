@@ -16,7 +16,7 @@ module Tinkick
     def_delegators :execute, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary,
       :total_count, :current_page, :limit_value, :total_pages, :num_pages, :offset_value,
       :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score,
-      :has_next_page?, :next_cursor, :aggregations
+      :has_next_page?, :next_cursor, :aggregations, :model_name, :entry_name
 
     def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil)
       @model = model

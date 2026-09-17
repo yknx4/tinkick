@@ -48,6 +48,18 @@ module Tinkick
       end
     end
 
+    def model_name
+      @query.model.model_name
+    end
+
+    def entry_name(options = {})
+      name = model_name.human #: String
+      return name.downcase if options.empty?
+
+      default = options[:count] == 1 ? name : name.pluralize
+      model_name.human(options.reverse_merge(default: default))
+    end
+
     def total_count
       @total_entries || @query.total_count
     end
