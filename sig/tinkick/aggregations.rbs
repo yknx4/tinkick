@@ -13,7 +13,7 @@ module Tinkick
 
   type aggregation_date_histogram_bounds = { ?min: aggregation_range_bound, ?max: aggregation_range_bound }
 
-  type aggregation_histogram_options = { ?field: String | Symbol, interval: Numeric, ?offset: Numeric, ?min_doc_count: Integer, ?order: aggregation_order, ?keyed: bool, ?extended_bounds: aggregation_histogram_bounds, ?hard_bounds: aggregation_histogram_bounds }
+  type aggregation_histogram_options = { ?field: String | Symbol, interval: Numeric, ?offset: Numeric, ?missing: filter_scalar, ?min_doc_count: Integer, ?order: aggregation_order, ?keyed: bool, ?extended_bounds: aggregation_histogram_bounds, ?hard_bounds: aggregation_histogram_bounds }
 
   type aggregation_date_histogram_options = { ?field: String | Symbol, ?calendar_interval: String | Symbol, ?fixed_interval: String | Symbol, ?min_doc_count: Integer, ?order: aggregation_order, ?keyed: bool, ?time_zone: String | Integer | Float, ?format: String, ?offset: String | Integer | Float, ?extended_bounds: aggregation_date_histogram_bounds, ?hard_bounds: aggregation_date_histogram_bounds }
 

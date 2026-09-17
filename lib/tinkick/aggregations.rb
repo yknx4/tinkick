@@ -43,8 +43,8 @@ module Tinkick
         if (options.key?(:include) || options.key?(:exclude)) && (range_kinds.any? || metrics.any? || histogram_kinds.any?)
           raise ArgumentError, "include and exclude apply only to terms aggregations"
         end
-        if options.key?(:missing) && (range_kinds.any? || metrics.any? || histogram_kinds.any?)
-          raise ArgumentError, "Top-level missing applies only to terms aggregations; put metric defaults inside the metric hash"
+        if options.key?(:missing) && (options.key?(:date_ranges) || metrics.any? || histogram_kinds.any?)
+          raise ArgumentError, "Top-level missing applies only to terms and numeric ranges; put metric or histogram defaults inside their options hash"
         end
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
         raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
@@ -276,7 +276,7 @@ module Tinkick
     end
 
     def numeric_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :interval, :offset, :min_doc_count, :order, :keyed, :extended_bounds, :hard_bounds]
+      unknown = options.keys - [:field, :interval, :offset, :min_doc_count, :order, :keyed, :extended_bounds, :hard_bounds, :missing]
       raise ArgumentError, "Unknown histogram options: #{unknown.join(", ")}" unless unknown.empty?
 
       interval = numeric_bound(options[:interval])
@@ -293,7 +293,7 @@ module Tinkick
       end
 
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
-      values = values_relation(scope, field)
+      values = values_relation(scope, field, missing: options[:missing])
       unless [:integer, :decimal, :float].include?(@model.columns_hash.fetch(field).type)
         raise InvalidQueryError, "histogram requires a numeric aggregation column"
       end
@@ -459,7 +459,7 @@ module Tinkick
       end.sort_by { |entry| [entry.fetch("from", -Float::INFINITY), entry.fetch("to", Float::INFINITY)] }
       conditions = options[:where]
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
-      values = values_relation(scope, field)
+      values = values_relation(scope, field, missing: options[:missing])
       types = dates ? [:date, :datetime, :timestamp] : [:integer, :decimal, :float]
       unless types.include?(@model.columns_hash.fetch(field).type)
         raise InvalidQueryError, "#{dates ? "date_ranges" : "ranges"} requires a #{dates ? "date or datetime" : "numeric"} aggregation column"

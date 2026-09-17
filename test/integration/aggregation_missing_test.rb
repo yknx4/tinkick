@@ -128,12 +128,66 @@ class AggregationMissingTest < TinkickIntegrationTest
   def test_unsupported_missing_placements_are_rejected
     [
       { ratings: { missing: 0, sum: {} } },
-      { ratings: { missing: 0, ranges: [{ from: 0 }] } },
-      { ratings: { histogram: { interval: 2, missing: 0 } } },
+      { ratings: { missing: 0, histogram: { interval: 2 } } },
       { description: { missing: "2026-01-01", date_ranges: [{ from: "2026-01-01" }] } },
       { description: { date_histogram: { calendar_interval: "day", missing: "2026-01-01" } } },
     ].each do |options|
       assert_raises(ArgumentError, Tinkick::NotImplementedError) { search(**options).aggs }
+    end
+  end
+
+  def test_numeric_range_defaults_count_missing_documents_once_in_each_matching_bucket
+    result = search(ratings: { missing: 0, ranges: [
+      { key: "low", from: 0, to: 4 }, { key: "high", from: 4 }, { key: "all", from: 0, to: 8 },
+    ] }).aggs.fetch("ratings").fetch("buckets")
+
+    assert_equal({ "low" => 4, "high" => 1, "all" => 5 }, result.to_h { |bucket| [bucket.fetch("key"), bucket.fetch("doc_count")] })
+    assert_equal 5, search(ratings: { ranges: [{}], missing: 0 }).total_count
+  end
+
+  def test_numeric_range_defaults_keep_scope_filters_and_keyed_results
+    result = search(ratings: { missing: 4, keyed: true,
+      ranges: [{ key: "below", to: 4 }, { key: "fallback", from: 4, to: 5 }],
+      where: { id: @records.first(3).map(&:id) } }).aggs.fetch("ratings")
+
+    assert_equal 3, result.fetch("doc_count")
+    assert_equal 0, result.fetch("buckets").fetch("below").fetch("doc_count")
+    assert_equal 3, result.fetch("buckets").fetch("fallback").fetch("doc_count")
+  end
+
+  def test_numeric_histogram_defaults_share_buckets_with_existing_values
+    page = search(ratings: { histogram: { interval: 4, missing: 4, min_doc_count: 1 } })
+
+    assert_equal({ 0.0 => 1, 4.0 => 4 }, buckets(page, :ratings))
+    assert_equal 5, page.total_count
+    assert_equal @records.map(&:id).sort, page.map(&:id).sort
+  end
+
+  def test_numeric_histogram_zero_defaults_combine_with_offset_and_keyed_results
+    result = search(ratings: { histogram: { interval: 4, offset: 1, missing: 0, min_doc_count: 1, keyed: true } })
+      .aggs.fetch("ratings").fetch("buckets")
+
+    assert_equal({ "-3.0" => 3, "1.0" => 1, "5.0" => 1 }, result.transform_values { |bucket| bucket.fetch("doc_count") })
+  end
+
+  def test_numeric_histogram_defaults_preserve_dense_bounds_and_aggregation_filters
+    page = search(ratings: { histogram: { interval: 4, missing: 0,
+      extended_bounds: { min: 0, max: 8 }, hard_bounds: { min: 0, max: 8 } },
+      where: { id: @records.first(3).map(&:id) } })
+
+    assert_equal({ 0.0 => 3, 4.0 => 0, 8.0 => 0 }, buckets(page, :ratings))
+    assert_equal 3, page.aggs.fetch("ratings").fetch("doc_count")
+  end
+
+  def test_missing_defaults_do_not_invent_documents_for_empty_numeric_buckets
+    result = search(ratings: { missing: 0, ranges: [{}], where: { id: -1 } }).aggs.fetch("ratings")
+    assert_equal 0, result.fetch("buckets").first.fetch("doc_count")
+    assert_empty buckets(search(ratings: { histogram: { interval: 4, missing: 0 }, where: { id: -1 } }), :ratings)
+
+    [:ranges, :histogram].each do |kind|
+      options = kind == :ranges ? { ranges: [{}], missing: nil } : { histogram: { interval: 4, missing: nil } }
+      expected = kind == :ranges ? { ranges: [{}] } : { histogram: { interval: 4 } }
+      assert_equal search(ratings: expected).aggs, search(ratings: options).aggs
     end
   end
 
