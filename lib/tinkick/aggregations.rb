@@ -29,20 +29,30 @@ module Tinkick
 
         # @type var metric_names: Array[aggregation_metric_name]
         metric_names = [:avg, :cardinality, :max, :min, :sum]
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :histogram, :keyed, :time_zone, :format, *metric_names]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :histogram, :date_histogram, :keyed, :time_zone, :format, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
         metrics = metric_names.select { |metric| options.key?(metric) }
         raise ArgumentError, "Each aggregation must select only one metric" if metrics.length > 1
         range_kinds = [:ranges, :date_ranges].select { |kind| options.key?(kind) }
-        if range_kinds.length + metrics.length + (options.key?(:histogram) ? 1 : 0) > 1
+        histogram_kinds = [:histogram, :date_histogram].select { |kind| options.key?(kind) }
+        if range_kinds.length + metrics.length + histogram_kinds.length > 1
           raise ArgumentError, "Each aggregation must select only one range kind, histogram, or metric"
         end
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
         raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
         raise ArgumentError, "format applies only to date aggregations" if options.key?(:format) && !options.key?(:date_ranges)
 
-        result = if options.key?(:histogram)
+        result = if options.key?(:date_histogram)
+          outer = options.keys - [:date_histogram, :where]
+          unless outer.empty?
+            raise ArgumentError, "Date histogram settings must be inside date_histogram:; only where: may accompany it"
+          end
+          settings = options.fetch(:date_histogram)
+          raise ArgumentError, "date_histogram must be an options hash" unless settings.is_a?(Hash)
+
+          date_histogram((settings[:field] || name).to_s, settings, options[:where])
+        elsif options.key?(:histogram)
           outer = options.keys - [:histogram, :where]
           unless outer.empty?
             raise ArgumentError, "Histogram settings must be inside histogram:; only where: may accompany it (unsupported outer options: #{outer.join(", ")})"
@@ -70,6 +80,62 @@ module Tinkick
     end
 
     private
+
+    def date_histogram(field, options, conditions)
+      unknown = options.keys - [:field, :calendar_interval, :min_doc_count, :order, :keyed]
+      raise ArgumentError, "Unknown date histogram options: #{unknown.join(", ")}" unless unknown.empty?
+
+      interval = options[:calendar_interval].to_s
+      aliases = { "1s" => "second", "1m" => "minute", "1h" => "hour", "1d" => "day", "1w" => "week", "1M" => "month", "1q" => "quarter", "1y" => "year", "months" => "month", "years" => "year" }
+      unit = aliases.fetch(interval, interval)
+      unless ["second", "minute", "hour", "day", "week", "month", "quarter", "year"].include?(unit)
+        raise ArgumentError, "calendar_interval must be one second, minute, hour, day, week, month, quarter, or year"
+      end
+      minimum = options.fetch(:min_doc_count, 0)
+      raise ArgumentError, "Date histogram min_doc_count must be a nonnegative integer" unless minimum.is_a?(Integer) && minimum >= 0
+      raise ArgumentError, "Date histogram keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
+
+      scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
+      values = values_relation(scope, field)
+      column = @model.columns_hash.fetch(field)
+      unless [:date, :datetime, :timestamp].include?(column.type)
+        raise InvalidQueryError, "date_histogram requires a date or datetime aggregation column"
+      end
+      value = column.sql_type.include?("with time zone") ? "_tinkick_value AT TIME ZONE 'UTC'" : "_tinkick_value::timestamp"
+      dates = @model.unscoped.from(values, :tinkick_values)
+        .where(Arel.sql("_tinkick_value IS NOT NULL"))
+        .select(Arel.sql("date_trunc(?, #{value}) AS _tinkick_date, _tinkick_document_id", unit))
+      counts = @model.unscoped.from(dates, :tinkick_dates)
+        .group(Arel.sql("_tinkick_date"))
+        .select(Arel.sql("_tinkick_date, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count"))
+      query = if minimum.zero?
+        @model.logger&.warn("Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the matching date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
+        step = unit == "quarter" ? "3 months" : "1 #{unit}"
+        bounds = @model.unscoped.from("tinkick_date_counts")
+          .select(Arel.sql("MIN(_tinkick_date) AS lower, MAX(_tinkick_date) AS upper, ?::interval AS step", step))
+        @model.unscoped.with(tinkick_date_counts: counts)
+          .from(bounds, :tinkick_bounds)
+          .joins("CROSS JOIN LATERAL generate_series(lower, upper, step) AS tinkick_series(_tinkick_date)")
+          .joins("LEFT JOIN tinkick_date_counts USING (_tinkick_date)")
+          .select(Arel.sql("(EXTRACT(EPOCH FROM _tinkick_date) * 1000)::bigint AS _tinkick_key, COALESCE(_tinkick_count, 0) AS _tinkick_count"))
+      else
+        @model.unscoped.from(counts, :tinkick_date_counts)
+          .where(Arel.sql("_tinkick_count >= ?", minimum))
+          .select(Arel.sql("(EXTRACT(EPOCH FROM _tinkick_date) * 1000)::bigint AS _tinkick_key, _tinkick_count"))
+      end
+      query = query.order(Arel.sql(order_sql(options.fetch(:order, { _key: :asc }))))
+      # @type var rows: Array[{ "_tinkick_key" => Integer, "_tinkick_count" => Integer }]
+      rows = @model.with_connection { |connection| connection.select_all(query).to_a }
+      formatter = AggregationDate.new
+      buckets = rows.map do |row|
+        key = row.fetch("_tinkick_key")
+        { "key" => key, "key_as_string" => formatter.format(key.to_f), "doc_count" => row.fetch("_tinkick_count") }
+      end
+      # @type var result: aggregation_date_histogram
+      result = { "buckets" => options[:keyed] ? buckets.to_h { |bucket| [bucket.fetch("key_as_string"), bucket] } : buckets }
+      result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
+      result
+    end
 
     def numeric_histogram(field, options, conditions)
       unknown = options.keys - [:field, :interval, :offset, :min_doc_count, :order, :keyed, :extended_bounds, :hard_bounds]
