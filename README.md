@@ -1192,17 +1192,19 @@ aggregations were requested. Array terms count a document once per distinct
 value; numeric metrics use every non-null array value. Numeric ranges count each
 matching document once per bucket. Null values do not create buckets.
 
-Terms and metrics accept `missing:` defaults:
+Terms, metrics, numeric ranges, and numeric histograms accept `missing:` defaults:
 
 ```ruby
 Product.search("coffee", aggs: {
   category: {missing: "Uncategorized"},
-  average_price: {avg: {field: :price, missing: 0}}
+  average_price: {avg: {field: :price, missing: 0}},
+  price_ranges: {field: :price, ranges: [{to: 10}, {from: 10}], missing: 0},
+  price_buckets: {histogram: {field: :price, interval: 10, missing: 0}}
 })
 ```
 
-Put the fallback beside `field` for terms and inside the metric hash for
-`avg`/`min`/`max`/`sum`/`cardinality`. Native SQL `COALESCE` replaces null
+Put the fallback beside `field` for terms/ranges and inside the histogram or
+metric hash for `avg`/`min`/`max`/`sum`/`cardinality`. Native SQL `COALESCE` replaces null
 values. An empty or all-null array contributes one fallback per document;
 a populated array uses its non-null values without adding the fallback.
 Empty strings remain values, and a fallback equal to an existing value shares
@@ -1210,8 +1212,9 @@ its bucket. The fallback also applies to the zero-count dictionary and is
 subject to `include`/`exclude`. `missing: nil` leaves normal behavior unchanged.
 PostgreSQL casts the fallback to the column type; incompatible values raise a
 database error. The physical column must exist. Matching rows and filtered
-aggregation `doc_count` do not change. Range and histogram defaults are not
-implemented yet.
+aggregation `doc_count` do not change. Numeric ranges/histograms count a document
+once per bucket, including duplicate array values and fallback collisions.
+Date range/histogram defaults are not implemented yet.
 
 `min_doc_count: 0` reads the model's scoped dictionary so unmatched values can
 produce zero-count buckets. It logs a warning because broad dictionaries cost
@@ -1384,8 +1387,8 @@ not translate that Elasticsearch request body. Use ActiveRecord `group` and
 aggregate queries, explicit SQL subqueries/window functions, or a reviewed
 persisted/generated column for those calculations. This is an API boundary,
 not a claim that PostgreSQL cannot perform grouped or nested calculations.
-Portable options still awaiting implementation are range/histogram `missing`
-defaults and flat JSONB aggregation paths.
+Portable options still awaiting implementation are date range/histogram
+`missing` defaults and scalar JSONB aggregation paths.
 Check representative plans against TIN's
 [SQL shape guidance](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
 
