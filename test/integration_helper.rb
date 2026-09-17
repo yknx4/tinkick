@@ -3,6 +3,7 @@
 require_relative "test_helper"
 require "active_record"
 require "active_support/test_case"
+require_relative "support/backend"
 
 # Rails' test helper includes these callbacks on this same class. Including them
 # on a subclass first would run fixture setup and teardown twice after app boot.
@@ -14,7 +15,7 @@ ActiveRecord::Base.with_connection do |connection|
   database = connection.select_value("SELECT current_database()")
   raise "Refusing to run tests against #{database.inspect}; expected tinkick_test" unless database == "tinkick_test"
 
-  raise "tinkick_test requires the TIN extension" unless connection.extension_enabled?("tin")
+  raise "tinkick_test requires TIN or Lead extension files installed on the server" unless connection.extension_available?("tin")
 
   ActiveRecord::MigrationContext.new(File.expand_path("db/migrate", __dir__)).migrate
 end
