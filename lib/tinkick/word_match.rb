@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "json"
 require_relative "extensions"
 require_relative "functions"
 require_relative "search_field"
@@ -148,43 +147,7 @@ module Tinkick
     public
 
     def index_analysis(field_name, field)
-      expression = field.canonical_expression if field.json?
-      indexes = @model.with_connection do |connection|
-        connection.select_all(Arel.sql(<<~SQL, @model.table_name)).to_a
-          SELECT attribute.attname AS column_name,
-            pg_catalog.pg_get_expr(index.indexprs, index.indrelid) AS expression,
-            array_to_json(index_class.reloptions)::text AS options
-          FROM pg_catalog.pg_index AS index
-          JOIN pg_catalog.pg_class AS index_class ON index_class.oid = index.indexrelid
-          JOIN pg_catalog.pg_am AS access_method ON access_method.oid = index_class.relam
-          LEFT JOIN pg_catalog.pg_attribute AS attribute
-            ON attribute.attrelid = index.indrelid AND attribute.attnum = index.indkey[0]
-          WHERE index.indrelid = pg_catalog.to_regclass(?)
-            AND access_method.amname = 'tin' AND index.indisvalid AND index.indisready
-            AND index.indpred IS NULL AND index.indnkeyatts = 1
-        SQL
-      end
-      configurations = indexes.filter_map do |index|
-        matching = field.json? ? index["expression"] == expression : index["column_name"] == field_name
-        next unless matching
-
-        options = index["options"]
-        values = options.is_a?(String) ? JSON.parse(options) : [] #: Array[String]
-        analysis = ANALYSIS_DEFAULTS.dup
-        values.each do |option|
-          key, value = option.split("=", 2)
-          analysis[key] = value if key && value && analysis.key?(key)
-        end
-        analysis
-      end.uniq
-      if configurations.empty?
-        raise Error, "#{@model.name}.#{field_name} requires a valid, nonpartial TIN index for token matching; add it with a Rails migration"
-      end
-      if configurations.length > 1
-        raise Error, "#{@model.name}.#{field_name} has TIN indexes with conflicting tokenization options; use the same analysis configuration for this indexed source"
-      end
-
-      configurations.fetch(0)
+      @model.tinkick_index_analysis(field_name, field)
     end
   end
 end

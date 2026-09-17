@@ -278,7 +278,8 @@ module Tinkick
           elsif two_edit_word?(mode, misspellings)
             native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings))
           else
-            compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings)
+            analysis = @model.tinkick_index_analysis(name, field)
+            compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
             compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded && !compiled.empty?
             if [:word_start, :word_middle, :word_end].include?(mode) && misspellings != false && compiled.include?("MATCHES")
               @fuzzy_partial = true

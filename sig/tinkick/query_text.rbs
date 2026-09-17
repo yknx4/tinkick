@@ -6,7 +6,7 @@ module Tinkick
 
     def initialize: (ActiveRecord::ConnectionAdapters::AbstractAdapter connection) -> void
 
-    def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: misspellings) -> String
+    def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: misspellings, ?analysis: Hash[String, String]) -> String
 
     def exclusion: (String term, words: Array[String], match: Symbol) -> String
 

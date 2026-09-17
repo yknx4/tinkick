@@ -8,14 +8,14 @@ module Tinkick
       @connection = connection
     end
 
-    def compile(term, operator: "and", match: :word, misspellings: false)
+    def compile(term, operator: "and", match: :word, misspellings: false, analysis: {})
       raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(operator)
       raise ArgumentError, "Unsupported match mode: #{match.inspect}" unless [:word, :phrase, :word_start, :word_middle, :word_end].include?(match)
       settings = match == :phrase ? nil : fuzzy_settings(misspellings)
 
       return "*" if term == "*"
 
-      words = tokens(term)
+      words = tokens(term, analysis: analysis)
       return "" if words.empty?
       return quote(term) if match == :phrase
 
@@ -96,7 +96,7 @@ module Tinkick
       # Searchkick indexes word ngrams from 1 through 50 Unicode characters.
       return "" if word.length > 50
 
-      if ["*", "#"].include?(word)
+      unless /\A[\p{L}\p{M}\p{N}_]+\z/.match?(word) && word == word.downcase
         prefix = match == :word_start ? "" : ".*"
         suffix = match == :word_end ? "" : ".*"
         return "MATCHES #{prefix}#{Regexp.escape(word)}#{suffix}"

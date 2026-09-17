@@ -11,11 +11,13 @@ class ExclusionTest < TinkickIntegrationTest
         CREATE INDEX index_tinkick_test_products_on_name ON tinkick_test_products USING tin (name)
         WITH (tokenizer = whitespace, case_folding = preserve, accent_folding = preserve)
       SQL
+      SearchProduct.reset_column_information
     end
 
     def down
       remove_index :tinkick_test_products, :name, using: :tin
       add_index :tinkick_test_products, :name, using: :tin
+      SearchProduct.reset_column_information
     end
   end
 

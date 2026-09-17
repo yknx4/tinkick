@@ -2,6 +2,7 @@
 
 require_relative "relation"
 require_relative "search_field"
+require "json"
 
 module Tinkick
   module Model
@@ -77,6 +78,27 @@ module Tinkick
       end
     end
 
+    def tinkick_index_analysis(field_name, field)
+      # @type self: singleton(ActiveRecord::Base)
+      schema = tinkick_schema
+      cached = schema[:analysis][field_name]
+      return cached if cached
+
+      expression = field.canonical_expression if field.json?
+      configurations = schema[:index_configurations].filter_map do |index|
+        matching = field.json? ? index[:expression] == expression : index[:column_name] == field_name
+        index[:analysis] if matching
+      end.uniq
+      if configurations.empty?
+        raise Error, "#{name}.#{field_name} requires a valid, nonpartial TIN index for token matching; add it with a Rails migration"
+      end
+      if configurations.length > 1
+        raise Error, "#{name}.#{field_name} has TIN indexes with conflicting tokenization options; use the same analysis configuration for this indexed source"
+      end
+
+      schema[:analysis][field_name] = configurations.fetch(0)
+    end
+
     private
 
     def tinkick_default_fields(schema)
@@ -133,7 +155,8 @@ module Tinkick
         end
 
         indexes = connection.select_all(Arel.sql(<<~SQL, table_name)).to_a
-          SELECT attribute.attname AS column_name, pg_catalog.pg_get_expr(index.indexprs, index.indrelid) AS expression
+          SELECT attribute.attname AS column_name, pg_catalog.pg_get_expr(index.indexprs, index.indrelid) AS expression,
+            array_to_json(index_class.reloptions)::text AS options
           FROM pg_catalog.pg_index AS index
           JOIN pg_catalog.pg_class AS index_class ON index_class.oid = index.indexrelid
           JOIN pg_catalog.pg_am AS access_method ON access_method.oid = index_class.relam
@@ -152,7 +175,21 @@ module Tinkick
           value = index["expression"]
           value if value.is_a?(String)
         end
-        @tinkick_schema = { columns: columns, pool: pool, data_fields: data_fields, index_fields: index_fields, index_expressions: index_expressions }
+        configurations = indexes.map do |index|
+          options = index["options"]
+          values = options.is_a?(String) ? JSON.parse(options) : [] #: Array[String]
+          analysis = WordMatch::ANALYSIS_DEFAULTS.dup
+          values.each do |option|
+            key, value = option.split("=", 2)
+            analysis[key] = value if key && value && analysis.key?(key)
+          end
+          column = index["column_name"]
+          expression = index["expression"]
+          { column_name: column.is_a?(String) ? column : nil,
+            expression: expression.is_a?(String) ? expression : nil, analysis: analysis }
+        end #: Array[index_configuration]
+        @tinkick_schema = { columns: columns, pool: pool, data_fields: data_fields, index_fields: index_fields,
+                           index_expressions: index_expressions, index_configurations: configurations, analysis: {} }
       end
     end
 
