@@ -146,7 +146,7 @@ class AnalysisOptionsTest < TinkickIntegrationTest
     assert_raises(Tinkick::Error) { ids(build_model(match: :text_start), "Jalapeño") }
   end
 
-  def test_case_sensitive_sql_casts_citext_before_like_and_regex_matching
+  def test_case_sensitive_sql_casts_citext_before_native_like_matching
     # CITEXT is installed by a committed test migration: the router cannot
     # resolve a type created inside this fixture transaction when preparing SQL.
     model = build_model(case_sensitive: true, special_characters: false)
@@ -154,7 +154,7 @@ class AnalysisOptionsTest < TinkickIntegrationTest
     @first.update!(name: "JALAPEÑO")
     @second.update!(name: "unrelated")
 
-    [false, true, { edit_distance: 2 }].each do |misspellings|
+    [false, { edit_distance: 0 }].each do |misspellings|
       sql, binds = matcher.predicate('"name"::citext', "JALAPEÑO", match: :text_start, misspellings: misspellings)
       assert_equal [@first.id], model.where(Arel.sql(sql, *binds)).pluck(:id)
       sql, binds = matcher.predicate('"name"::citext', "jalapeño", match: :text_start, misspellings: misspellings)
@@ -174,15 +174,17 @@ class AnalysisOptionsTest < TinkickIntegrationTest
     assert_empty ids(model, "JAL", exclude: "JAL")
   end
 
-  def test_fuzzy_text_uses_selected_normalization_before_fixed_prefix_and_edits
+  def test_native_text_normalization_remains_available_without_fuzzy_edits
     @first.update!(name: "JALAPEÑO")
     @second.update!(name: "unrelated")
     folded = build_model(match: :text_start, case_sensitive: true, special_characters: true)
     preserved = build_model(match: :text_start, case_sensitive: true, special_characters: false)
 
-    assert_equal [@first.id], ids(folded, "JALAPENO", misspellings: { prefix_length: 7 })
-    assert_empty ids(preserved, "JALAPENO", misspellings: { prefix_length: 7 })
-    assert_equal [@first.id], ids(preserved, "JALXPENO", misspellings: { edit_distance: 2 })
+    assert_equal [@first.id], ids(folded, "JALAPENO", misspellings: { edit_distance: 0 })
+    assert_empty ids(preserved, "JALAPENO", misspellings: { edit_distance: 0 })
+    [folded, preserved].each do |model|
+      assert_raises(Tinkick::NotImplementedError) { ids(model, "JALXPENO", misspellings: { edit_distance: 2 }) }
+    end
     assert_empty ids(preserved, "JALXPENO", misspellings: false)
   end
 

@@ -80,9 +80,8 @@ class FieldMatchingTest < TinkickIntegrationTest
 
     output.truncate(0)
     output.rewind
-    search("apxl", match: :word_start, misspellings: true).to_a
-    assert_includes(output.string, "Fuzzy partial")
-    assert_includes(output.string, "dictionary")
+    assert_raises(Tinkick::NotImplementedError) { search("apxl", match: :word_start, misspellings: true).to_a }
+    assert_empty(output.string)
   ensure
     SearchProduct.logger = original_logger
   end

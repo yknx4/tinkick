@@ -17,7 +17,7 @@ class PhraseMisspellingsTest < TinkickIntegrationTest
   def test_phrase_and_two_edit_word_fields_can_share_misspellings_options
     fields = [{ name: :word }, { description: :phrase }]
 
-    assert_equal(["Red Apple"], search("papel", fields: fields, misspellings: { edit_distance: 2 }).map(&:name))
+    assert_equal(["Red Apple"], search("apxxe", fields: fields, misspellings: { edit_distance: 2 }).map(&:name))
     assert_equal(["Green Pear"], search("ripe fruit", fields: fields, misspellings: { edit_distance: 2 }).map(&:name))
   end
 

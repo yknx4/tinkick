@@ -15,11 +15,14 @@ class TextSearchTest < TinkickIntegrationTest
     assert_empty(model.search("riven", match: :text_start, misspellings: false))
   end
 
-  def test_whole_field_default_fuzzy_search_and_filters_share_the_same_sql_scope
+  def test_whole_field_matching_keeps_native_filters_and_rejects_fuzzy_edits
     model = search_model
     product = tinkick_test_products(:red_apple)
     product.update!(name: "Rivendell travel journals")
-    results = model.search("rivendlel", match: :text_start, where: { id: product.id })
+    assert_raises(Tinkick::NotImplementedError) do
+      model.search("rivendlel", match: :text_start, where: { id: product.id }).to_a
+    end
+    results = model.search("rivendell", match: :text_start, misspellings: false, where: { id: product.id })
 
     assert_equal([product.id], results.map(&:id))
     assert_equal(1, results.total_count)
