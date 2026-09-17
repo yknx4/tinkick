@@ -303,12 +303,20 @@ the selection:
 Product.search("apple", load: false, select: [:name, :price])
 Product.search("apple").load(false).select(:name).select(:price).reselect(:name)
 Product.search("apple", load: false, select: {includes: ["name", "meta*"], excludes: "metadata_private"})
+Product.search("apple", load: false,
+  select: {includes: ["metadata.origin.city", "metadata.people.name"], excludes: "*.secret"})
 ```
 
-Source filters support top-level column names and `*` patterns. The primary key
-remains available as result identity; extra keyset ordering columns stay hidden.
-PostgreSQL arrays and complete JSONB columns retain their Ruby values. Nested
-JSON source pruning remains adapter work. An empty list returns identity only;
+Source filters support column names, dotted JSON properties, and `*` patterns.
+Selecting an object includes its descendants; exclusions take precedence.
+Arrays of objects retain their structure, removing objects with no selected
+properties. Nulls, false values, and explicitly selected empty containers survive.
+The primary key remains available as result identity; extra keyset ordering
+columns stay hidden. PostgreSQL arrays and complete JSONB columns retain their
+Ruby values. Nested selection projects eligible root columns in SQL and prunes
+their JSON within the bounded result page. It logs a cost warning because a
+large JSON column still travels over the connection; use stored or generated
+columns for frequent narrow projections. An empty list returns identity only;
 `select: nil`, `true`, or `false` keeps all raw fields, following Searchkick's
 request behavior. Normal model results retain complete attributes and association
 preloading. `select { |record| ... }` performs Enumerable selection on the page.
