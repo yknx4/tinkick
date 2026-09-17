@@ -127,8 +127,8 @@ class FieldBoostTest < ActionDispatch::IntegrationTest
   def test_per_field_misspellings_use_the_name_without_its_boost_suffix
     expected = [document(:typo_exact).id]
 
-    assert_equal expected, search("astrolbae", fields: ["body^2"], misspellings: { fields: ["body"] }).map(&:id)
-    assert_empty search("astrolbae", fields: ["body^2"], misspellings: { fields: [] })
+    assert_equal expected, search("astrolbe", fields: ["body^2"], misspellings: { fields: ["body"] }).map(&:id)
+    assert_empty search("astrolbe", fields: ["body^2"], misspellings: { fields: [] })
     error = assert_raises(ArgumentError) do
       search("astrolbae", fields: ["body^2"], misspellings: { fields: ["body^2"] })
     end
@@ -136,7 +136,7 @@ class FieldBoostTest < ActionDispatch::IntegrationTest
   end
 
   def test_per_field_misspellings_use_the_original_wildcard_without_its_boost_suffix
-    assert_equal [document(:typo_exact).id], search("astrolbae", fields: ["*^2"],
+    assert_equal [document(:typo_exact).id], search("astrolbe", fields: ["*^2"],
       misspellings: { fields: ["*"] }).map(&:id)
     error = assert_raises(ArgumentError) do
       search("astrolbae", fields: ["*^2"], misspellings: { fields: ["*^2"] })
@@ -152,9 +152,9 @@ class FieldBoostTest < ActionDispatch::IntegrationTest
     assert_empty search("forge", fields: fields)
   end
 
-  def test_refined_two_edit_matching_keeps_its_native_candidate_boost
-    baseline = scores(search("astorlbae", fields: ["body^1"], misspellings: { edit_distance: 2 }))
-    boosted = scores(search("astorlbae", fields: ["body^3"], misspellings: { edit_distance: 2 }))
+  def test_native_two_edit_matching_keeps_its_field_boost
+    baseline = scores(search("astrolbae", fields: ["body^1"], misspellings: { edit_distance: 2 }))
+    boosted = scores(search("astrolbae", fields: ["body^3"], misspellings: { edit_distance: 2 }))
 
     assert_equal [document(:typo_exact).id], baseline.keys
     baseline.each do |id, score|

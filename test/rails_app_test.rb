@@ -72,14 +72,19 @@ class RailsAppTest < ActionDispatch::IntegrationTest
     refute TolkienCharacter.where(name: poem).exists?
   end
 
-  def test_typo_transposition_returns_the_intended_character
+  def test_native_one_edit_typo_matching_without_transposition_emulation
     character = tinkick_test_characters(:character_0)
     assert_equal "Hunleth", character.name
+
+    get "/characters.json", params: { q: "Hunlet" }
+
+    assert_response :success
+    assert_equal ["Hunleth"], response.parsed_body.fetch("characters").map { |entry| entry.fetch("name") }
 
     get "/characters.json", params: { q: "Hnuleth" }
 
     assert_response :success
-    assert_equal ["Hunleth"], response.parsed_body.fetch("characters").map { |entry| entry.fetch("name") }
+    assert_empty response.parsed_body.fetch("characters")
   end
 
   def test_countless_metadata_does_not_issue_a_count_query

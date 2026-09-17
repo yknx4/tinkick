@@ -82,7 +82,9 @@ class RelevanceTest < ActionDispatch::IntegrationTest
     expected = [document(:typo_exact).id]
 
     assert_equal expected, search("astrolabe").map(&:id)
-    assert_equal expected, SearchDocument.tinkick_search("astrolbae").map(&:id)
+    assert_equal expected, SearchDocument.tinkick_search("astrolbe").map(&:id)
+    assert_empty SearchDocument.tinkick_search("astrolbae")
+    assert_equal expected, SearchDocument.tinkick_search("astrolbae", misspellings: { edit_distance: 2 }).map(&:id)
     assert_empty search("astrolbae")
   end
 

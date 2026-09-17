@@ -84,9 +84,9 @@ class SqlFieldBoostTest < ActionDispatch::IntegrationTest
     baseline.each { |id, score| assert_score score * 120_000, duplicates.fetch(id) }
   end
 
-  def test_large_weights_keep_refined_two_edit_candidates_and_eligibility
-    baseline = scores(search("astorlbae", fields: ["body^1"], misspellings: { edit_distance: 2 }))
-    large = scores(search("astorlbae", fields: ["body^30000"], misspellings: { edit_distance: 2 }))
+  def test_large_weights_keep_native_two_edit_matches
+    baseline = scores(search("astrolbae", fields: ["body^1"], misspellings: { edit_distance: 2 }))
+    large = scores(search("astrolbae", fields: ["body^30000"], misspellings: { edit_distance: 2 }))
 
     assert_equal [tinkick_test_documents(:typo_exact).id], large.keys
     baseline.each { |id, score| assert_score score * 30_000, large.fetch(id) }

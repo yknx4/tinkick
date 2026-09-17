@@ -39,7 +39,9 @@ class StressTest < ActiveSupport::TestCase
 
     assert_equal([9_997, 9_998, 9_999], search("Gondolin sentries").map(&:id).sort)
     assert_equal([9_997], search("Gondolin sentries", match: :phrase).map(&:id))
-    assert_equal([10_000], SearchDocument.search("astrolbae", limit: 10).map(&:id))
+    assert_equal([10_000], SearchDocument.search("astrolbe", limit: 10).map(&:id))
+    assert_empty(SearchDocument.search("astrolbae", limit: 10))
+    assert_equal([10_000], SearchDocument.search("astrolbae", misspellings: { edit_distance: 2 }, limit: 10).map(&:id))
     assert_empty(search("astrolbae"))
     assert_equal([10_000], search("astrola", match: :word_start).map(&:id))
     assert_equal([10_000], search("Navigation workshop", fields: [:title], match: :exact).map(&:id))
