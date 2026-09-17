@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: tinkick-lead:ci
+    pull_policy: never
+    environment:
+      POSTGRES_DB: tinkick_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: tinkick-ci-only
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d tinkick_test"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+    shm_size: 256mb
