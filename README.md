@@ -946,6 +946,10 @@ columns, composite primary keys, offset, page greater than one, and padding are
 rejected. Add appropriate ordinary indexes for the chosen order; arbitrary
 column sorts are not promised TIN top-k performance.
 
+Integer-backed Rails enum columns use their stored integer order and cursor
+values. Both model and raw results retain the enum labels; projecting the enum
+out of raw results still preserves its hidden cursor value.
+
 A cursor is an encoded position, not a signature, authorization token, or
 snapshot. Reapply the same query, order, filters, and tenant restrictions on every
 request. Concurrent changes to sort values can affect traversal. Explicit totals
