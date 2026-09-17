@@ -10,6 +10,7 @@ require_relative "tinkick/highlighter"
 require_relative "tinkick/results"
 require_relative "tinkick/relation"
 require_relative "tinkick/model"
+require_relative "tinkick/reranking"
 require "active_support/lazy_load_hooks"
 
 module Tinkick

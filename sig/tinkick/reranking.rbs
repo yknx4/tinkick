@@ -1,0 +1,7 @@
+module Tinkick
+  type reranked_result = { result: Object?, score: Float }
+
+  module Reranking
+    def self.rrf: (_ToAry[Object?] first_ranking, *_ToAry[Object?] rankings, ?k: Integer | Float) -> Array[reranked_result]
+  end
+end
