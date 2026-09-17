@@ -3,6 +3,7 @@
 require_relative "extensions"
 require_relative "functions"
 require_relative "search_field"
+require "json"
 
 module Tinkick
   class WordMatch
@@ -25,10 +26,7 @@ module Tinkick
       field = SearchField.new(@model, field_name)
       analysis = index_analysis(field_name, field)
       @model.with_connection do |connection|
-        options = analysis.map do |key, value|
-          argument = key == "max_token_bytes" ? Integer(value, 10) : value
-          ", #{key} => #{connection.quote(argument)}"
-        end.join
+        options = tokenizer_options(connection, analysis)
         words = connection.select_values(Arel.sql(<<~SQL, term)).map(&:to_s)
           SELECT tin.tokenize(?#{options}) FROM pg_catalog.pg_extension WHERE extname = 'tin'
         SQL
@@ -43,14 +41,7 @@ module Tinkick
         end
         next ["FALSE", []] if words.empty?
 
-        function = if match == :word && (distance != 2 || !transpositions)
-          Functions.require_edit_distance!(@model)
-        elsif transpositions
-          Functions.require!(@model)
-        else
-          schema = Extensions.require!(@model, "fuzzystrmatch")
-          "#{connection.quote_column_name(schema)}.levenshtein_less_equal"
-        end
+        function = distance_function(connection, match, distance, transpositions)
         candidates = words.map { |word| candidate(word, prefix, match, distance, transpositions) }.join(" #{operator.upcase} ")
         candidates = "(#{candidates}) AND NOT (#{excluded})" if excluded
         binds = [candidates] #: Array[filter_scalar]
@@ -68,7 +59,80 @@ module Tinkick
       end
     end
 
+    def highlight_query(field_name, term, texts:, match:, misspellings:)
+      return "" if texts.all?(&:nil?)
+
+      unless [:word, :word_start, :word_middle, :word_end].include?(match)
+        raise ArgumentError, "Unsupported token match mode: #{match.inspect}"
+      end
+      distance, prefix, transpositions = settings(misspellings, match)
+      field = SearchField.new(@model, field_name)
+      analysis = index_analysis(field_name, field)
+      @model.with_connection do |connection|
+        options = tokenizer_options(connection, analysis)
+        function = distance_function(connection, match, distance, transpositions)
+        fixed = "LEAST(#{prefix}, char_length(tinkick_query_tokens.value))"
+        value = "tinkick_page_tokens.value"
+        joins = ""
+        if match != :word
+          minimum = "GREATEST(1, char_length(tinkick_query_tokens.value) - 2, #{fixed})"
+          maximum = "LEAST(50, char_length(tinkick_query_tokens.value) + 2, char_length(tinkick_page_tokens.value))"
+          joins = "CROSS JOIN LATERAL generate_series(#{minimum}, #{maximum}) AS tinkick_lengths(length)"
+          if match == :word_middle
+            joins += " CROSS JOIN LATERAL generate_series(1, char_length(tinkick_page_tokens.value) - tinkick_lengths.length + 1) AS tinkick_offsets(position)"
+          end
+          position = case match
+          when :word_start then "1"
+          when :word_end then "char_length(tinkick_page_tokens.value) - tinkick_lengths.length + 1"
+          else "tinkick_offsets.position"
+          end
+          value = "substring(tinkick_page_tokens.value FROM #{position} FOR tinkick_lengths.length)"
+        end
+        arguments = "substring(#{value} FROM #{fixed} + 1), substring(tinkick_query_tokens.value FROM #{fixed} + 1), #{distance}"
+        arguments += ", #{transpositions}" if function == "tinkick.edit_distance"
+        binds = [term, JSON.generate(texts)].map do |text|
+          ActiveRecord::Relation::QueryAttribute.new("highlight", text, ActiveRecord::Type::String.new)
+        end
+        @model.logger&.warn("Tinkick: refined highlighting tokenizes returned page text and applies SQL edit distance. This adds one eligibility query before highlighting; long fields and word_middle matching can be expensive.")
+        tokens = connection.select_values(<<~SQL, "Tinkick Refined Highlight", binds)
+          WITH tinkick_query_tokens AS MATERIALIZED (
+            SELECT tin.tokenize($1#{options}) AS value
+            FROM pg_catalog.pg_extension WHERE extname = 'tin'
+          ), tinkick_page_tokens AS MATERIALIZED (
+            SELECT DISTINCT tin.tokenize(input.text#{options}) AS value
+            FROM pg_catalog.pg_extension
+            CROSS JOIN LATERAL jsonb_array_elements_text($2::jsonb) AS input(text)
+            WHERE extname = 'tin'
+          )
+          SELECT DISTINCT tinkick_page_tokens.value
+          FROM tinkick_page_tokens CROSS JOIN tinkick_query_tokens
+          #{joins}
+          WHERE left(#{value}, #{fixed}) COLLATE "C" = left(tinkick_query_tokens.value, #{fixed}) COLLATE "C"
+            AND #{function}(#{arguments}) <= #{distance}
+        SQL
+        tokens.map(&:to_s).sort.map { |token| "(MATCHES #{Regexp.escape(token)})" }.join(" OR ")
+      end
+    end
+
     private
+
+    def tokenizer_options(connection, analysis)
+      analysis.map do |key, value|
+        argument = key == "max_token_bytes" ? Integer(value, 10) : value
+        ", #{key} => #{connection.quote(argument)}"
+      end.join
+    end
+
+    def distance_function(connection, match, distance, transpositions)
+      if match == :word && (distance != 2 || !transpositions)
+        Functions.require_edit_distance!(@model)
+      elsif transpositions
+        Functions.require!(@model)
+      else
+        schema = Extensions.require!(@model, "fuzzystrmatch")
+        "#{connection.quote_column_name(schema)}.levenshtein_less_equal"
+      end
+    end
 
     def settings(options, match)
       options = { transpositions: true } if options == true
