@@ -1,0 +1,51 @@
+module Tinkick
+  class RegexAutomaton
+    type edge = [ Integer, Integer, Integer ]
+    type graph = Array[Array[edge]]
+    type states = Hash[Integer, bool]
+
+    MAX_CODEPOINT: Integer
+
+    class Work
+      @remaining: Integer
+      def initialize: (?Integer limit) -> void
+      def consume: (?Integer amount) -> void
+    end
+
+    @accepting: states
+    attr_reader edges: graph
+    attr_reader finals: Array[Integer]
+    attr_reader work: Work
+
+    def initialize: (graph edges, Array[Integer] finals, ?work: Work) -> void
+    def self.empty: (?work: Work) -> RegexAutomaton
+    def self.epsilon: (?work: Work) -> RegexAutomaton
+    def self.characters: (Integer lower, ?Integer upper, ?work: Work) -> RegexAutomaton
+    def self.any: (?work: Work) -> RegexAutomaton
+    def self.all: (?work: Work) -> RegexAutomaton
+    def self.literal: (String text, ?work: Work) -> RegexAutomaton
+    def self.interval: (Integer lower, Integer upper, ?Integer width, ?work: Work) -> RegexAutomaton
+    def self.fixed_interval: (Integer lower, Integer upper, Integer digits, work: Work) -> RegexAutomaton
+    def self.append: (Array[edge] edges, Integer lower, Integer upper, Integer target) -> void
+    def self.determinize: (graph edges, Hash[Integer, Array[Integer]] epsilon, Array[Integer] finals, Array[Integer] start, work: Work) -> RegexAutomaton
+    def run: (String text) -> bool
+    def accepting?: (Integer state) -> bool
+    def target: (Integer state, Integer point) -> Integer
+    def union: (RegexAutomaton other) -> RegexAutomaton
+    def intersection: (RegexAutomaton other) -> RegexAutomaton
+    def complement: () -> RegexAutomaton
+    def concatenate: (RegexAutomaton other) -> RegexAutomaton
+    def repeat: () -> RegexAutomaton
+    def bounds: (Integer minimum, Integer? maximum) -> RegexAutomaton
+    def epsilon?: () -> bool
+    def universal?: () -> bool
+    def minimize: () -> RegexAutomaton
+
+    private
+
+    def product: (RegexAutomaton other, :union | :intersection operation) -> RegexAutomaton
+    def complete_edges: () -> graph
+    def split_partitions: (Array[Integer] sources, Array[states] partitions, Array[Integer] membership, Array[Integer] queue) -> void
+    def reduced_edges: (graph complete, Array[states] partitions, Array[Integer] membership) -> RegexAutomaton
+  end
+end
