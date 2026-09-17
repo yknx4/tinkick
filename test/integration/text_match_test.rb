@@ -209,20 +209,30 @@ class TextMatchTest < TinkickIntegrationTest
     assert_equal [product.id], ids("😀" * 52, :text_start, misspellings: { edit_distance: 2, transpositions: false })
   end
 
-  def test_fuzzy_text_requires_positive_scaled_similarity_for_short_grams
+  def test_fuzzy_text_preserves_lucene_zero_score_short_gram_matches
     product = tinkick_test_products(:red_apple)
+    other = tinkick_test_products(:green_pear)
     product.update!(name: "ab")
-    tinkick_test_products(:green_pear).update!(name: "zz")
+    other.update!(name: "zz")
+    both = [product.id, other.id].sort
 
-    [1, 2].each do |distance|
-      assert_equal [product.id], ids("a", :text_start, misspellings: { edit_distance: distance })
-      assert_empty ids("b", :text_start, misspellings: { edit_distance: distance })
-      assert_equal [product.id], ids("b", :text_end, misspellings: { edit_distance: distance })
+    # Lucene 9.12.2 FuzzyQuery includes these zero-score hits for 1..50 text grams.
+    [:text_start, :text_middle, :text_end].each do |mode|
+      [1, 2].each do |distance|
+        assert_equal both, ids("a", mode, misspellings: { edit_distance: distance })
+        assert_equal both, ids("b", mode, misspellings: { edit_distance: distance })
+      end
+      assert_equal [product.id], ids("abcd", mode, misspellings: { edit_distance: 2 })
     end
-    assert_empty ids("abcd", :text_start, misspellings: { edit_distance: 2 })
 
     product.update!(name: "a")
-    [1, 2].each { |distance| assert_empty ids("ab", :text_start, misspellings: { edit_distance: distance }) }
+    [:text_start, :text_middle, :text_end].each do |mode|
+      assert_equal [product.id], ids("ab", mode, misspellings: true)
+      assert_equal both, ids("ab", mode, misspellings: { edit_distance: 2 })
+      assert_equal both, ids("ab", mode, misspellings: { edit_distance: 2, transpositions: false })
+      assert_equal [product.id], ids("a", mode, misspellings: { edit_distance: 2, prefix_length: 1 })
+      assert_empty ids("b", mode, misspellings: { edit_distance: 2, prefix_length: 1 })
+    end
   end
 
   def test_two_edit_text_warns_about_gram_enumeration_and_distance_cost

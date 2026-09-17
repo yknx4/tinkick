@@ -58,8 +58,6 @@ module Tinkick
       when :text_end then "char_length(tinkick_text.value) - tinkick_lengths.length + 1"
       else "tinkick_offsets.position"
       end
-      # Lucene requires the edit distance to be less than both full term lengths.
-      allowed = "LEAST(2, #{term.length - 1}, tinkick_lengths.length - 1)"
       sql = <<~SQL
         EXISTS (
           SELECT 1
@@ -68,7 +66,7 @@ module Tinkick
           #{positions}
           CROSS JOIN LATERAL (SELECT substring(tinkick_text.value FROM #{position} FOR tinkick_lengths.length) AS value) AS tinkick_grams
           WHERE left(tinkick_grams.value, #{fixed}) COLLATE "C" = ? COLLATE "C"
-            AND #{function}(substring(tinkick_grams.value FROM #{fixed + 1}), ?, #{allowed}) <= #{allowed}
+            AND #{function}(substring(tinkick_grams.value FROM #{fixed + 1}), ?, 2) <= 2
         )
       SQL
       @model.logger&.warn("Tinkick: whole-field edit_distance: 2 enumerates candidate grams and performs edit-distance comparisons for each row. This can be expensive on long fields or large result sets; inspect EXPLAIN before using it at scale.")
@@ -100,7 +98,7 @@ module Tinkick
       end
 
       patterns = alternatives.select do |candidate|
-        candidate.length.between?(1, 50) && (candidate == characters || (term.length > 1 && candidate.length > 1))
+        candidate.length.between?(1, 50)
       end.map(&:join).uniq
       return if patterns.empty?
 
