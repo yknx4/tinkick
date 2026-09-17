@@ -11,7 +11,7 @@ Baseline: Searchkick 6.1.2 / commit93e901a75b11a25101668a616e006b158251b16e, cur
 
 ## Dependency-ordered feasible adapter work
 
-1. **Finish core result metadata.** scope_results and model_name/entry_name are implemented and tested. Remaining: misspellings? after exact-first retry policy; measured took and error/missing_records semantics. No native TIN gap here.
+1. **Finish core result metadata.** scope_results, missing_records, and model_name/entry_name are implemented and tested. Remaining: misspellings? after exact-first retry policy; measured took and error semantics. No native TIN gap here.
 
 2. **Projection and query option operations.** Top-level select/reselect source filtering, Enumerable block selection, and hidden cursor-key preservation are implemented. Remaining: nested JSON source pruning; only/except on options; wildcard search-field expansion; explicit _score ordering. Model results retain complete attributes according to pinned Searchkick behavior.
 

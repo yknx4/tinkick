@@ -360,10 +360,15 @@ ActiveRecord; `load: false` is **not** a performance recommendation or an extern
 `_source` document. `load` without an argument executes the relation; it is
 different from `load(false)`.
 
+`missing_records` returns `[{id: "123", model: Product}]` for records removed by
+`scope_results` or deleted between search selection and scoped loading. IDs are
+strings, in original page order. Calling it loads and caches that page without
+requesting a count or filling its gaps; ordinary and raw results return `[]`.
+
 ### Metadata still missing
 
 `took`, `response`, `hits`, `with_hit`, `error`,
-`missing_records`, `misspellings?`, suggestions,
+`misspellings?`, suggestions,
 and public highlight result methods are not implemented. Aggregation metadata
 is available through `aggs` and `aggregations`. Searchkick 6 removed
 `each_with_hit` and `with_details`; use `with_hit.each` and `with_highlights` when
