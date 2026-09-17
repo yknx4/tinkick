@@ -496,6 +496,7 @@ use the primary key's actual name for an explicit equivalent filter.
 | Existence | `where(deleted_at: { exists: false })` |
 | LIKE / ILIKE | `where(name: { like: "App%" })`, `where(name: { ilike: "%apple%" })` |
 | Literal field prefix | `where(name: { prefix: "Apple" })` |
+| Whole-value Lucene regexp | `where(name: { regexp: "Moria.*" })` |
 | Boolean OR | `where(_or: [{ in_stock: true }, { backordered: true }])` |
 | Boolean AND / negation | `where(_and: [{ price: { gt: 10 } }, { price: { lt: 50 } }])`, `where(_not: { store_id: 2 })` |
 | Legacy grouped OR | `where(or: [[{ store_id: 1 }, { store_id: 2 }]])` |
@@ -515,7 +516,7 @@ values, allowing ordinary column indexes. Duplicate mappings use the first label
 returned by Rails when a record is reloaded. A label mapped to SQL NULL counts as
 present; an unrecognized stored backing value counts as missing.
 
-Ranges, comparisons, prefix/LIKE/ILIKE, and Ruby Regexp filters operate on those
+Ranges, comparisons, prefix/LIKE/ILIKE, and regexp filters operate on those
 canonical labels too. Ranges use byte ordering, so backing ordinal order cannot
 change the result. These paths evaluate a SQL `CASE` expression and warn about
 their cost; an ordinary backing-column index cannot accelerate that expression.
@@ -569,8 +570,38 @@ ASCII literal characters, but does not fold character ranges or accented letters
 Other Ruby options do not change matching. Unsupported Lucene escapes such as
 `\b` raise `InvalidQueryError`. Patterns are bound SQL values. This path logs a
 scan warning; an optional `pg_trgm` expression index may help suitable patterns,
-but is not required. The raw string `regexp` operator and geospatial filter
-hashes remain implementation work.
+but is not required.
+
+The raw string `regexp` operator matches the whole value and enables Lucene's
+optional syntax:
+
+```ruby
+Product.search("archive", where: { name: { regexp: "Moria.*" } })
+Product.search("archive", where: { name: { regexp: "Moria@&~(.*closed.*)" } })
+Product.search("*", where: { "metadata.code" => { regexp: "room<01-12>" } })
+```
+
+`&` intersects patterns, `~` complements the following expression, `@` accepts
+any string, `#` accepts no string, and `<min-max>` matches a decimal interval.
+Equal-width interval bounds preserve that width. Escape these characters or
+double-quote literal text when they are not operators. `^`/`$` remain literal;
+raw strings do not strip Ruby `\A`/`\z` anchors. See
+[Lucene regexp syntax](https://www.elastic.co/docs/reference/query-languages/query-dsl/regexp-syntax).
+
+Ordinary patterns use PostgreSQL regex. Patterns with optional operators compile
+to a bound transition graph evaluated by recursive SQL. This path logs a warning:
+it walks each candidate value character by character, and long values can make
+it expensive. Use selective TIN/SQL conditions and inspect `EXPLAIN ANALYZE`.
+Neither path requires an optional extension. The graph path does not use a
+`pg_trgm` index.
+
+Array and JSONB patterns must match one string element; intersection cannot
+combine evidence from different elements. JSONB numbers, booleans, and null are
+not converted to text for these filters. Canonical enum labels are supported.
+Invalid patterns, undefined named automata, nesting over 256 groups, or exceeding
+the adapter's compilation-work budget raise `Tinkick::InvalidQueryError`. The
+budget is an adapter resource limit, not Elasticsearch's determinization limit.
+Geospatial filter hashes remain implementation work.
 
 Recipe alternatives, returning ordinary ActiveRecord relations:
 
