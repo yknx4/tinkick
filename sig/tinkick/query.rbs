@@ -75,6 +75,7 @@ module Tinkick
 
     def merge_highlight_spans: (Array[CustomSpans::span] spans) -> Array[CustomSpans::span]
     def measure_page: [T] () { () -> T } -> T
+    def instrument: [T] (:search | :count | :aggregations operation) { () -> T } -> T
 
     def normalize_misspellings: (QueryText::misspellings options, search_fields fields) -> QueryText::misspellings
     def resolve_misspellings: () -> void

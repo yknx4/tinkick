@@ -61,6 +61,40 @@ class InstrumentationTest < TinkickIntegrationTest
     assert_empty other_events
   end
 
+  def test_counts_and_aggregations_emit_distinct_events_only_when_executed
+    search = Product.search("*", aggs: [:name])
+    events = capture_events do
+      2.times { assert_equal 2, search.total_count }
+      2.times { assert_equal 2, search.aggs.fetch("name").fetch("buckets").length }
+    end
+
+    assert_equal ["count.tinkick", "aggregations.tinkick"], events.map(&:name)
+    assert_equal ["#{Product.name} Count", "#{Product.name} Aggregations"], events.map { |event| event.payload.fetch(:name) }
+    assert events.all? { |event| event.payload.fetch(:model) == Product.name }
+  end
+
+  def test_pluck_reports_a_search_without_loading_a_result_page
+    search = Product.search("apple", misspellings: false, load: false)
+    events = capture_events { assert_equal ["Red Apple"], search.pluck(:name) }
+
+    assert_equal ["search.tinkick"], events.map(&:name)
+    assert_equal Product.name, events.first.payload.fetch(:model)
+    assert_equal ["search.tinkick"], capture_events { search.to_a }.map(&:name)
+  end
+
+  def test_failed_counts_report_the_database_exception
+    search = InvalidProduct.search("*", misspellings: false)
+    events = capture_events do
+      Product.transaction(requires_new: true) do
+        assert_raises(ActiveRecord::StatementInvalid) { search.total_count }
+        raise ActiveRecord::Rollback
+      end
+    end
+
+    assert_equal ["count.tinkick"], events.map(&:name)
+    assert_kind_of ActiveRecord::StatementInvalid, events.first.payload.fetch(:exception_object)
+  end
+
   private
 
   def capture_events

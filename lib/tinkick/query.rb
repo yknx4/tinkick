@@ -87,12 +87,14 @@ module Tinkick
     end
 
     def pluck_rows(columns)
-      fields = columns.map { |field| field.to_s }
-      projection = fields.map { |field| Arel.sql(quoted_column(field)) }
-      relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
-      values = read_rows(relation)
-      values = values.first(@limit) if countless?
-      values.map { |row| row.slice(*fields) }
+      instrument(:search) do
+        fields = columns.map { |field| field.to_s }
+        projection = fields.map { |field| Arel.sql(quoted_column(field)) }
+        relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
+        values = read_rows(relation)
+        values = values.first(@limit) if countless?
+        values.map { |row| row.slice(*fields) }
+      end
     end
 
     def countless?
@@ -116,7 +118,7 @@ module Tinkick
     end
 
     def total_count
-      @total_count ||= scope.except(:order, :limit, :offset).count
+      @total_count ||= instrument(:count) { scope.except(:order, :limit, :offset).count }
     end
 
     def misspellings?
@@ -129,29 +131,31 @@ module Tinkick
       return unless spec
       return @aggs if @aggs
 
-      resolve_misspellings
-      specifications = if spec.is_a?(Array)
-        spec.to_h do |field|
-          empty_options = {} #: aggregation_options
-          [field, empty_options]
-        end
-      else
-        spec
-      end
-      base = build_scope(@smart_aggs ? {} : @where)
-      output = {} #: Hash[String, aggregation_result]
-      specifications.each do |name, options|
-        conditions = options[:where] || {}
-        if @smart_aggs
-          other_filters = @where.reject { |field, _value| field.to_s == name.to_s }
-          unless other_filters.empty?
-            conditions = conditions.empty? ? other_filters : @where.merge(conditions)
+      @aggs = instrument(:aggregations) do
+        resolve_misspellings
+        specifications = if spec.is_a?(Array)
+          spec.to_h do |field|
+            empty_options = {} #: aggregation_options
+            [field, empty_options]
           end
+        else
+          spec
         end
-        aggregate_options = options.merge(where: conditions) #: aggregation_options
-        output.merge!(Aggregations.new(@model, base).call({ name => aggregate_options }))
+        base = build_scope(@smart_aggs ? {} : @where)
+        output = {} #: Hash[String, aggregation_result]
+        specifications.each do |name, options|
+          conditions = options[:where] || {}
+          if @smart_aggs
+            other_filters = @where.reject { |field, _value| field.to_s == name.to_s }
+            unless other_filters.empty?
+              conditions = conditions.empty? ? other_filters : @where.merge(conditions)
+            end
+          end
+          aggregate_options = options.merge(where: conditions) #: aggregation_options
+          output.merge!(Aggregations.new(@model, base).call({ name => aggregate_options }))
+        end
+        output
       end
-      @aggs = output
     end
 
     def highlight_fields
@@ -241,12 +245,16 @@ module Tinkick
     end
 
     def measure_page
-      ActiveSupport::Notifications.instrument("search.tinkick", name: "#{@model.name} Search", model: @model.name) do
+      instrument(:search) do
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         value = yield
         @took ||= ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1_000).round
         value
       end
+    end
+
+    def instrument(operation)
+      ActiveSupport::Notifications.instrument("#{operation}.tinkick", name: "#{@model.name} #{operation.capitalize}", model: @model.name) { yield }
     end
 
     def normalize_misspellings(options, fields)
