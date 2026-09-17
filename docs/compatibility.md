@@ -114,9 +114,9 @@ transpositions, and explicit native distance/prefix controls. Native fuzzy terms
 combine with exact swapped terms for distance-one transpositions. Scores remain
 native, without synthetic exact/fuzzy boosts. The user approved omitting the
 implicit Searchkick expansion cap: default TIN results may include additional
-valid typo matches. Per-field fuzzy selection and two-edit word/partial
+valid typo matches. Exact-first below-threshold retry, per-field fuzzy selection, and two-edit word/partial
 transpositions are implemented; two-edit paths use optional SQL refinement with
-cost warnings. Explicit expansion limits, below-count retry, and transpositions
+cost warnings. Explicit expansion limits and transpositions
 above two edits remain adapter work. Literal and distance-one fuzzy keycap emoji
 are covered by real TIN tests.
 

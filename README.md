@@ -389,7 +389,7 @@ requesting a count or filling its gaps; ordinary and raw results return `[]`.
 ### Metadata still missing
 
 `took`, `response`, `hits`, `with_hit`, `error`,
-`misspellings?`, suggestions,
+suggestions,
 and public highlight result methods are not implemented. Aggregation metadata
 is available through `aggs` and `aggregations`. Searchkick 6 removed
 `each_with_hit` and `with_details`; use `with_hit.each` and `with_highlights` when
@@ -523,10 +523,8 @@ Searchkick's implicit three expansions. It may return additional valid typo
 matches. This choice favors TIN performance; numerical scores and tied ordering
 are also allowed to differ. Explicit controls must not be silently ignored.
 
-These controls are **not implemented and currently raise**:
-
-- `max_expansions`, including an explicitly requested value of three.
-- `below`, which needs an exact-first search and conditional fuzzy retry.
+`max_expansions`, including an explicitly requested value of three, remains
+adapter work and currently raises.
 
 Whole-word `edit_distance: 2` with transpositions uses native TIN candidates plus
 bounded SQL verification. Install its optional helper only if this feature is
@@ -549,17 +547,22 @@ candidate query and can differ from Searchkick. Normal distance-one search and
 gem loading do not require this helper. A missing helper raises migration
 guidance only when the corresponding feature is used.
 
-Recipe for application-owned `below` behavior, with two queries when needed:
+Use `below` to enable fuzzy matching only when the exact filtered search has
+fewer than the requested number of matches:
 
 ```ruby
-results = Product.search(user_text, misspellings: false, limit: 20)
-if results.total_count < 5
-  results = Product.search(user_text, misspellings: true, limit: 20)
-end
+results = Product.search(user_text, misspellings: {below: 5}, limit: 20)
+results.misspellings? # whether the fuzzy pass was enabled
 ```
 
-Keep the same filters and fields on both calls. This recipe is not the missing
-fluent `below` option and does not reproduce Searchkick's retry expansion cap.
+The adapter runs one exact-match count capped at the threshold, logs an extra
+query warning, and reuses that decision for records, totals, and aggregations.
+It counts the original filters and exclusions, independently of pagination,
+`scope_results`, and `total_entries`. Numeric strings and floats use Searchkick's
+integer conversion; zero or negative thresholds keep exact matching, while nil
+or false disables the threshold. There is no retry expansion cap or added
+database snapshot. `misspellings?` describes the selected pass, so it can be true
+for exact/phrase modes or `fields: []`; a plain match-all search returns false.
 There is not yet a verified public replacement for an explicit expansion cap;
 retain the old search path if that cap is required for match eligibility.
 
@@ -876,10 +879,17 @@ Product.search("coffee", aggs: {
 Supported calendar units are second, minute, hour, day, week (Monday start),
 month, quarter, and year, including `1s`, `1m`, `1h`, `1d`, `1w`, `1M`, `1q`, and
 `1y` aliases. Buckets contain an epoch-millisecond `key`, ISO8601 `key_as_string`,
-and `doc_count`. Put `min_doc_count`, `order`, and `keyed` inside `date_histogram:`;
+and `doc_count`. For fixed durations, use `fixed_interval: "90m"` instead of
+`calendar_interval`. Fixed intervals support positive integer `ms`, `s`, `m`,
+`h`, and `d` quantities, with buckets anchored at the Unix epoch; `250ms` works
+on both sides of 1970. `micros` and `nanos` durations truncate to whole
+milliseconds and must be at least one millisecond. Fractional quantities and
+calendar units such as months are invalid fixed durations.
+
+Put `min_doc_count`, `order`, and `keyed` inside `date_histogram:`;
 only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
 avoid generating empty buckets. The default logs a warning for small intervals
-over wide date ranges. Fixed intervals, explicit zones, offsets, bounds, custom
+over wide date ranges. Explicit zones, offsets, bounds, custom
 formats, nested aggregations, and additional aggregate options remain adapter
 implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
