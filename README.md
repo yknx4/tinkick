@@ -1165,7 +1165,12 @@ query is insufficient.
 Custom-analysis phrases and changed token-length/grapheme policies still require
 additional span mapping and currently raise an argument error. They are adapter
 work, not an unsupported-TIN claim.
-A model `highlight:` declaration is not yet accepted. See
+Model declarations such as `tinkick searchable: [:name], highlight: [:name]` are
+accepted. Declared highlight fields are checked when the model is searched, with
+a migration error for missing columns. The declaration does not enable query
+highlighting or limit which queried fields can be highlighted: pass `highlight:`
+to the search as shown above. TIN needs no separate term-vector storage for this
+declaration. See
 [TIN highlighting](https://planetscale.com/docs/postgres/search/highlighting).
 
 ## Similar items, geospatial, and vector search
