@@ -1,0 +1,1497 @@
+{
+  "captured_at": "2026-09-17T07:25:52Z",
+  "documents": 10000,
+  "ruby": "4.0.1",
+  "rails": "8.1.3.1",
+  "postgres": "18.6 (Debian 18.6-1.pgdg13+2)",
+  "tin": "1.0.2",
+  "method": "One read-only EXPLAIN ANALYZE BUFFERS immediately after each query on the fixed 10,000-document Faker Tolkien corpus (seed 314159). Warm caches are possible; no concurrency or production latency claim.",
+  "cases": [
+    {
+      "name": "native_relevance",
+      "term": "mithril lantern",
+      "options": {
+        "limit": 2
+      },
+      "sql": "SELECT \"tinkick_test_documents\".*, tin.score(\"tinkick_test_documents\".ctid) AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"tinkick_test_documents\".\"body\" ==> $1)) ORDER BY _tinkick_score DESC LIMIT $2",
+      "binds": [
+        "\"mithril\" AND \"lantern\"",
+        2
+      ],
+      "results": [
+        {
+          "id": 9993,
+          "score": 24.598265
+        },
+        {
+          "id": 9995,
+          "score": 21.482834
+        }
+      ],
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Limit",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 8.2,
+            "Total Cost": 9.26,
+            "Plan Rows": 1,
+            "Plan Width": 361,
+            "Actual Startup Time": 0.303,
+            "Actual Total Time": 0.306,
+            "Actual Rows": 2.0,
+            "Actual Loops": 1,
+            "Disabled": false,
+            "Shared Hit Blocks": 56,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Shared I/O Read Time": 0.0,
+            "Shared I/O Write Time": 0.0,
+            "Local I/O Read Time": 0.0,
+            "Local I/O Write Time": 0.0,
+            "Temp I/O Read Time": 0.0,
+            "Temp I/O Write Time": 0.0,
+            "Plans": [
+              {
+                "Node Type": "Custom Scan",
+                "Parent Relationship": "Outer",
+                "Custom Plan Provider": "Projector",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 8.2,
+                "Total Cost": 9.26,
+                "Plan Rows": 1,
+                "Plan Width": 361,
+                "Actual Startup Time": 0.302,
+                "Actual Total Time": 0.304,
+                "Actual Rows": 2.0,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Predicted Work": {
+                  "Rows": 1.0,
+                  "Mutable Rows": 0.0,
+                  "Posting Pages": 0.0,
+                  "Position Pages": 0.0,
+                  "Full Posting Pages": 0.0,
+                  "Doclen Pages": 0.0,
+                  "Candidate Blocks": 0.0,
+                  "Exact Batches": 0.0,
+                  "Heap Pages": 1.0,
+                  "Filter TIDs": 0.0,
+                  "Hash Rows": 0.0,
+                  "Sort Rows": 0.0,
+                  "Startup Pages": 0.0,
+                  "Driver Rows": 0.0
+                },
+                "Shared Hit Blocks": 56,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Shared I/O Read Time": 0.0,
+                "Shared I/O Write Time": 0.0,
+                "Local I/O Read Time": 0.0,
+                "Local I/O Write Time": 0.0,
+                "Temp I/O Read Time": 0.0,
+                "Temp I/O Write Time": 0.0,
+                "Plans": [
+                  {
+                    "Node Type": "Custom Scan",
+                    "Parent Relationship": "child",
+                    "Custom Plan Provider": "Text Search Scan",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "tinkick_test_documents",
+                    "Alias": "tinkick_test_documents",
+                    "Startup Cost": 8.2,
+                    "Total Cost": 8.2,
+                    "Plan Rows": 1,
+                    "Plan Width": 361,
+                    "Actual Startup Time": 0.296,
+                    "Actual Total Time": 0.297,
+                    "Actual Rows": 2.0,
+                    "Actual Loops": 1,
+                    "Disabled": false,
+                    "Index": "index_tinkick_test_documents_on_body",
+                    "Query": "AND(mithril, lantern)",
+                    "Scoring": "dense-term elision",
+                    "Predicted Work": {
+                      "Rows": 1.0,
+                      "Mutable Rows": 0.11,
+                      "Posting Pages": 6.0,
+                      "Position Pages": 0.0,
+                      "Full Posting Pages": 6.0,
+                      "Doclen Pages": 0.0,
+                      "Candidate Blocks": 0.0,
+                      "Exact Batches": 0.0,
+                      "Heap Pages": 0.0,
+                      "Filter TIDs": 0.0,
+                      "Hash Rows": 0.0,
+                      "Sort Rows": 0.0,
+                      "Startup Pages": 2.0,
+                      "Driver Rows": 9.0
+                    },
+                    "Top K": "2",
+                    "Page Touches": {
+                      "Total": 33,
+                      "Approx MiB": 0.3,
+                      "Metadata": 10,
+                      "Term Map": 12,
+                      "Postings Footer": 4,
+                      "DL Sidecar": 1,
+                      "Liveness Bitmap": 6
+                    },
+                    "Mutable Adapter": {
+                      "Storage Page Touches": 88,
+                      "Storage Approx MiB": 0.7
+                    },
+                    "Shared Hit Blocks": 55,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0,
+                    "Shared I/O Read Time": 0.0,
+                    "Shared I/O Write Time": 0.0,
+                    "Local I/O Read Time": 0.0,
+                    "Local I/O Write Time": 0.0,
+                    "Temp I/O Read Time": 0.0,
+                    "Temp I/O Write Time": 0.0
+                  }
+                ]
+              }
+            ]
+          },
+          "Planning": {
+            "Shared Hit Blocks": 93,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Shared I/O Read Time": 0.0,
+            "Shared I/O Write Time": 0.0,
+            "Local I/O Read Time": 0.0,
+            "Local I/O Write Time": 0.0,
+            "Temp I/O Read Time": 0.0,
+            "Temp I/O Write Time": 0.0
+          },
+          "Planning Time": 0.46,
+          "Triggers": [],
+          "Execution Time": 0.519
+        }
+      ]
+    },
+    {
+      "name": "relevance_countless",
+      "term": "database",
+      "options": {
+        "where": {
+          "category": "technical"
+        },
+        "limit": 20,
+        "countless": true
+      },
+      "sql": "SELECT \"tinkick_test_documents\".*, tin.score(\"tinkick_test_documents\".ctid) AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (\"tinkick_test_documents\".\"category\" = $1) AND ((\"tinkick_test_documents\".\"body\" ==> $2)) ORDER BY _tinkick_score DESC LIMIT $3",
+      "binds": [
+        "technical",
+        "\"database\"",
+        21
+      ],
+      "results": [
+        {
+          "id": 5252,
+          "score": 0.0
+        },
+        {
+          "id": 5256,
+          "score": 0.0
+        },
+        {
+          "id": 5260,
+          "score": 0.0
+        },
+        {
+          "id": 5264,
+          "score": 0.0
+        },
+        {
+          "id": 5268,
+          "score": 0.0
+        },
+        {
+          "id": 5272,
+          "score": 0.0
+        },
+        {
+          "id": 5276,
+          "score": 0.0
+        },
+        {
+          "id": 5280,
+          "score": 0.0
+        },
+        {
+          "id": 5284,
+          "score": 0.0
+        },
+        {
+          "id": 5288,
+          "score": 0.0
+        },
+        {
+          "id": 5292,
+          "score": 0.0
+        },
+        {
+          "id": 5296,
+          "score": 0.0
+        },
+        {
+          "id": 5300,
+          "score": 0.0
+        },
+        {
+          "id": 5304,
+          "score": 0.0
+        },
+        {
+          "id": 5308,
+          "score": 0.0
+        },
+        {
+          "id": 5312,
+          "score": 0.0
+        },
+        {
+          "id": 5316,
+          "score": 0.0
+        },
+        {
+          "id": 5320,
+          "score": 0.0
+        },
+        {
+          "id": 5324,
+          "score": 0.0
+        },
+        {
+          "id": 5328,
+          "score": 0.0
+        }
+      ],
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Limit",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 170.3,
+            "Total Cost": 192.12,
+            "Plan Rows": 21,
+            "Plan Width": 361,
+            "Actual Startup Time": 0.472,
+            "Actual Total Time": 0.499,
+            "Actual Rows": 21.0,
+            "Actual Loops": 1,
+            "Disabled": false,
+            "Shared Hit Blocks": 199,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Shared I/O Read Time": 0.0,
+            "Shared I/O Write Time": 0.0,
+            "Local I/O Read Time": 0.0,
+            "Local I/O Write Time": 0.0,
+            "Temp I/O Read Time": 0.0,
+            "Temp I/O Write Time": 0.0,
+            "Plans": [
+              {
+                "Node Type": "Custom Scan",
+                "Parent Relationship": "Outer",
+                "Custom Plan Provider": "Projector",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 170.3,
+                "Total Cost": 192.12,
+                "Plan Rows": 21,
+                "Plan Width": 361,
+                "Actual Startup Time": 0.471,
+                "Actual Total Time": 0.496,
+                "Actual Rows": 21.0,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Predicted Work": {
+                  "Rows": 21.0,
+                  "Mutable Rows": 0.0,
+                  "Posting Pages": 0.0,
+                  "Position Pages": 0.0,
+                  "Full Posting Pages": 0.0,
+                  "Doclen Pages": 0.0,
+                  "Candidate Blocks": 0.0,
+                  "Exact Batches": 0.0,
+                  "Heap Pages": 20.58,
+                  "Filter TIDs": 0.0,
+                  "Hash Rows": 0.0,
+                  "Sort Rows": 0.0,
+                  "Startup Pages": 0.0,
+                  "Driver Rows": 0.0
+                },
+                "Shared Hit Blocks": 199,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Shared I/O Read Time": 0.0,
+                "Shared I/O Write Time": 0.0,
+                "Local I/O Read Time": 0.0,
+                "Local I/O Write Time": 0.0,
+                "Temp I/O Read Time": 0.0,
+                "Temp I/O Write Time": 0.0,
+                "Plans": [
+                  {
+                    "Node Type": "Custom Scan",
+                    "Parent Relationship": "child",
+                    "Custom Plan Provider": "Projector",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Startup Cost": 170.3,
+                    "Total Cost": 170.3,
+                    "Plan Rows": 21,
+                    "Plan Width": 361,
+                    "Actual Startup Time": 0.468,
+                    "Actual Total Time": 0.481,
+                    "Actual Rows": 21.0,
+                    "Actual Loops": 1,
+                    "Disabled": false,
+                    "Filter": "(category = 'technical'::text)",
+                    "Rows Removed by Filter": 0,
+                    "Purpose": "Branch Verification",
+                    "Predicted Work": {
+                      "Rows": 21.0,
+                      "Mutable Rows": 0.0,
+                      "Posting Pages": 0.0,
+                      "Position Pages": 0.0,
+                      "Full Posting Pages": 0.0,
+                      "Doclen Pages": 0.0,
+                      "Candidate Blocks": 0.0,
+                      "Exact Batches": 0.0,
+                      "Heap Pages": 79.47,
+                      "Filter TIDs": 0.0,
+                      "Hash Rows": 0.0,
+                      "Sort Rows": 0.0,
+                      "Startup Pages": 0.0,
+                      "Driver Rows": 0.0
+                    },
+                    "Shared Hit Blocks": 194,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0,
+                    "Shared I/O Read Time": 0.0,
+                    "Shared I/O Write Time": 0.0,
+                    "Local I/O Read Time": 0.0,
+                    "Local I/O Write Time": 0.0,
+                    "Temp I/O Read Time": 0.0,
+                    "Temp I/O Write Time": 0.0,
+                    "Plans": [
+                      {
+                        "Node Type": "Custom Scan",
+                        "Parent Relationship": "child",
+                        "Custom Plan Provider": "Text Search Scan",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Relation Name": "tinkick_test_documents",
+                        "Alias": "tinkick_test_documents",
+                        "Startup Cost": 85.57,
+                        "Total Cost": 85.57,
+                        "Plan Rows": 21,
+                        "Plan Width": 361,
+                        "Actual Startup Time": 0.466,
+                        "Actual Total Time": 0.468,
+                        "Actual Rows": 21.0,
+                        "Actual Loops": 1,
+                        "Disabled": false,
+                        "Index": "index_tinkick_test_documents_on_body",
+                        "Query": "database",
+                        "Scoring": "dense-term elision",
+                        "Elided Terms": "database",
+                        "Predicted Work": {
+                          "Rows": 2562.0,
+                          "Mutable Rows": 275.69,
+                          "Posting Pages": 3.0,
+                          "Position Pages": 0.0,
+                          "Full Posting Pages": 3.0,
+                          "Doclen Pages": 0.0,
+                          "Candidate Blocks": 0.0,
+                          "Exact Batches": 0.0,
+                          "Heap Pages": 0.0,
+                          "Filter TIDs": 0.0,
+                          "Hash Rows": 0.0,
+                          "Sort Rows": 0.0,
+                          "Startup Pages": 2.0,
+                          "Driver Rows": 2562.0
+                        },
+                        "Top K": "21",
+                        "Candidate Filter": "Parent Projector",
+                        "Page Touches": {
+                          "Total": 24,
+                          "Approx MiB": 0.2,
+                          "Metadata": 10,
+                          "Term Map": 11,
+                          "Postings Footer": 2,
+                          "Liveness Bitmap": 1
+                        },
+                        "Mutable Adapter": {
+                          "Storage Page Touches": 82,
+                          "Storage Approx MiB": 0.6
+                        },
+                        "Shared Hit Blocks": 189,
+                        "Shared Read Blocks": 0,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 0,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 0,
+                        "Shared I/O Read Time": 0.0,
+                        "Shared I/O Write Time": 0.0,
+                        "Local I/O Read Time": 0.0,
+                        "Local I/O Write Time": 0.0,
+                        "Temp I/O Read Time": 0.0,
+                        "Temp I/O Write Time": 0.0
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "Planning": {
+            "Shared Hit Blocks": 127,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Shared I/O Read Time": 0.0,
+            "Shared I/O Write Time": 0.0,
+            "Local I/O Read Time": 0.0,
+            "Local I/O Write Time": 0.0,
+            "Temp I/O Read Time": 0.0,
+            "Temp I/O Write Time": 0.0
+          },
+          "Planning Time": 0.596,
+          "Triggers": [],
+          "Execution Time": 0.797
+        }
+      ]
+    },
+    {
+      "name": "column_keyset",
+      "term": "*",
+      "options": {
+        "where": {
+          "category": "technical"
+        },
+        "order": {
+          "id": "asc"
+        },
+        "limit": 137,
+        "keyset": true
+      },
+      "sql": "SELECT \"tinkick_test_documents\".*, 1.0 AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (\"tinkick_test_documents\".\"category\" = $1) ORDER BY \"tinkick_test_documents\".\"id\" ASC LIMIT $2",
+      "binds": [
+        "technical",
+        138
+      ],
+      "results": [
+        {
+          "id": 4,
+          "score": 1.0
+        },
+        {
+          "id": 8,
+          "score": 1.0
+        },
+        {
+          "id": 12,
+          "score": 1.0
+        },
+        {
+          "id": 16,
+          "score": 1.0
+        },
+        {
+          "id": 20,
+          "score": 1.0
+        },
+        {
+          "id": 24,
+          "score": 1.0
+        },
+        {
+          "id": 28,
+          "score": 1.0
+        },
+        {
+          "id": 32,
+          "score": 1.0
+        },
+        {
+          "id": 36,
+          "score": 1.0
+        },
+        {
+          "id": 40,
+          "score": 1.0
+        },
+        {
+          "id": 44,
+          "score": 1.0
+        },
+        {
+          "id": 48,
+          "score": 1.0
+        },
+        {
+          "id": 52,
+          "score": 1.0
+        },
+        {
+          "id": 56,
+          "score": 1.0
+        },
+        {
+          "id": 60,
+          "score": 1.0
+        },
+        {
+          "id": 64,
+          "score": 1.0
+        },
+        {
+          "id": 68,
+          "score": 1.0
+        },
+        {
+          "id": 72,
+          "score": 1.0
+        },
+        {
+          "id": 76,
+          "score": 1.0
+        },
+        {
+          "id": 80,
+          "score": 1.0
+        },
+        {
+          "id": 84,
+          "score": 1.0
+        },
+        {
+          "id": 88,
+          "score": 1.0
+        },
+        {
+          "id": 92,
+          "score": 1.0
+        },
+        {
+          "id": 96,
+          "score": 1.0
+        },
+        {
+          "id": 100,
+          "score": 1.0
+        },
+        {
+          "id": 104,
+          "score": 1.0
+        },
+        {
+          "id": 108,
+          "score": 1.0
+        },
+        {
+          "id": 112,
+          "score": 1.0
+        },
+        {
+          "id": 116,
+          "score": 1.0
+        },
+        {
+          "id": 120,
+          "score": 1.0
+        },
+        {
+          "id": 124,
+          "score": 1.0
+        },
+        {
+          "id": 128,
+          "score": 1.0
+        },
+        {
+          "id": 132,
+          "score": 1.0
+        },
+        {
+          "id": 136,
+          "score": 1.0
+        },
+        {
+          "id": 140,
+          "score": 1.0
+        },
+        {
+          "id": 144,
+          "score": 1.0
+        },
+        {
+          "id": 148,
+          "score": 1.0
+        },
+        {
+          "id": 152,
+          "score": 1.0
+        },
+        {
+          "id": 156,
+          "score": 1.0
+        },
+        {
+          "id": 160,
+          "score": 1.0
+        },
+        {
+          "id": 164,
+          "score": 1.0
+        },
+        {
+          "id": 168,
+          "score": 1.0
+        },
+        {
+          "id": 172,
+          "score": 1.0
+        },
+        {
+          "id": 176,
+          "score": 1.0
+        },
+        {
+          "id": 180,
+          "score": 1.0
+        },
+        {
+          "id": 184,
+          "score": 1.0
+        },
+        {
+          "id": 188,
+          "score": 1.0
+        },
+        {
+          "id": 192,
+          "score": 1.0
+        },
+        {
+          "id": 196,
+          "score": 1.0
+        },
+        {
+          "id": 200,
+          "score": 1.0
+        },
+        {
+          "id": 204,
+          "score": 1.0
+        },
+        {
+          "id": 208,
+          "score": 1.0
+        },
+        {
+          "id": 212,
+          "score": 1.0
+        },
+        {
+          "id": 216,
+          "score": 1.0
+        },
+        {
+          "id": 220,
+          "score": 1.0
+        },
+        {
+          "id": 224,
+          "score": 1.0
+        },
+        {
+          "id": 228,
+          "score": 1.0
+        },
+        {
+          "id": 232,
+          "score": 1.0
+        },
+        {
+          "id": 236,
+          "score": 1.0
+        },
+        {
+          "id": 240,
+          "score": 1.0
+        },
+        {
+          "id": 244,
+          "score": 1.0
+        },
+        {
+          "id": 248,
+          "score": 1.0
+        },
+        {
+          "id": 252,
+          "score": 1.0
+        },
+        {
+          "id": 256,
+          "score": 1.0
+        },
+        {
+          "id": 260,
+          "score": 1.0
+        },
+        {
+          "id": 264,
+          "score": 1.0
+        },
+        {
+          "id": 268,
+          "score": 1.0
+        },
+        {
+          "id": 272,
+          "score": 1.0
+        },
+        {
+          "id": 276,
+          "score": 1.0
+        },
+        {
+          "id": 280,
+          "score": 1.0
+        },
+        {
+          "id": 284,
+          "score": 1.0
+        },
+        {
+          "id": 288,
+          "score": 1.0
+        },
+        {
+          "id": 292,
+          "score": 1.0
+        },
+        {
+          "id": 296,
+          "score": 1.0
+        },
+        {
+          "id": 300,
+          "score": 1.0
+        },
+        {
+          "id": 304,
+          "score": 1.0
+        },
+        {
+          "id": 308,
+          "score": 1.0
+        },
+        {
+          "id": 312,
+          "score": 1.0
+        },
+        {
+          "id": 316,
+          "score": 1.0
+        },
+        {
+          "id": 320,
+          "score": 1.0
+        },
+        {
+          "id": 324,
+          "score": 1.0
+        },
+        {
+          "id": 328,
+          "score": 1.0
+        },
+        {
+          "id": 332,
+          "score": 1.0
+        },
+        {
+          "id": 336,
+          "score": 1.0
+        },
+        {
+          "id": 340,
+          "score": 1.0
+        },
+        {
+          "id": 344,
+          "score": 1.0
+        },
+        {
+          "id": 348,
+          "score": 1.0
+        },
+        {
+          "id": 352,
+          "score": 1.0
+        },
+        {
+          "id": 356,
+          "score": 1.0
+        },
+        {
+          "id": 360,
+          "score": 1.0
+        },
+        {
+          "id": 364,
+          "score": 1.0
+        },
+        {
+          "id": 368,
+          "score": 1.0
+        },
+        {
+          "id": 372,
+          "score": 1.0
+        },
+        {
+          "id": 376,
+          "score": 1.0
+        },
+        {
+          "id": 380,
+          "score": 1.0
+        },
+        {
+          "id": 384,
+          "score": 1.0
+        },
+        {
+          "id": 388,
+          "score": 1.0
+        },
+        {
+          "id": 392,
+          "score": 1.0
+        },
+        {
+          "id": 396,
+          "score": 1.0
+        },
+        {
+          "id": 400,
+          "score": 1.0
+        },
+        {
+          "id": 404,
+          "score": 1.0
+        },
+        {
+          "id": 408,
+          "score": 1.0
+        },
+        {
+          "id": 412,
+          "score": 1.0
+        },
+        {
+          "id": 416,
+          "score": 1.0
+        },
+        {
+          "id": 420,
+          "score": 1.0
+        },
+        {
+          "id": 424,
+          "score": 1.0
+        },
+        {
+          "id": 428,
+          "score": 1.0
+        },
+        {
+          "id": 432,
+          "score": 1.0
+        },
+        {
+          "id": 436,
+          "score": 1.0
+        },
+        {
+          "id": 440,
+          "score": 1.0
+        },
+        {
+          "id": 444,
+          "score": 1.0
+        },
+        {
+          "id": 448,
+          "score": 1.0
+        },
+        {
+          "id": 452,
+          "score": 1.0
+        },
+        {
+          "id": 456,
+          "score": 1.0
+        },
+        {
+          "id": 460,
+          "score": 1.0
+        },
+        {
+          "id": 464,
+          "score": 1.0
+        },
+        {
+          "id": 468,
+          "score": 1.0
+        },
+        {
+          "id": 472,
+          "score": 1.0
+        },
+        {
+          "id": 476,
+          "score": 1.0
+        },
+        {
+          "id": 480,
+          "score": 1.0
+        },
+        {
+          "id": 484,
+          "score": 1.0
+        },
+        {
+          "id": 488,
+          "score": 1.0
+        },
+        {
+          "id": 492,
+          "score": 1.0
+        },
+        {
+          "id": 496,
+          "score": 1.0
+        },
+        {
+          "id": 500,
+          "score": 1.0
+        },
+        {
+          "id": 504,
+          "score": 1.0
+        },
+        {
+          "id": 508,
+          "score": 1.0
+        },
+        {
+          "id": 512,
+          "score": 1.0
+        },
+        {
+          "id": 516,
+          "score": 1.0
+        },
+        {
+          "id": 520,
+          "score": 1.0
+        },
+        {
+          "id": 524,
+          "score": 1.0
+        },
+        {
+          "id": 528,
+          "score": 1.0
+        },
+        {
+          "id": 532,
+          "score": 1.0
+        },
+        {
+          "id": 536,
+          "score": 1.0
+        },
+        {
+          "id": 540,
+          "score": 1.0
+        },
+        {
+          "id": 544,
+          "score": 1.0
+        },
+        {
+          "id": 548,
+          "score": 1.0
+        }
+      ],
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Limit",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 0.29,
+            "Total Cost": 40.18,
+            "Plan Rows": 138,
+            "Plan Width": 389,
+            "Actual Startup Time": 0.016,
+            "Actual Total Time": 0.213,
+            "Actual Rows": 138.0,
+            "Actual Loops": 1,
+            "Disabled": false,
+            "Shared Hit Blocks": 35,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Shared I/O Read Time": 0.0,
+            "Shared I/O Write Time": 0.0,
+            "Local I/O Read Time": 0.0,
+            "Local I/O Write Time": 0.0,
+            "Temp I/O Read Time": 0.0,
+            "Temp I/O Write Time": 0.0,
+            "Plans": [
+              {
+                "Node Type": "Index Scan",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Scan Direction": "Forward",
+                "Index Name": "tinkick_test_documents_pkey",
+                "Relation Name": "tinkick_test_documents",
+                "Alias": "tinkick_test_documents",
+                "Startup Cost": 0.29,
+                "Total Cost": 722.39,
+                "Plan Rows": 2498,
+                "Plan Width": 389,
+                "Actual Startup Time": 0.015,
+                "Actual Total Time": 0.198,
+                "Actual Rows": 138.0,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Filter": "(category = 'technical'::text)",
+                "Rows Removed by Filter": 414,
+                "Index Searches": 1,
+                "Shared Hit Blocks": 35,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Shared I/O Read Time": 0.0,
+                "Shared I/O Write Time": 0.0,
+                "Local I/O Read Time": 0.0,
+                "Local I/O Write Time": 0.0,
+                "Temp I/O Read Time": 0.0,
+                "Temp I/O Write Time": 0.0
+              }
+            ]
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Shared I/O Read Time": 0.0,
+            "Shared I/O Write Time": 0.0,
+            "Local I/O Read Time": 0.0,
+            "Local I/O Write Time": 0.0,
+            "Temp I/O Read Time": 0.0,
+            "Temp I/O Write Time": 0.0
+          },
+          "Planning Time": 0.102,
+          "Triggers": [],
+          "Execution Time": 0.24
+        }
+      ]
+    },
+    {
+      "name": "category_facets",
+      "term": "*",
+      "options": {
+        "aggs": {
+          "category": {
+            "order": {
+              "_key": "asc"
+            }
+          }
+        },
+        "limit": 1
+      },
+      "sql": "SELECT _tinkick_key, _tinkick_count, SUM(_tinkick_count) OVER () AS _tinkick_total FROM (SELECT _tinkick_value AS _tinkick_key, COUNT(*) AS _tinkick_count FROM (SELECT DISTINCT \"tinkick_test_documents\".\"id\" AS _tinkick_document_id, \"tinkick_test_documents\".\"category\" AS _tinkick_value FROM \"tinkick_test_documents\" WHERE (TRUE) AND (TRUE)) tinkick_values WHERE (_tinkick_value IS NOT NULL) GROUP BY _tinkick_value) tinkick_counts WHERE _tinkick_count >= $1 ORDER BY _tinkick_key ASC LIMIT $2",
+      "binds": [
+        1,
+        1000
+      ],
+      "results": {
+        "category": {
+          "doc_count_error_upper_bound": 0,
+          "sum_other_doc_count": 0,
+          "buckets": [
+            {
+              "key": "control",
+              "doc_count": 8
+            },
+            {
+              "key": "fantasy",
+              "doc_count": 2498
+            },
+            {
+              "key": "food",
+              "doc_count": 2498
+            },
+            {
+              "key": "technical",
+              "doc_count": 2498
+            },
+            {
+              "key": "travel",
+              "doc_count": 2498
+            }
+          ]
+        }
+      },
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Limit",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 919.37,
+            "Total Cost": 919.54,
+            "Plan Rows": 67,
+            "Plan Width": 47,
+            "Actual Startup Time": 9.03,
+            "Actual Total Time": 9.032,
+            "Actual Rows": 5.0,
+            "Actual Loops": 1,
+            "Disabled": false,
+            "Shared Hit Blocks": 514,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Shared I/O Read Time": 0.0,
+            "Shared I/O Write Time": 0.0,
+            "Local I/O Read Time": 0.0,
+            "Local I/O Write Time": 0.0,
+            "Temp I/O Read Time": 0.0,
+            "Temp I/O Write Time": 0.0,
+            "Plans": [
+              {
+                "Node Type": "Sort",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 919.37,
+                "Total Cost": 919.54,
+                "Plan Rows": 67,
+                "Plan Width": 47,
+                "Actual Startup Time": 9.028,
+                "Actual Total Time": 9.03,
+                "Actual Rows": 5.0,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Sort Key": [
+                  "tinkick_test_documents.category"
+                ],
+                "Sort Method": "quicksort",
+                "Sort Space Used": 25,
+                "Sort Space Type": "Memory",
+                "Shared Hit Blocks": 514,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Shared I/O Read Time": 0.0,
+                "Shared I/O Write Time": 0.0,
+                "Local I/O Read Time": 0.0,
+                "Local I/O Write Time": 0.0,
+                "Temp I/O Read Time": 0.0,
+                "Temp I/O Write Time": 0.0,
+                "Plans": [
+                  {
+                    "Node Type": "WindowAgg",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Startup Cost": 917.29,
+                    "Total Cost": 917.34,
+                    "Plan Rows": 67,
+                    "Plan Width": 47,
+                    "Actual Startup Time": 9.017,
+                    "Actual Total Time": 9.02,
+                    "Actual Rows": 5.0,
+                    "Actual Loops": 1,
+                    "Disabled": false,
+                    "Window": "w1 AS ()",
+                    "Storage": "Memory",
+                    "Maximum Storage": 17,
+                    "Shared Hit Blocks": 514,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0,
+                    "Shared I/O Read Time": 0.0,
+                    "Shared I/O Write Time": 0.0,
+                    "Local I/O Read Time": 0.0,
+                    "Local I/O Write Time": 0.0,
+                    "Temp I/O Read Time": 0.0,
+                    "Temp I/O Write Time": 0.0,
+                    "Plans": [
+                      {
+                        "Node Type": "Aggregate",
+                        "Strategy": "Hashed",
+                        "Partial Mode": "Simple",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Startup Cost": 914.0,
+                        "Total Cost": 916.5,
+                        "Plan Rows": 67,
+                        "Plan Width": 15,
+                        "Actual Startup Time": 9.005,
+                        "Actual Total Time": 9.007,
+                        "Actual Rows": 5.0,
+                        "Actual Loops": 1,
+                        "Disabled": false,
+                        "Group Key": [
+                          "tinkick_test_documents.category"
+                        ],
+                        "Filter": "(count(*) >= '1'::bigint)",
+                        "Planned Partitions": 0,
+                        "HashAgg Batches": 1,
+                        "Peak Memory Usage": 32,
+                        "Disk Usage": 0,
+                        "Rows Removed by Filter": 0,
+                        "Shared Hit Blocks": 514,
+                        "Shared Read Blocks": 0,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 0,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 0,
+                        "Shared I/O Read Time": 0.0,
+                        "Shared I/O Write Time": 0.0,
+                        "Local I/O Read Time": 0.0,
+                        "Local I/O Write Time": 0.0,
+                        "Temp I/O Read Time": 0.0,
+                        "Temp I/O Write Time": 0.0,
+                        "Plans": [
+                          {
+                            "Node Type": "Aggregate",
+                            "Strategy": "Hashed",
+                            "Partial Mode": "Simple",
+                            "Parent Relationship": "Outer",
+                            "Parallel Aware": false,
+                            "Async Capable": false,
+                            "Startup Cost": 664.0,
+                            "Total Cost": 764.0,
+                            "Plan Rows": 10000,
+                            "Plan Width": 15,
+                            "Actual Startup Time": 5.523,
+                            "Actual Total Time": 6.991,
+                            "Actual Rows": 10000.0,
+                            "Actual Loops": 1,
+                            "Disabled": false,
+                            "Group Key": [
+                              "tinkick_test_documents.id",
+                              "tinkick_test_documents.category"
+                            ],
+                            "Planned Partitions": 0,
+                            "HashAgg Batches": 1,
+                            "Peak Memory Usage": 665,
+                            "Disk Usage": 0,
+                            "Shared Hit Blocks": 514,
+                            "Shared Read Blocks": 0,
+                            "Shared Dirtied Blocks": 0,
+                            "Shared Written Blocks": 0,
+                            "Local Hit Blocks": 0,
+                            "Local Read Blocks": 0,
+                            "Local Dirtied Blocks": 0,
+                            "Local Written Blocks": 0,
+                            "Temp Read Blocks": 0,
+                            "Temp Written Blocks": 0,
+                            "Shared I/O Read Time": 0.0,
+                            "Shared I/O Write Time": 0.0,
+                            "Local I/O Read Time": 0.0,
+                            "Local I/O Write Time": 0.0,
+                            "Temp I/O Read Time": 0.0,
+                            "Temp I/O Write Time": 0.0,
+                            "Plans": [
+                              {
+                                "Node Type": "Seq Scan",
+                                "Parent Relationship": "Outer",
+                                "Parallel Aware": false,
+                                "Async Capable": false,
+                                "Relation Name": "tinkick_test_documents",
+                                "Alias": "tinkick_test_documents",
+                                "Startup Cost": 0.0,
+                                "Total Cost": 614.0,
+                                "Plan Rows": 10000,
+                                "Plan Width": 15,
+                                "Actual Startup Time": 0.009,
+                                "Actual Total Time": 1.054,
+                                "Actual Rows": 10000.0,
+                                "Actual Loops": 1,
+                                "Disabled": false,
+                                "Shared Hit Blocks": 514,
+                                "Shared Read Blocks": 0,
+                                "Shared Dirtied Blocks": 0,
+                                "Shared Written Blocks": 0,
+                                "Local Hit Blocks": 0,
+                                "Local Read Blocks": 0,
+                                "Local Dirtied Blocks": 0,
+                                "Local Written Blocks": 0,
+                                "Temp Read Blocks": 0,
+                                "Temp Written Blocks": 0,
+                                "Shared I/O Read Time": 0.0,
+                                "Shared I/O Write Time": 0.0,
+                                "Local I/O Read Time": 0.0,
+                                "Local I/O Write Time": 0.0,
+                                "Temp I/O Read Time": 0.0,
+                                "Temp I/O Write Time": 0.0
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "Shared I/O Read Time": 0.0,
+            "Shared I/O Write Time": 0.0,
+            "Local I/O Read Time": 0.0,
+            "Local I/O Write Time": 0.0,
+            "Temp I/O Read Time": 0.0,
+            "Temp I/O Write Time": 0.0
+          },
+          "Planning Time": 0.139,
+          "Triggers": [],
+          "Execution Time": 9.254
+        }
+      ]
+    }
+  ]
+}
