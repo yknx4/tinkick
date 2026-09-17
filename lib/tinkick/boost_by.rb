@@ -6,23 +6,29 @@ module Tinkick
   class BoostBy
     MAX_SCORE = 3.4028234663852886e38
 
-    def initialize(model, specification, boost_where: nil)
+    def initialize(model, specification, boost_where: nil, boost: nil)
       @model = model
       @sums = [] #: Array[[String, String]]
       @multipliers = [] #: Array[[String, String]]
       @warned = false
       @conditions = conditional_functions(boost_where)
       @conditional_scoring = @conditions.any? { |_condition, weight| weight.positive? }
-      return unless specification
+      return unless specification || boost
 
       fields = if specification.is_a?(Array)
         specification.to_h { |field| [field, {}] }
       else
-        specification
+        specification || {}
       end #: Hash[String | Symbol, numeric_boost_options]
       raise ArgumentError, "boost_by must be an array of numeric fields or a field options hash" unless fields.is_a?(Hash)
 
-      fields.each do |name, options|
+      entries = fields.to_a
+      if boost
+        # The legacy alias replaces a sum function, but retains a multiply function.
+        entries.reject! { |name, options| name == boost && options[:boost_mode] != "multiply" }
+        entries << [boost, { factor: 1 }]
+      end
+      entries.each do |name, options|
         unless options.is_a?(Hash) && (options.keys - [:factor, :modifier, :missing, :boost_mode]).empty?
           raise ArgumentError, "boost_by field options must contain only factor, modifier, missing, and boost_mode"
         end

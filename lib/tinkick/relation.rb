@@ -18,7 +18,7 @@ module Tinkick
       :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score,
       :has_next_page?, :next_cursor, :aggregations, :model_name, :entry_name, :missing_records, :misspellings?, :took, :error, :hits, :with_hit, :response, :highlights, :with_highlights
 
-    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, select: nil, exclude: nil, highlight: nil, boost_by: nil, boost_where: nil)
+    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, select: nil, exclude: nil, highlight: nil, boost_by: nil, boost_where: nil, boost: nil)
       @model = model
       @term = term
       @options = {
@@ -26,7 +26,7 @@ module Tinkick
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding,
         match: match, operator: operator, load: load, total_entries: total_entries,
         countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results,
-        select: select, exclude: exclude, highlight: highlight, boost_by: boost_by, boost_where: boost_where,
+        select: select, exclude: exclude, highlight: highlight, boost_by: boost_by, boost_where: boost_where, boost: boost,
       }
       query
     end
@@ -89,6 +89,16 @@ module Tinkick
     def highlight!(value = true)
       check_loaded
       @options[:highlight] = value
+      self
+    end
+
+    def boost(value)
+      clone.boost!(value)
+    end
+
+    def boost!(value)
+      check_loaded
+      @options[:boost] = value
       self
     end
 
@@ -469,7 +479,7 @@ module Tinkick
         fields: @options[:fields], where: @options[:where], order: @options[:order],
         limit: page_size, offset: @options[:keyset] ? nil : (@options[:offset] || (page_number - 1) * page_size + page_padding).to_i,
         match: @options[:match], operator: @options[:operator], misspellings: @options[:misspellings],
-        countless: @options[:countless], keyset: @options[:keyset], after: @options[:after], aggs: @options[:aggs], smart_aggs: @options[:smart_aggs], exclude: @options[:exclude], boost_by: @options[:boost_by], boost_where: @options[:boost_where])
+        countless: @options[:countless], keyset: @options[:keyset], after: @options[:after], aggs: @options[:aggs], smart_aggs: @options[:smart_aggs], exclude: @options[:exclude], boost_by: @options[:boost_by], boost_where: @options[:boost_where], boost: @options[:boost])
     end
 
     def execute

@@ -3,9 +3,9 @@ module Tinkick
 
   type relation_field = search_field | search_fields
 
-  type relation_options = { fields: search_fields, misspellings: QueryText::misspellings, where: filter_conditions, order: query_order?, limit: relation_number, offset: relation_number, page: relation_number, per_page: relation_number, padding: relation_number, match: Symbol, operator: String | Symbol, load: bool?, total_entries: Integer?, countless: bool, keyset: bool, after: String?, aggs: aggregation_spec?, smart_aggs: bool, includes: association_spec?, model_includes: model_associations?, scope_results: result_scope?, select: source_selection?, exclude: exclusion_phrases, highlight: highlight_options, boost_by: numeric_boost_spec, boost_where: where_boosts }
+  type relation_options = { fields: search_fields, misspellings: QueryText::misspellings, where: filter_conditions, order: query_order?, limit: relation_number, offset: relation_number, page: relation_number, per_page: relation_number, padding: relation_number, match: Symbol, operator: String | Symbol, load: bool?, total_entries: Integer?, countless: bool, keyset: bool, after: String?, aggs: aggregation_spec?, smart_aggs: bool, includes: association_spec?, model_includes: model_associations?, scope_results: result_scope?, select: source_selection?, exclude: exclusion_phrases, highlight: highlight_options, boost_by: numeric_boost_spec, boost_where: where_boosts, boost: legacy_boost }
 
-  type relation_option_subset = { ?fields: search_fields, ?misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?select: source_selection?, ?exclude: exclusion_phrases, ?highlight: highlight_options, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts }
+  type relation_option_subset = { ?fields: search_fields, ?misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?select: source_selection?, ?exclude: exclusion_phrases, ?highlight: highlight_options, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost }
 
   class Relation
     include Enumerable[result_record]
@@ -24,7 +24,7 @@ module Tinkick
     attr_reader model: singleton(ActiveRecord::Base)
     alias klass model
 
-    def initialize: (singleton(ActiveRecord::Base) model, ?Object? term, fields: search_fields, misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?select: source_selection?, ?exclude: exclusion_phrases, ?highlight: highlight_options, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, ?Object? term, fields: search_fields, misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?select: source_selection?, ?exclude: exclusion_phrases, ?highlight: highlight_options, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost) -> void
 
     def loaded?: () -> bool
     def only: (*String | Symbol keys) -> Relation
@@ -115,6 +115,8 @@ module Tinkick
     def error: () -> nil
     def hits: () -> Array[search_hit]
     def response: () -> search_response
+    def boost: (legacy_boost value) -> Relation
+    def boost!: (legacy_boost value) -> Relation
     def boost_by: (String | Symbol | Array[String | Symbol] | Hash[String | Symbol, numeric_boost_options] value) -> Relation
     def boost_by!: (String | Symbol | Array[String | Symbol] | Hash[String | Symbol, numeric_boost_options] value) -> Relation
 

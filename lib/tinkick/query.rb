@@ -14,11 +14,11 @@ module Tinkick
   class Query
     attr_reader :model, :limit, :after, :took
 
-    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil)
+    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
-      @boost_by = BoostBy.new(model, boost_by, boost_where: boost_where)
+      @boost_by = BoostBy.new(model, boost_by, boost_where: boost_where, boost: boost)
       @term = term.to_s
       @fields = model.tinkick_expand_fields(fields, match: match).map do |field|
         if field.is_a?(Hash)

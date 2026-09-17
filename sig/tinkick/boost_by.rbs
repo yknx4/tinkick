@@ -7,6 +7,8 @@ module Tinkick
 
   type where_boosts = filter_conditions | false | nil
 
+  type legacy_boost = String | Symbol | false | nil
+
   class BoostBy
     MAX_SCORE: Float
 
@@ -17,7 +19,7 @@ module Tinkick
     @conditions: Array[[ filter_conditions, Float ]]
     @conditional_scoring: bool
 
-    def initialize: (singleton(ActiveRecord::Base) model, numeric_boost_spec specification, ?boost_where: where_boosts) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, numeric_boost_spec specification, ?boost_where: where_boosts, ?boost: legacy_boost) -> void
     def empty?: () -> bool
     def score_sql: (String base_score) -> String
 
