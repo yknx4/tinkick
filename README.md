@@ -73,10 +73,11 @@ gem "tinkick", path: "../tinkick"
 Then run `bundle install`. The repository can also build an installable gem with
 `bundle exec rake build`; publication to RubyGems is a separate release step.
 
-**Rails 8.0 compatibility:** add `gem "json", "< 3"` to the application Gemfile.
-The verified Rails 8.0 encoder passes an option removed by JSON 3. The development
-matrix pairs Rails 8.0 with JSON 2 and Rails 8.1 with JSON 3. Tinkick does not patch
-Rails or impose the older JSON version on Rails 8.1 applications.
+**Rails JSON compatibility:** the verified Rails 8.0.5.1 and 8.1.3.1 releases
+need `gem "json", "< 3"` in the application Gemfile. Rails 8.0 encoding and
+Rails 8.1 JSONB decoding call interfaces changed by JSON 3. The development
+matrix uses JSON 2 for both Rails versions. Tinkick does not patch Rails' JSON
+handling; newer Rails releases should be checked before removing this constraint.
 
 ## Getting started
 
