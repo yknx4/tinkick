@@ -145,6 +145,8 @@ module Tinkick
       SQL
     end
 
+    public
+
     def index_analysis(field_name, field)
       expression = field.canonical_expression if field.json?
       indexes = @model.with_connection do |connection|
@@ -176,7 +178,7 @@ module Tinkick
         analysis
       end.uniq
       if configurations.empty?
-        raise Error, "#{@model.name}.#{field_name} requires a valid, nonpartial TIN index for fuzzy word matching; add it with a Rails migration"
+        raise Error, "#{@model.name}.#{field_name} requires a valid, nonpartial TIN index for token matching; add it with a Rails migration"
       end
       if configurations.length > 1
         raise Error, "#{@model.name}.#{field_name} has TIN indexes with conflicting tokenization options; use the same analysis configuration for this indexed source"

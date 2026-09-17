@@ -3,6 +3,8 @@ module Tinkick
 
   type search_fields = Array[search_field]
 
+  type exclusion_phrases = String | Array[String] | false | nil
+
   type query_order = String | Symbol | Hash[String | Symbol, String | Symbol] | Array[query_order]
 
   class Query
@@ -19,6 +21,7 @@ module Tinkick
     @operator: String
     @match: Symbol
     @misspellings: QueryText::misspellings
+    @exclude: Array[String]
     @records: Array[ActiveRecord::Base]?
     @rows: Array[Hash[String, result_value]]?
     @total_count: Integer?
@@ -35,7 +38,7 @@ module Tinkick
     attr_reader limit: Integer
     attr_reader after: String?
 
-    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: search_fields, ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String | nil, ?operator: String | Symbol, ?match: Symbol, ?misspellings: QueryText::misspellings, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: search_fields, ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String | nil, ?operator: String | Symbol, ?match: Symbol, ?misspellings: QueryText::misspellings, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?exclude: exclusion_phrases) -> void
 
     def records: () -> Array[ActiveRecord::Base]
 
@@ -60,6 +63,7 @@ module Tinkick
 
     def scope: () -> ActiveRecord::Relation
     def build_scope: (filter_conditions conditions) -> ActiveRecord::Relation
+    def excluding_scope: (ActiveRecord::Relation relation, Array[[ String, SearchField, Symbol ]] fields, QueryText compiler) -> [ ActiveRecord::Relation, String? ]
     def two_edit_word?: (Symbol mode) -> bool
     def field_predicate: (SearchField field, filter_predicate predicate) -> filter_predicate
     def matching_scope: (ActiveRecord::Relation relation, Array[filter_predicate] predicates) -> ActiveRecord::Relation

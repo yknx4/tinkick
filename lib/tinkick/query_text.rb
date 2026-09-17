@@ -47,19 +47,38 @@ module Tinkick
       end.join(separator)
     end
 
-    private
+    def exclusion(term, words:, match:)
+      return "" if words.empty?
+      return quote(term) if [:word, :phrase].include?(match)
 
-    def tokens(term)
+      return "" if words.any? { |word| word.length > 50 }
+
+      leading = match == :word_start ? "" : ".*"
+      trailing = match == :word_end ? "" : ".*"
+      patterns = words.map { |word| "MATCHES #{leading}#{Regexp.escape(word)}#{trailing}" }
+      patterns.map { |pattern| "(#{pattern})" }.join(" THEN/0 ")
+    end
+
+    def tokens(term, analysis: {})
+      names = ["tokenizer", "case_folding", "accent_folding", "long_tokens", "max_token_bytes", "graphemes", "position_gaps"]
+      raise ArgumentError, "Unknown TIN analysis options" unless (analysis.keys - names).empty?
+
+      options = analysis.map do |key, value|
+        argument = key == "max_token_bytes" ? Integer(value, 10) : value
+        ", #{key} => #{@connection.quote(argument)}"
+      end.join
       bind = ActiveRecord::Relation::QueryAttribute.new("term", term, ActiveRecord::Type::String.new)
       # The catalog source routes this helper to PostgreSQL on PlanetScale.
       # @type var values: Array[String]
       values = @connection.select_values(
-        "SELECT tin.tokenize($1) FROM pg_extension WHERE extname = 'tin'",
+        "SELECT tin.tokenize($1#{options}) FROM pg_extension WHERE extname = 'tin'",
         "Tinkick Tokenize",
         [bind],
       )
       values
     end
+
+    private
 
     def quote(term)
       escaped = term.gsub(/["\\_\[\]]/) { |character| "\\#{character}" }

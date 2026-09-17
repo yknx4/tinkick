@@ -6,6 +6,7 @@ module Tinkick
 
     def initialize: (singleton(ActiveRecord::Base) model) -> void
     def predicate: (String field_name, String term, misspellings: QueryText::misspellings, ?operator: String, ?match: Symbol) -> filter_predicate
+    def index_analysis: (String field_name, SearchField field) -> Hash[String, String]
 
     private
 
@@ -13,6 +14,5 @@ module Tinkick
     def candidate: (String word, Integer prefix, Symbol match) -> String
     def partial_lengths: (String word, Integer prefix) -> [ Integer, Integer ]
     def refinement: (String column_sql, String options, String word, Integer prefix, Symbol match, String function) -> String
-    def index_analysis: (String field_name, SearchField field) -> Hash[String, String]
   end
 end

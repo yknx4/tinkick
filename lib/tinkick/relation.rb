@@ -18,7 +18,7 @@ module Tinkick
       :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score,
       :has_next_page?, :next_cursor, :aggregations, :model_name, :entry_name
 
-    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil)
+    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, exclude: nil)
       @model = model
       @term = term
       @options = {
@@ -26,6 +26,7 @@ module Tinkick
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding,
         match: match, operator: operator, load: load, total_entries: total_entries,
         countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results,
+        exclude: exclude,
       }
       query
     end
@@ -99,6 +100,18 @@ module Tinkick
     def scope_results!(value)
       check_loaded
       @options[:scope_results] = value
+      self
+    end
+
+    def exclude(*values)
+      clone.exclude!(*values)
+    end
+
+    def exclude!(*values)
+      check_loaded
+      previous = @options[:exclude]
+      existing = previous ? Array(previous) : [] #: Array[String]
+      @options[:exclude] = existing + values.flatten.compact
       self
     end
 
@@ -371,7 +384,7 @@ module Tinkick
         fields: @options[:fields], where: @options[:where], order: @options[:order],
         limit: page_size, offset: @options[:keyset] ? nil : (@options[:offset] || (page_number - 1) * page_size + page_padding).to_i,
         match: @options[:match], operator: @options[:operator], misspellings: @options[:misspellings],
-        countless: @options[:countless], keyset: @options[:keyset], after: @options[:after], aggs: @options[:aggs], smart_aggs: @options[:smart_aggs])
+        countless: @options[:countless], keyset: @options[:keyset], after: @options[:after], aggs: @options[:aggs], smart_aggs: @options[:smart_aggs], exclude: @options[:exclude])
     end
 
     def execute

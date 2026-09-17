@@ -12,7 +12,7 @@ module Tinkick
   class Query
     attr_reader :model, :limit, :after
 
-    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true)
+    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
@@ -36,6 +36,11 @@ module Tinkick
       @operator = operator.to_s
       @match = match
       @misspellings = misspellings
+      @exclude = case exclude
+      when Array then exclude
+      when String then [exclude]
+      else []
+      end
       @countless = countless || keyset
       @keyset = keyset
       @after = after
@@ -151,11 +156,12 @@ module Tinkick
         fields = @fields.map { |name, mode| [name, SearchField.new(@model, name, match: mode), mode] } #: Array[[String, SearchField, Symbol]]
 
         relation = Filter.new(@model).apply(@model.all, conditions)
+        compiler = QueryText.new(connection)
+        relation, excluded = excluding_scope(relation, fields, compiler)
         next relation if @term == "*"
 
         native = [] #: Array[filter_predicate]
         exact = [] #: Array[filter_predicate]
-        compiler = QueryText.new(connection)
         fields.each do |name, field, mode|
           if mode == :exact
             exact << field_predicate(field, ["#{field.text_sql}::text COLLATE \"C\" = ?", [@term]])
@@ -165,6 +171,7 @@ module Tinkick
             native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: @misspellings))
           else
             compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: @misspellings)
+            compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded && !compiled.empty?
             if [:word_start, :word_middle, :word_end].include?(mode) && @misspellings != false && compiled.include?("MATCHES")
               @fuzzy_partial = true
             end
@@ -180,6 +187,48 @@ module Tinkick
           mixed_scope(relation, native, exact)
         end
       end
+    end
+
+    def excluding_scope(relation, fields, compiler)
+      return [relation, nil] if @exclude.empty?
+
+      base = relation
+      combined = nil #: String?
+      fields.each do |name, field, mode|
+        if [:exact, :text_start, :text_middle, :text_end].include?(mode)
+          @exclude.each do |phrase|
+            predicate = if mode == :exact
+              ["#{field.text_sql}::text COLLATE \"C\" = ?", [phrase]] #: filter_predicate
+            else
+              TextMatch.new(@model).predicate(field.text_sql, phrase, match: mode, misspellings: false)
+            end
+            sql, binds = field_predicate(field, predicate)
+            relation = relation.where(Arel.sql("(#{sql}) IS NOT TRUE", *binds))
+          end
+          next
+        end
+
+        analysis = WordMatch.new(@model).index_analysis(name, field)
+        phrases = @exclude.map do |phrase|
+          compiler.exclusion(phrase, words: compiler.tokens(phrase, analysis: analysis), match: mode)
+        end.reject(&:empty?)
+        next if phrases.empty?
+
+        excluded = phrases.map { |phrase| "(#{phrase})" }.join(" OR ")
+        if fields.length == 1 && @term != "*" && !two_edit_word?(mode)
+          combined = excluded
+          next
+        end
+
+        primary_key = @model.primary_key
+        raise InvalidQueryError, "#{@model.name} requires a single primary key for exclusions" unless primary_key.is_a?(String)
+
+        sql, binds = field_predicate(field, ["#{field.text_sql} ==> ?", [excluded]])
+        identifiers = base.where(Arel.sql(sql, *binds)).select(primary_key)
+        relation = relation.where.not(primary_key => identifiers)
+        @model.logger&.warn("Tinkick: phrase exclusions across fields, match-all searches, or refined fuzzy modes use TIN matching-ID subqueries to preserve null values. These extra index queries can increase cost; inspect EXPLAIN ANALYZE for your workload.")
+      end
+      [relation, combined]
     end
 
     def two_edit_word?(mode)

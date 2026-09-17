@@ -14,7 +14,7 @@ module Tinkick
 
     def tinkick_options: () -> model_options?
 
-    def tinkick_search: (?Object? term, ?fields: model_fields?, ?misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol?, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?) -> Relation
+    def tinkick_search: (?Object? term, ?fields: model_fields?, ?misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol?, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?exclude: exclusion_phrases) -> Relation
 
     alias search tinkick_search
 

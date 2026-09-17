@@ -8,9 +8,11 @@ module Tinkick
 
     def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: misspellings) -> String
 
-    private
+    def exclusion: (String term, words: Array[String], match: Symbol) -> String
 
-    def tokens: (String term) -> Array[String]
+    def tokens: (String term, ?analysis: Hash[String, String]) -> Array[String]
+
+    private
 
     def quote: (String term) -> String
 
