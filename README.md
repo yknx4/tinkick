@@ -470,6 +470,14 @@ explicitly serialize the visible records for an HTTP response.
 
 ## Filtering
 
+Model declarations accept `filterable: [:store_id, "metadata.category"]`.
+Tinkick validates the physical columns and JSONB path roots when search is used;
+missing columns raise a migration-oriented error. This also works through
+`Tinkick.model_options`. `nil`, `false`, and `[]` skip declaration checks.
+The declaration does not restrict filters to listed fields or create indexes:
+filtering uses the existing PostgreSQL table. Add ordinary B-tree, GIN, or other
+appropriate indexes in Rails migrations for the application's actual queries.
+
 Filters use real columns and bound values. These scalar forms are available:
 
 | Operation | Example |
@@ -1726,7 +1734,7 @@ The following reference maps less common upstream options to their current statu
 | Searchkick API or configuration | Status / replacement |
 | --- | --- |
 | `searchable`, `default_fields`, `match` | Available within the supported modes/types. |
-| `filterable` | Not accepted. Filter real scalar columns and add ordinary PostgreSQL indexes as needed. |
+| `filterable` | Accepts field lists and validates columns/JSONB path roots lazily. Does not limit filters or create indexes; add appropriate PostgreSQL indexes through migrations. |
 | `unscope`, `inheritance`, query `type` | Not implemented as Searchkick options; define explicit model scopes and test the intended STI/tenant behavior. |
 | Global `model_options` | `Tinkick.model_options` supplies defaults for subsequent declarations; explicit model values override them. |
 | `search_method_name` | `Tinkick.search_method_name` selects the alias for subsequent declarations; `nil` disables alias creation. Existing methods are preserved and `tinkick_search` remains available. |
