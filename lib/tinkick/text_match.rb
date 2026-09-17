@@ -2,11 +2,33 @@
 
 require_relative "extensions"
 require_relative "functions"
+require "json"
 
 module Tinkick
   class TextMatch
     def initialize(model)
       @model = model
+    end
+
+    def highlight_matches(texts, term, match:, misspellings: false)
+      return Array.new(texts.length) if texts.all?(&:nil?)
+
+      sql, binds = if match == :exact
+        ['tinkick_input.text COLLATE "C" = ? COLLATE "C"', [term]]
+      else
+        predicate("tinkick_input.text", term, match: match, misspellings: misspellings)
+      end
+      @model.with_connection do |connection|
+        # @type var values: Array[String?]
+        values = connection.select_values(Arel.sql(<<~SQL, *binds, JSON.generate(texts)), "Tinkick Text Highlight")
+          SELECT CASE WHEN #{sql} THEN tinkick_input.text ELSE NULL END
+          FROM pg_catalog.pg_extension
+          CROSS JOIN LATERAL jsonb_array_elements_text(?::jsonb) WITH ORDINALITY AS tinkick_input(text, position)
+          WHERE extname = 'tin'
+          ORDER BY tinkick_input.position
+        SQL
+        values
+      end
     end
 
     def predicate(column_sql, term, match:, misspellings: false)

@@ -6,6 +6,8 @@ module Tinkick
 
     def initialize: (singleton(ActiveRecord::Base) model) -> void
 
+    def highlight_matches: (Array[String?] texts, String term, match: Symbol, ?misspellings: QueryText::misspellings) -> Array[String?]
+
     def predicate: (String column_sql, String term, match: Symbol, ?misspellings: QueryText::misspellings) -> predicate
 
     private
