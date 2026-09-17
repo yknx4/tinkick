@@ -4,6 +4,15 @@ require_relative "test_helper"
 require "active_record"
 
 class ModelOptionsTest < Minitest::Test
+  def test_partial_mode_declarations_are_lazy_and_preserve_the_requested_fields
+    [:word_start, :word_middle, :word_end, :text_start, :text_middle, :text_end].each do |mode|
+      model = Class.new(ActiveRecord::Base)
+      model.tinkick(**{ mode => [:name] })
+
+      assert_equal [:name], model.tinkick_options.fetch(mode)
+    end
+  end
+
   def test_stemming_options_raise_an_unimplemented_error_identifying_tin
     [
       { stem: true },
