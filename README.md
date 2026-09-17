@@ -713,6 +713,7 @@ Product.search("coffee").aggs(:category).aggs(
 | --- | --- |
 | Terms | `field`, `limit` (default 1,000), `min_doc_count` (default 1), and `_key`/`_count` ordering |
 | Numeric/date ranges | Inclusive `from`, exclusive `to`, overlapping and empty buckets, optional `key`, and `keyed: true` |
+| Numeric histograms | `interval`, `offset`, `min_doc_count` (default 0), `_key`/`_count` ordering, and keyed output |
 | Metrics | `avg`, `min`, `max`, `sum`, and exact `cardinality` |
 | Per-aggregation filters | `where` limits that aggregation without changing the record results |
 | Smart facets | Enabled by default; a facet ignores its own top-level `where` field while retaining other filters |
@@ -743,8 +744,24 @@ matching document once per bucket. Null values do not create buckets.
 `min_doc_count: 0` reads the model's scoped dictionary so unmatched values can
 produce zero-count buckets. It logs a warning because broad dictionaries cost
 more. Array aggregation and exact `COUNT(DISTINCT)` cardinality also warn about
-workload-dependent cost. Aggregations issue bounded SQL result queries, with
-sorting and bucket limits in PostgreSQL, rather than grouping Ruby records.
+workload-dependent cost. Aggregations group and sort in PostgreSQL; terms also
+apply their bucket limit there. They do not group Ruby model records.
+
+Numeric histograms use an additive portable API. Searchkick exposes this shape
+through its raw `body_options` DSL; Tinkick accepts it inside `aggs:`:
+
+```ruby
+Product.search("coffee", aggs: {
+  prices: {histogram: {field: :price, interval: 10, min_doc_count: 1}}
+})
+```
+
+Put histogram settings inside `histogram:`; only per-aggregation `where:` goes
+alongside it. Bucket keys follow `floor((value - offset) / interval) * interval + offset`.
+Array values count each record once per bucket. The default `min_doc_count: 0`
+fills gaps between matching buckets in SQL and logs a warning: small intervals
+over wide ranges can return many empty buckets. Use `min_doc_count: 1` when gaps
+are unnecessary. Extended/hard bounds and numeric formatting remain adapter work.
 
 Date ranges accept `Date`, `Time`, ISO8601 strings, or epoch-millisecond bounds.
 `time_zone` accepts an IANA name or a fixed `+HH:MM`/`-HH:MM` offset; UTC is the
