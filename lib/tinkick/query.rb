@@ -463,7 +463,7 @@ module Tinkick
         @model.logger&.warn("Tinkick: Fuzzy partial matching expands patterns in TIN's token dictionary. Broad prefixes or infixes can increase query cost; use misspellings: false when typo matching is unnecessary and inspect EXPLAIN ANALYZE with representative data.")
       end
       if @weighted_scoring && @mixed_matching
-        @model.logger&.warn("Tinkick: weighted SQL scoring runs separate matching field queries, then can group and sort matching rows. SQL match modes and field boosts above 10000 require this path; native-only field boosts up to 10000 keep TIN scoring. Inspect EXPLAIN ANALYZE for your workload.")
+        @model.logger&.warn("Tinkick: weighted SQL scoring combines field queries, then can group and sort matching rows. Explicit SQL field weights and native field boosts above 10000 require this path; native-only field boosts up to 10000 keep TIN scoring. Inspect EXPLAIN ANALYZE for your workload.")
       elsif @mixed_matching
         @model.logger&.warn("Tinkick: mixed TIN and SQL match modes combine and group matching rows before sorting. This can be slower than native TIN top-k ranking; use a single native match mode where its semantics fit and check EXPLAIN ANALYZE for your workload.")
       end
