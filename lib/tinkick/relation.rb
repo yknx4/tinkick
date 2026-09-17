@@ -106,6 +106,39 @@ module Tinkick
       clone.boost_by!(value)
     end
 
+    def conversions(value)
+      clone.conversions!(value)
+    end
+
+    def conversions!(value)
+      check_loaded
+      @options[:conversions] = value
+      self
+    end
+
+    alias_method :conversions_v1, :conversions
+    alias_method :conversions_v1!, :conversions!
+
+    def conversions_v2(value)
+      clone.conversions_v2!(value)
+    end
+
+    def conversions_v2!(value)
+      check_loaded
+      @options[:conversions_v2] = value
+      self
+    end
+
+    def conversions_term(value)
+      clone.conversions_term!(value)
+    end
+
+    def conversions_term!(value)
+      check_loaded
+      @options[:conversions_term] = value
+      self
+    end
+
     def boost_by_recency(value)
       clone.boost_by_recency!(value)
     end

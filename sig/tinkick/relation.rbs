@@ -122,6 +122,14 @@ module Tinkick
 
     def boost_where: (filter_conditions value) -> Relation
     def boost_where!: (filter_conditions value) -> Relation
+    def conversions: (conversion_fields value) -> Relation
+    def conversions!: (conversion_fields value) -> Relation
+    alias conversions_v1 conversions
+    alias conversions_v1! conversions!
+    def conversions_v2: (conversion_v2 value) -> Relation
+    def conversions_v2!: (conversion_v2 value) -> Relation
+    def conversions_term: (conversion_term value) -> Relation
+    def conversions_term!: (conversion_term value) -> Relation
     def boost_by_recency: (Hash[String | Symbol, recency_boost_options] value) -> Relation
     def boost_by_recency!: (Hash[String | Symbol, recency_boost_options] value) -> Relation
 
