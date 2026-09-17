@@ -7,6 +7,8 @@ require "time"
 require "faker"
 require_relative "../lib/tinkick"
 
+path = File.expand_path("../docs/benchmarks/2026-09-17-regexp-plans.json", __dir__)
+
 ActiveRecord::Base.establish_connection(adapter: "postgresql", database: "tinkick_test")
 class RegexpPlanProduct < ActiveRecord::Base
   self.table_name = "tinkick_test_products"
@@ -35,10 +37,10 @@ ensure
   Faker::Config.random = previous_random
 end
 
-ordinary = ".*Moria.*"
-advanced = ".*Moria.*&~(.*Balrog.*)"
-patterns = { native_control: nil, ordinary_all: ordinary, advanced_all: advanced,
-             ordinary_native: ordinary, advanced_native: advanced }
+ordinary = { name: { regexp: "Moria" } }
+combined = { _and: [ordinary, { _not: { name: { regexp: "Balrog" } } }] }
+filters = { native_control: nil, ordinary_all: ordinary, combined_all: combined,
+            ordinary_native: ordinary, combined_native: combined }
 lengths = rows.map { |row| row.fetch(:name).length }.sort
 report = {
   captured_at: Time.now.utc.iso8601,
@@ -70,15 +72,15 @@ RegexpPlanProduct.with_connection do |connection|
       raise "Unexpected TIN candidate count" unless native.count == report[:expected_native_candidates]
       report[:index] = connection.select_value("SELECT pg_get_indexdef(indexrelid) FROM pg_index WHERE indexrelid = 'index_tinkick_test_products_on_name'::regclass")
 
-      patterns.each do |label, pattern|
+      filters.each do |label, conditions|
         narrowed = label == :native_control || label.to_s.end_with?("_native")
         relation = narrowed ? native : base
-        relation = Tinkick::Filter.new(RegexpPlanProduct).apply(relation, name: { regexp: pattern }) if pattern
+        relation = Tinkick::Filter.new(RegexpPlanProduct).apply(relation, conditions) if conditions
         expected = rows.select do |row|
           value = row.fetch(:name)
           (!narrowed || value.start_with?("mithril ")) &&
-            (!pattern || value.include?("Moria")) &&
-            (pattern != advanced || !value.include?("Balrog"))
+            (!conditions || value.include?("Moria")) &&
+            (conditions != combined || !value.include?("Balrog"))
         end.map { |row| row.fetch(:id) }.sort
         count = relation.count
         raise "Wrong count for #{label}: #{count}, expected #{expected.length}" unless count == expected.length
@@ -95,7 +97,7 @@ RegexpPlanProduct.with_connection do |connection|
           "Tinkick regexp plan", statement.fetch(:binds))
         binds = statement.fetch(:binds).map { |bind| bind.respond_to?(:value_for_database) ? bind.value_for_database : bind }
         report[:cases][label] = {
-          pattern: pattern, native_narrowing: narrowed, count: count, result_ids: ids,
+          filters: conditions, native_narrowing: narrowed, count: count, result_ids: ids,
           sql: sql, binds: binds, plan: JSON.parse(plan),
         }
       end
@@ -110,7 +112,6 @@ RegexpPlanProduct.with_connection do |connection|
   end
 end
 
-path = File.expand_path("../docs/benchmarks/2026-09-17-regexp-plans.json", __dir__)
 File.write(path, JSON.pretty_generate(report) + "\n")
 puts JSON.generate(report.slice(:fixture_rows, :name_codepoints, :remaining_fixture_ids, :remaining_fixture_rows).merge(
   cases: report[:cases].transform_values do |entry|
