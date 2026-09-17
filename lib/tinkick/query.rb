@@ -5,6 +5,7 @@ require_relative "query_text"
 require_relative "text_match"
 require_relative "keyset"
 require_relative "search_field"
+require_relative "word_match"
 require_relative "aggregations"
 
 module Tinkick
@@ -136,7 +137,7 @@ module Tinkick
 
     def build_scope(conditions)
       @model.with_connection do |connection|
-        fields = @fields.map { |field, mode| [SearchField.new(@model, field, match: mode), mode] } #: Array[[SearchField, Symbol]]
+        fields = @fields.map { |name, mode| [name, SearchField.new(@model, name, match: mode), mode] } #: Array[[String, SearchField, Symbol]]
 
         relation = Filter.new(@model).apply(@model.all, conditions)
         next relation if @term == "*"
@@ -144,11 +145,13 @@ module Tinkick
         native = [] #: Array[filter_predicate]
         exact = [] #: Array[filter_predicate]
         compiler = QueryText.new(connection)
-        fields.each do |field, mode|
+        fields.each do |name, field, mode|
           if mode == :exact
             exact << field_predicate(field, ["#{field.text_sql}::text COLLATE \"C\" = ?", [@term]])
           elsif [:text_start, :text_middle, :text_end].include?(mode)
             exact << field_predicate(field, TextMatch.new(@model).predicate(field.text_sql, @term, match: mode, misspellings: @misspellings))
+          elsif two_edit_word?(mode)
+            native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, misspellings: @misspellings))
           else
             compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: @misspellings)
             if [:word_start, :word_middle, :word_end].include?(mode) && @misspellings != false && compiled.include?("MATCHES")
@@ -166,6 +169,14 @@ module Tinkick
           mixed_scope(relation, native, exact)
         end
       end
+    end
+
+    def two_edit_word?(mode)
+      options = @misspellings
+      return false unless mode == :word && options.is_a?(Hash)
+
+      distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
+      distance.is_a?(Integer) && distance == 2 && options.fetch(:transpositions, true) == true
     end
 
     def field_predicate(field, predicate)
