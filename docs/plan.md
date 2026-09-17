@@ -16,7 +16,7 @@
 
 ## Milestones and exit evidence
 
-### 0. Scaffold — this change
+### 0. Scaffold — completed
 
 Package a prerelease gem with explicit runtime requirements, Minitest Rails
 boot checks, Shopify RuboCop, RBS validation/formatting, strict Steep, and CI.
@@ -133,7 +133,22 @@ be necessary operationally; Tinkick will not implement the latter as data copy.
    projections without any external documents.
 
 These are implementation questions, not additional work included in the
-scaffold. Ask before selecting behavior or introducing a new public API.
+initial scaffold. Resolve them before exposing the dependent public behavior.
+
+## Implementation progress
+
+The scaffold is committed. The real integration harness now verifies the
+designated database before Rails migrations and exercises TIN with transactional
+fixtures. Separate commits implement scalar filter translation, literal/phrase
+query compilation, unloaded attribute wrappers, and the extension installer.
+RBS uses a pinned maintained Rails signature collection with concrete corrections
+for the Rails 8 APIs used by these features.
+
+These internal pieces do not yet provide `Model.search`. Query execution and
+per-column index migration generation are the next increments. Public model
+registration, lazy relations/results, default analysis/fuzziness, and the broader
+compatibility contracts remain unfinished. Native capability observations and
+adapter implementation status are recorded separately in the compatibility docs.
 
 ## Test environment and documentation status
 
@@ -147,7 +162,7 @@ database name, extension version and cleanup boundary. Integration tests should
 fail clearly when explicitly requested without TIN; they must not silently
 substitute PostgreSQL built-in full-text search.
 
-No database connection or DDL is needed for the current scaffold. Outline status:
+Integration checks now connect and migrate only the dedicated test database. Outline status:
 not applicable; no Outline integration is configured. Customer-facing impact:
 README and local compatibility/migration planning docs only; no supported
 search feature is advertised as already available.

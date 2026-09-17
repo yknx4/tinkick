@@ -8,9 +8,11 @@ The inventory covers the README and the model, module, relation, query, results,
 index, filtering, and Rails integration source. This fixes a reproducible
 research baseline; the release compatibility range still needs contract tests.
 
-All search features below are **planned, not implemented**. “Target” means
-preserve the caller's API. “Unverified” means parity still needs testing, not
-that TIN lacks the feature. “Gap” is reserved for an evidenced difference.
+Implementation is in progress; this inventory describes the complete target,
+not a claim that every listed API is available. The literal/phrase compiler
+has [live integration coverage](../test/integration/query_text_test.rb).
+“Target” means preserve the caller's API. “Unverified” means parity still needs
+testing, not that TIN lacks the feature. “Gap” is reserved for an evidenced difference.
 “Excluded” follows the model-table datasource decision or the Elasticsearch
 low-level exception. TIN similarity is not proof of equivalent behavior.
 
@@ -22,7 +24,7 @@ Source: [model.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a251016
 | --- | --- |
 | `searchkick(**options)`, `search`, `searchkick_search`, `searchkick_options`, `searchkick_klass` | Target; integrate through Active Record load hooks and preserve caller names. |
 | `searchable`, `filterable`, `default_fields`, `match`, `word*`, `text*` | Target; validate selected columns and required TIN indexes. Matching modes need separate proofs. |
-| `search_data` | Intentional change: validate field names against the model's columns; do not serialize or index returned values. Missing columns must request migrations. |
+| `search_data` | Intentional change: validate field names against the model's columns; do not serialize or index returned values. Derived data belongs in stored or generated columns added through Rails migrations. Missing columns must request those migrations. |
 | `should_index?`, `search_import`, `unscope`, `inheritance` | No import pipeline. Establish a SQL scope policy; arbitrary Ruby predicates cannot become SQL automatically. |
 | `index_name`, `index_prefix`, global suffix | Mapping decision: callers may use these for tenant isolation. Never silently discard them. |
 | `language`, `stem*`, synonyms, case/character options, conversions, suggestions | Native analysis controls plus feature-specific translation or verification work; see the evidence table below. |
@@ -51,6 +53,16 @@ the normal default limit is 10,000. `load` with no argument executes and returns
 the relation, whereas `load(false)` configures document-style output. Do not
 substitute convenient defaults without recording a compatibility change.
 
+The same pinned [query source](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/lib/searchkick/query.rb)
+sets misspellings to distance one (`edit_distance`, with `distance` as an
+alias), transpositions enabled, and three maximum expansions by default.
+`below` first runs without fuzzy matching and retries only when the successful
+response's total count is below the threshold; the retry defaults to twenty
+expansions. Per-field misspellings names must belong to the searched fields.
+Phrase matching does not add fuzzy branches. Exact-match branches receive
+ten times the fuzzy branch's boost, so translating fuzzy eligibility alone
+does not reproduce the ranking policy.
+
 ## Retrieval features and filters
 
 Source: [query.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/lib/searchkick/query.rb).
@@ -63,7 +75,7 @@ Source: [query.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a251016
 | Misspellings | Distance, stable prefix, per-field selection, below-count retry, transpositions, expansion limits; TIN does not document every Searchkick control. |
 | Ranking | Field boosts, numeric boosts, `boost_where`, recency, conversions and model boosts need ranking tests and query-plan measurements. |
 | Aggregations | Terms, ranges/date ranges, histograms, avg/min/max/sum/cardinality, per-aggregation filters, limits/order, minimum counts, smart facets; aggregate in SQL. |
-| Analysis | Default stemming is a material gap. Language analyzers, stem overrides/exclusions, synonyms and emoji-name expansion require separate decisions. |
+| Analysis | Native stemming differs from Searchkick's default analyzer. Language analyzers, stem overrides/exclusions, synonyms and emoji-name expansion require translation or explicit compatibility decisions; native absence does not prove an adapter implementation impossible. |
 | Beyond lexical search | Suggestions, similar items, geospatial, KNN, semantic/hybrid search and RRF need separate implementation designs. No absence claim follows from an unimplemented adapter. TIN's overview describes pgvector composition for hybrid retrieval. |
 
 Smart aggregation behavior must follow source/contract tests, not a generic
@@ -79,14 +91,14 @@ These classifications supersede a broad “gap” label for the families above.
 | Feature | Documented TIN foundation | Classification / remaining work |
 | --- | --- | --- |
 | Phrases | Adjacency, one-word gaps, position alternatives and tolerance. [Phrases](https://planetscale.com/docs/postgres/search/tinql#phrases) | Native support; translate requests and test analyzer/slop semantics. |
-| Fuzzy/prefix/infix/suffix matching | `term~P:N`, `*` and `?`. [TINQL](https://planetscale.com/docs/postgres/search/tinql) | Native support; set Searchkick's prefix explicitly. Transposition/expansion controls remain unverified. |
+| Fuzzy/prefix/infix/suffix matching | `term~P:N`, `*` and `?`. [TINQL](https://planetscale.com/docs/postgres/search/tinql) | Native support; explicit prefix/distance and token wildcards verified on TIN 1.0.2. Adjacent transpositions differ from Searchkick's default; expansion limits and faithful adapter translation remain open. Whole-field match modes need separate work. |
 | Cross-field relevance | Per-column predicates, combined scores and query boosts. [SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes) | Native support; one-column indexes do not prevent multi-field search. |
 | Numeric/recency/personalized boosts | SQL expressions can accompany ranked TIN queries. [SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes) | Adapter formulas and performance tests, not a proven missing capability. |
-| Full-field highlights/custom tags | `tin.highlight` with explicit tags and optional query. [Highlighting](https://planetscale.com/docs/postgres/search/highlighting) | Native support; map Searchkick's default tags/result format. Snippets remain unverified. |
+| Full-field highlights/custom tags | `tin.highlight` with explicit tags and optional query. [Highlighting](https://planetscale.com/docs/postgres/search/highlighting) | Native support verified for automatic/explicit queries. Original document HTML is not escaped; the adapter must handle it. Snippets and compatible result format remain adapter work. |
 | Case/accent controls | Configurable folding, token boundaries, gaps and emoji policy. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes) | Native support; map options and document migrations. |
 | Nested stored JSON text | Text-producing expression indexes. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes) | Native primitive; field-path validation and nested-object semantics need design. |
 | Filters/counts/aggregations | Boolean predicates combine with SQL and counts. [Operator](https://planetscale.com/docs/postgres/search/reference/operator) | Adapter SQL and smart-facet semantics. |
-| Token inspection / term quoting | `tin.tokenize`, `tin.maybe_quote`. [Functions](https://planetscale.com/docs/postgres/search/reference/functions) | Native helpers; evaluate before duplicating logic. |
+| Token inspection / term quoting | `tin.tokenize`, `tin.maybe_quote`. [Functions](https://planetscale.com/docs/postgres/search/reference/functions) | Helpers verified when selected from `pg_extension`; the current router rejects standalone helper calls. Zero-token input and phrase escaping still need explicit handling. |
 | Default stemming | Explicitly absent from TIN's capability table. [Overview](https://planetscale.com/docs/postgres/search) | Confirmed native difference; compatibility policy remains open. |
 | Synonyms, suggestions, similar items | Boolean/phrase/term-score primitives offer possible building blocks. | Investigate composition; no blanket impossibility claim. |
 | Physical rebuild / replicas | Concurrent index DDL and replica operation. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes), [Operations](https://planetscale.com/docs/postgres/search/operations) | Operational support; distinct from intentionally removed data import. |
@@ -95,6 +107,13 @@ The [scoring reference](https://planetscale.com/docs/postgres/search/scoring)
 also documents full scoring, normalization, inspection and term-set overrides.
 These are translation tools; they do not prove identical Searchkick ranking.
 “Not tested” must remain distinct from “not supported.”
+
+The separate [live evidence record](tin-api.md#live-evidence) identifies the
+database/version, actual query shapes, results and documentation discrepancies.
+These probes demonstrate usable primitives, not Elasticsearch analyzer,
+fuzziness, expansion, ranking or response parity. Operational requirements
+(migrations, index maintenance, vacuum and replica retries) must not be labeled
+as absent search features.
 
 ## Results
 

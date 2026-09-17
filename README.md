@@ -5,15 +5,16 @@ Tinkick is a gem targeting near drop-in compatibility with
 [PlanetScale TIN](https://planetscale.com/docs/postgres/search) and the Rails
 model's PostgreSQL table as the datasource.
 
-**Status: scaffold only.** The gem loads and has development checks, but does
-not yet implement `searchkick`, `search`, field validation, or migrations.
+**Status: early implementation.** The gem includes a TIN migration generator,
+tested literal/phrase query compilation, scalar filters, and result wrappers.
+The public `searchkick` declaration and `search` interface are not available yet.
 Do not replace Searchkick in a running application with this version.
 
 ## Requirements
 
 - Ruby 4.0 or newer.
 - Rails / Active Record 8.0 or newer.
-- PostgreSQL with the `tin` extension for future search integration tests and use.
+- PostgreSQL with the `tin` extension for integration tests and use.
   Ordinary PostgreSQL does not provide TIN by itself.
 
 The gemspec leaves future Ruby and Active Record versions eligible; that is not
@@ -24,7 +25,7 @@ are runtime dependencies.
 ## Intended compatibility
 
 Existing model declarations and queries should retain their Searchkick names.
-This is a future usage target, **not working code in this scaffold**:
+This is a future usage target, **not working code yet**:
 
 ```ruby
 class Product < ApplicationRecord
@@ -49,16 +50,31 @@ See the [compatibility inventory](docs/compatibility.md),
 [TIN API notes](docs/tin-api.md), and [implementation plan](docs/plan.md).
 They identify semantic gaps, including stemming, and decisions still required.
 
+## Extension migration
+
+After adding the gem to a Rails application, generate its extension migration:
+
+```sh
+bin/rails generate tinkick:install
+bin/rails db:migrate
+```
+
+The generated migration enables `tin` when it is available on the database
+server. It does not install TIN server software or create searchable fields.
+Its rollback refuses to disable the extension because other indexes may use it.
+Existing or edited installation migrations are preserved when the generator runs
+again. Nothing changes the database merely by requiring the gem.
+
 ## Development
 
 The existing `.envrc` and `dev.ejson` supply local development/test connection
 settings. Keep them local; neither is included in Git or the built gem. This
-scaffold does not change their contents. Unit and Rails boot checks do not
+gem does not change their contents. Unit and Rails boot checks do not
 connect to PostgreSQL.
 
 The designated databases are `tinkick_development` and `tinkick_test`, using
-standard PostgreSQL environment variables supplied through direnv. Future
-schema changes must use Rails migrations importable into consuming applications.
+standard PostgreSQL environment variables supplied through direnv. Schema
+changes use Rails migrations importable into consuming applications.
 
 Run commands through the project environment:
 

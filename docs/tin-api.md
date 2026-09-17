@@ -1,10 +1,11 @@
 # TIN API research
 
 Reviewed 2026-09-17 UTC against the public PlanetScale documentation, including
-the complete Markdown bodies of all eight requested pages (TINQL, scoring,
-highlighting, operations, indexes, operator, functions and SQL shapes). These
-are documented capabilities, not live test results. Record the actual extension
-and PostgreSQL versions when integration testing begins.
+the complete bodies of all eight requested pages (TINQL, scoring, highlighting,
+operations, indexes, operator, functions and SQL shapes). The sections below
+describe documented capabilities. The separate [live evidence](#live-evidence)
+section records observations from PostgreSQL 18.6 with TIN 1.0.2; neither kind
+of evidence establishes complete Searchkick compatibility.
 
 ## Index and operator contract
 
@@ -44,8 +45,9 @@ on gem load, model declaration, or an ordinary search request.
 phrases, wildcard/regex/fuzzy matching, term ranges, boosts, boolean alternatives,
 minimum-match groups, proximity, span relations and positional filters.
 Keywords are uppercase; juxtaposition means AND. NOT is only used in compound
-operators. Phrase syntax has its own escapes. Fuzzy terms must tokenize to one
-word and default to a stable prefix of one; `term~P:N` controls that prefix.
+operators. Phrase syntax has its own escapes, including literal underscores
+and brackets. The documentation requires fuzzy terms to tokenize to one word
+and defaults to a stable prefix of one; `term~P:N` controls that prefix.
 Phrases support adjacency, explicit gaps, position alternatives and tolerance.
 Boost factors are bounded.
 
@@ -61,10 +63,13 @@ Do not equate word wildcards with whole-field substring semantics.
 a TIN scan in the same query. `ctid` identifies the scanned tuple, not a durable
 record ID. Multiple fields contribute to the score. Default dense-term elision
 can make every score zero on tiny fixtures. Full scoring costs more. Some
-scoring arguments must be identical across calls on the same relation.
+scoring arguments (`dense_ratio`, `term_add`, `term_replace`) must be written
+identically across calls on the same relation; `k1` and `b` may differ.
 `score` and `full_score` cannot be mixed on one scanned relation. Dead rows can
 remain in corpus statistics until maintenance, though matching obeys visibility.
 Scores therefore change over time. Guard a zero denominator if normalizing.
+An explicit boost, including `^1.0`, pins a term against dense-term elision;
+field-boost translation therefore also affects which terms contribute.
 
 Tinkick must test both dense-term settings, add deterministic tie handling,
 retain the model primary key for loading, and avoid scoring a plain SQL-only
@@ -75,6 +80,9 @@ favor ranked `ORDER BY ... DESC LIMIT ...` retrieval. SQL filters can cooperate
 with ordinary indexes. Scoring both sides of a join requires a matching TIN
 predicate on each side. Proposed Tinkick queries must be checked with actual
 plans; composability in SQL is not evidence that every shape keeps top-k speed.
+The reference also documents `LATERAL` searches whose query comes from an outer
+row, allowing per-row top-k retrieval. This remains unverified through the
+current PlanetScale router.
 
 ## Analysis, highlights and operational constraints
 
@@ -85,10 +93,10 @@ primitives, but emoji tokens do not equal emoji-name expansion.
 
 [Highlighting](https://planetscale.com/docs/postgres/search/highlighting) offers
 custom tags and automatic or explicit query selection, with overlapping spans
-merged. Tinkick still needs fragment sizing, result-key compatibility, and
-HTML-safety validation before returning content intended for browser rendering.
-The page's BEFORE description and example are not entirely consistent; test
-actual span behavior rather than inferring it from that example.
+merged. `$QUERY_PART` escapes the query description placed in a tag; this does
+not promise escaping of document content. Tinkick still needs fragment sizing,
+result-key compatibility, and HTML-safety handling. The page's BEFORE prose
+and example differ; the live result below agrees with the example.
 
 [Limitations](https://planetscale.com/docs/postgres/search/reference/limitations):
 partitioned parents require usable TIN indexes on planned leaves; relevance
@@ -102,9 +110,85 @@ entries. Exact counts apply to the visible snapshot, not freshness relative to
 the writer. Build memory constrains worker count and fragmentation; serving
 parallelism depends on segments and worker limits. Storage/cache behavior,
 readahead, work memory, planner costs and WAL settings affect performance.
-These are operational considerations, not missing search features. No cluster
-tuning is performed by the gem scaffold.
+These are operational considerations, not missing search features. The gem
+does not tune cluster settings.
 
-The linked Settings reference was unavailable during review. Its complete
-contents and the deployed extension version remain unverified; no dependency
-on undocumented settings is proposed.
+[Settings](https://planetscale.com/docs/postgres/search/reference/settings)
+was subsequently available and read in full. It documents custom scans,
+maintenance modes, build I/O and worker controls, page-reuse statistics, and
+debug settings that force alternative query plans. These provide possible
+diagnostic tools; their availability through the current router has not been
+tested, and the gem does not change them.
+
+## Live evidence
+
+Read-only probes on 2026-09-17 UTC first checked `current_database()` was
+`tinkick_test` and enabled `default_transaction_read_only`. PostgreSQL reported
+`18.6 (Debian 18.6-1.pgdg13+2)` and `pg_extension` reported TIN `1.0.2`.
+The indexed probes used the Rails-migrated `tinkick_test_products` table and
+its `name`/`description` TIN indexes. SQL values were bound parameters.
+These observations describe that endpoint and version, not every TIN release.
+
+### Router and helper execution
+
+The router rejected standalone `SELECT tin.maybe_quote($1)` and
+`SELECT tin.highlight(...)` with SQLSTATE `NK013` (unimplemented function
+opcode). `SELECT * FROM tin.tokenize($1)` also raised `NK013`; an
+`ARRAY(SELECT ...)` tokenization expression was rejected as an unsupported
+array subquery. These are execution-shape restrictions, not missing TIN helpers.
+
+Selecting the helpers from the extension catalog succeeded:
+
+```sql
+SELECT tin.tokenize($1) FROM pg_extension WHERE extname = 'tin';
+SELECT tin.maybe_quote($1) FROM pg_extension WHERE extname = 'tin';
+SELECT tin.highlight($1, $2, $3, $4) FROM pg_extension WHERE extname = 'tin';
+```
+
+Default tokens included `Jalapeño` → `jalapeno`, `wi-fi` → `wi`, `fi`,
+`foo_bar` → `foo_bar`, and emoji retained as tokens. The explicit whitespace
+tokenizer with case/accent preservation returned `Jalapeño`, `AND`, `wi-fi`
+unchanged. Helpers must use the same analysis options as their target index.
+`tin.maybe_quote('AND')` returned `"AND"`; quoting an empty string returned
+`""`, so quoting alone does not make zero-token input a valid query.
+
+### Literal, phrase and fuzzy matching
+
+| Probe | Observed result |
+| --- | --- |
+| Indexed `apple OR pear` | Matched both Red Apple and Green Pear. |
+| Indexed `"apple OR pear"` | Matched neither; the operator became literal phrase content. |
+| Empty input or `!!!` | Matched no rows. |
+| Explicit `""` | Raised SQLSTATE `XX000` with an empty-phrase parse error. |
+| `*` / `"*"` | Matched every fixture / no fixtures. |
+| Document `foo_bar`, query `"foo_bar"` / `"foo\_bar"` | False / true. Phrase underscores must be escaped. |
+| Document `fuji crisp apple`, query `"fuji apple"` / `"fuji apple"~1` | False / true; phrase tolerance allows the extra word. |
+| Indexed `app*` / `*pple` | Both matched Red Apple; this proves token wildcards, not whole-field matching. |
+| Document `maple`, query `apple~0:2` / `apple~1:2` | True / false; the stable-prefix parameter changes matching. |
+| Indexed `appl~0:1` / `aplpe~0:1` | Matched Red Apple / no rows. Adjacent transposition was not one native edit. |
+| Indexed `red-apple~0:1` / `ryd-appl~0:1` | Exact spelling matched / inexact spelling did not. The documented multi-token error did not occur on 1.0.2. |
+| Indexed `ryd~0:1 AND appl~0:1` | Matched Red Apple. Apply fuzzy modifiers to individual analyzed tokens. |
+| Indexed `"apple"~0:1` | Raised a parse error; a quoted phrase cannot take this fuzzy-prefix suffix. |
+
+The literal and phrase compiler's automated coverage is in
+[`query_text_test.rb`](../test/integration/query_text_test.rb). The fuzzy probes
+above are manual evidence; they do not claim a complete misspellings adapter.
+
+### Highlighting and scoring
+
+Both automatic and explicit indexed highlighting returned
+`Red <em>Apple</em>`. Explicit `a BEFORE b` over `b a b` returned
+`b <b>a</b> <b>b</b>`, marking both witnessing spans. Input document HTML
+remained unchanged apart from added tags: an existing `<script>` element was
+not escaped. Empty or invalid explicit highlight queries sometimes returned
+unmodified text instead of the parse error raised by `==>`; highlighting must
+not serve as a query validator.
+
+Default scoring, full scoring, and disabled dense-term elision each returned
+`0.9517491` for the two visible apple/pear matches during the probe. That is
+not a stable expected value: previous writes affect retained corpus statistics.
+Boosting apple by two returned `1.9034982` for that match, while pear remained
+`0.9517491`. Mixing `score` and `full_score` on one relation failed as
+documented; calls without a TIN scan also failed. Cross-field score composition,
+boosted ranking and normalized-score behavior still need representative
+automated coverage and query-plan inspection.
