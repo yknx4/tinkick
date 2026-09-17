@@ -117,8 +117,8 @@ module Tinkick
       if offset.nil? && unit && ["second", "minute", "hour"].include?(unit)
         return subday_date_histogram(field, options, conditions, formatter, unit, bucket_offset, minimum)
       end
-      if offset.nil? && !["day", "week", "month", "quarter", "year"].include?(unit)
-        raise ArgumentError, "IANA time_zone currently requires calendar_interval; fixed_interval support is not implemented"
+      if offset.nil? && unit.nil?
+        return iana_fixed_date_histogram(field, options, conditions, formatter, interval_milliseconds, bucket_offset, minimum)
       end
       # Bounds round without the aggregation offset, which is added to final keys.
       lower_date, upper_date = date_histogram_bounds(options.fetch(:extended_bounds, {}), formatter, unit: unit, interval: interval_milliseconds)
@@ -192,6 +192,154 @@ module Tinkick
       result = { "buckets" => options[:keyed] ? buckets.to_h { |bucket| [bucket.fetch("key_as_string"), bucket] } : buckets }
       result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
       result
+    end
+
+    def iana_fixed_date_histogram(field, options, conditions, formatter, interval, bucket_offset, minimum)
+      bounds = iana_fixed_histogram_bounds(options, formatter)
+      scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
+      values = values_relation(scope, field)
+      column = @model.columns_hash.fetch(field)
+      unless [:date, :datetime, :timestamp].include?(column.type)
+        raise InvalidQueryError, "date_histogram requires a date or datetime aggregation column"
+      end
+      @model.logger&.warn("Tinkick: IANA fixed date_histogram inspects daily timezone offsets across the matching and bound range. Wide ranges require more transition discovery work; use selective date filters when possible.")
+      value = column.sql_type.include?("with time zone") ? "_tinkick_value" : "_tinkick_value::timestamp AT TIME ZONE 'UTC'"
+      matching = @model.unscoped.from(values, :tinkick_values).where("_tinkick_value IS NOT NULL")
+        .select(Arel.sql("_tinkick_document_id, NULL::integer AS bound_index, (#{value}) - ?::interval AS instant", "#{bucket_offset} milliseconds"))
+      bound_inputs = bounds.each_index.map { |index| "(#{index}, CAST(:bound#{index} AS timestamptz))" }.join(", ")
+      inputs = "#{matching.to_sql} UNION ALL SELECT NULL, bound_index, instant FROM (VALUES #{bound_inputs}) AS bounds(bound_index, instant) WHERE instant IS NOT NULL"
+      binds = bounds.each_with_index.to_h { |bound, index| ["bound#{index}".to_sym, bound] }
+        .merge(zone: options[:time_zone].to_s, step: "#{interval} milliseconds", interval: interval, adjustment: "#{bucket_offset} milliseconds", minimum: minimum)
+      buckets_sql = if minimum.zero?
+        @model.logger&.warn("Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
+        # Clip each period before generating its grid: a millisecond interval
+        # must not expand the discovery lookback into millions of hidden buckets.
+        <<~SQL
+          SELECT _tinkick_date, COALESCE(_tinkick_count, 0) AS _tinkick_count FROM (
+            SELECT _tinkick_date FROM prefixes CROSS JOIN extent CROSS JOIN LATERAL generate_series(
+              CASE WHEN lower IS NOT NULL AND upper IS NOT NULL THEN first_grid +
+                CEIL(EXTRACT(EPOCH FROM (GREATEST(first_grid, lower) - first_grid)) * 1000 / :interval) * CAST(:step AS interval) END,
+              LEAST(ends - INTERVAL '1 millisecond', upper), CAST(:step AS interval), 'UTC') AS grid(_tinkick_date)
+            UNION SELECT gap_key FROM prefixes CROSS JOIN extent WHERE gap_key BETWEEN lower AND upper
+          ) AS dates LEFT JOIN counts USING (_tinkick_date)
+        SQL
+      else
+        "SELECT _tinkick_date, _tinkick_count FROM counts WHERE _tinkick_count >= :minimum"
+      end
+      shifted = "_tinkick_date + CAST(:adjustment AS interval)"
+      invalid = "COALESCE(lower < hard_lower OR upper > hard_upper, FALSE)"
+      sql = <<~SQL
+        #{iana_fixed_periods_sql(inputs)}, boundaries AS (
+          SELECT MAX(_tinkick_date) FILTER (WHERE bound_index = 0) AS lower,
+            MAX(_tinkick_date) FILTER (WHERE bound_index = 1) AS upper,
+            MAX(_tinkick_date) FILTER (WHERE bound_index = 2) AS hard_lower,
+            MAX(_tinkick_date) FILTER (WHERE bound_index = 3) AS hard_upper FROM rounded
+        ), counts AS (
+          SELECT _tinkick_date, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count
+          FROM rounded CROSS JOIN boundaries WHERE bound_index IS NULL AND NOT #{invalid}
+            AND (hard_lower IS NULL OR #{shifted} >= hard_lower)
+            AND (hard_upper IS NULL OR #{shifted} < hard_upper) GROUP BY _tinkick_date
+        ), extent AS (
+          SELECT LEAST(MIN(_tinkick_date), (SELECT lower FROM boundaries)) AS lower,
+            GREATEST(MAX(_tinkick_date), (SELECT upper FROM boundaries)) AS upper FROM counts
+          HAVING NOT (SELECT #{invalid} FROM boundaries)
+        )
+        SELECT (EXTRACT(EPOCH FROM (#{shifted})) * 1000)::bigint AS _tinkick_key,
+          COALESCE(_tinkick_count, 0) AS _tinkick_count,
+          #{iana_fixed_offset_sql(shifted)} AS _tinkick_offset, #{invalid} AS _tinkick_invalid_bounds
+        FROM boundaries LEFT JOIN (#{buckets_sql}) AS buckets ON TRUE
+        ORDER BY #{order_sql(options.fetch(:order, { _key: :asc }))}
+      SQL
+      # The outer row retains bound-validation metadata even for no buckets.
+      # @type var rows: Array[{ "_tinkick_key" => Integer?, "_tinkick_count" => Integer, "_tinkick_offset" => Integer?, "_tinkick_invalid_bounds" => bool }]
+      rows = @model.with_connection { |connection| connection.select_all(Arel.sql(sql, **binds)).to_a }
+      raise ArgumentError, "Extended bounds must be within hard bounds" if rows.any? { |row| row.fetch("_tinkick_invalid_bounds") }
+
+      buckets = rows.filter_map do |row|
+        key = row.fetch("_tinkick_key")
+        next unless key
+
+        { "key" => key, "key_as_string" => formatter.format(key.to_f, utc_offset: row.fetch("_tinkick_offset")), "doc_count" => row.fetch("_tinkick_count") }
+      end
+      # @type var result: aggregation_date_histogram
+      result = { "buckets" => options[:keyed] ? buckets.to_h { |bucket| [bucket.fetch("key_as_string"), bucket] } : buckets }
+      result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
+      result
+    end
+
+    def iana_fixed_histogram_bounds(options, formatter)
+      # @type var default_bounds: aggregation_date_histogram_bounds
+      default_bounds = {}
+      [options.fetch(:extended_bounds, default_bounds), options.fetch(:hard_bounds, default_bounds)].flat_map do |bounds|
+        unless bounds.is_a?(Hash) && (bounds.keys - [:min, :max]).empty?
+          raise ArgumentError, "Date histogram bounds must be a hash containing only min and max"
+        end
+        lower = formatter.histogram_bound(bounds[:min])
+        upper = formatter.histogram_bound(bounds[:max])
+        raise ArgumentError, "Date histogram bounds min cannot exceed max" if lower && upper && lower > upper
+
+        [lower, upper].map { |value| value && Time.at(Rational(value, 1_000)).utc }
+      end
+    end
+
+    def iana_fixed_periods_sql(inputs)
+      # IANA's audited 1850..2050 transitions are at least 601,200 seconds apart,
+      # with a total UTC-offset span below two days. Daily samples locate changed
+      # days; binary search finds the exact native PostgreSQL transition second.
+      # One interval plus two days of lookback includes a prior grid or gap key.
+      midpoint = "to_timestamp(FLOOR((EXTRACT(EPOCH FROM lo) + EXTRACT(EPOCH FROM hi)) / 2))"
+      <<~SQL
+        WITH RECURSIVE inputs AS (#{inputs}), limits AS (
+          SELECT date_trunc('day', MIN(instant) - CAST(:step AS interval) - INTERVAL '2 days', 'UTC') AS lower,
+            date_trunc('day', MAX(instant), 'UTC') + INTERVAL '2 days' AS upper FROM inputs
+        ), samples AS (
+          SELECT sample, #{iana_fixed_offset_sql("sample")} AS offset_seconds
+          FROM limits CROSS JOIN LATERAL generate_series(lower, upper, INTERVAL '1 day', 'UTC') AS grid(sample)
+        ), pairs AS (
+          SELECT sample AS hi, offset_seconds AS after_offset, LAG(sample) OVER (ORDER BY sample) AS lo,
+            LAG(offset_seconds) OVER (ORDER BY sample) AS before_offset FROM samples
+        ), changes(lo, hi, before_offset, after_offset) AS (
+          SELECT lo, hi, before_offset, after_offset FROM pairs WHERE before_offset <> after_offset
+          UNION ALL
+          SELECT CASE WHEN #{iana_fixed_offset_sql(midpoint)} = before_offset THEN #{midpoint} ELSE lo END,
+            CASE WHEN #{iana_fixed_offset_sql(midpoint)} = before_offset THEN hi ELSE #{midpoint} END,
+            before_offset, after_offset FROM changes WHERE hi - lo > INTERVAL '1 second'
+        ), starts AS (
+          SELECT sample AS starts, offset_seconds, NULL::integer AS before_offset
+          FROM samples WHERE sample = (SELECT MIN(sample) FROM samples)
+          UNION ALL SELECT hi, after_offset, before_offset FROM changes WHERE hi - lo <= INTERVAL '1 second'
+        ), periods AS (
+          SELECT starts, offset_seconds, before_offset,
+            LEAD(starts, 1, (SELECT upper FROM limits)) OVER (ORDER BY starts) AS ends FROM starts
+        ), floors AS (
+          SELECT *, #{iana_fixed_floor_sql("starts", "offset_seconds")} AS first_floor,
+            #{iana_fixed_floor_sql("ends - INTERVAL '1 millisecond'", "offset_seconds")} AS last_floor FROM periods
+        ), grids AS (
+          SELECT *, CASE WHEN first_floor < starts THEN first_floor + CAST(:step AS interval) ELSE first_floor END AS first_grid,
+            CASE WHEN last_floor >= starts THEN last_floor END AS last_grid,
+            CASE WHEN offset_seconds > before_offset AND first_floor < starts
+              AND first_floor >= starts - (offset_seconds - before_offset) * INTERVAL '1 second' THEN starts END AS gap_key FROM floors
+        ), prefixes AS (
+          SELECT *, GREATEST(gap_key,
+            MAX(GREATEST(last_grid, gap_key)) OVER (ORDER BY starts ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)) AS prefix_key FROM grids
+        ), lookup AS (
+          SELECT array_agg(starts ORDER BY starts) AS starts, array_agg(offset_seconds ORDER BY starts) AS offsets,
+            array_agg(first_grid ORDER BY starts) AS firsts, array_agg(prefix_key ORDER BY starts) AS prefixes FROM prefixes
+        ), positioned AS (
+          SELECT inputs.*, lookup.*, width_bucket(instant, starts) AS period_index FROM inputs CROSS JOIN lookup
+        ), rounded AS (
+          SELECT _tinkick_document_id, bound_index, CASE WHEN instant < firsts[period_index] THEN prefixes[period_index]
+            ELSE #{iana_fixed_floor_sql("instant", "offsets[period_index]")} END AS _tinkick_date FROM positioned
+        )
+      SQL
+    end
+
+    def iana_fixed_offset_sql(value)
+      "EXTRACT(EPOCH FROM (((#{value}) AT TIME ZONE :zone) - ((#{value}) AT TIME ZONE 'UTC')))::integer"
+    end
+
+    def iana_fixed_floor_sql(value, offset)
+      "(date_bin(CAST(:step AS interval), (#{value}) AT TIME ZONE :zone, TIMESTAMP '1970-01-01') AT TIME ZONE 'UTC') - (#{offset}) * INTERVAL '1 second'"
     end
 
     def subday_date_histogram(field, options, conditions, formatter, unit, bucket_offset, minimum)

@@ -57,6 +57,16 @@ module Tinkick
 
     def date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions) -> aggregation_date_histogram
 
+    def iana_fixed_date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions, AggregationDate formatter, Integer interval, Integer bucket_offset, Integer minimum) -> aggregation_date_histogram
+
+    def iana_fixed_histogram_bounds: (aggregation_date_histogram_options options, AggregationDate formatter) -> Array[Time?]
+
+    def iana_fixed_periods_sql: (String inputs) -> String
+
+    def iana_fixed_offset_sql: (String value) -> String
+
+    def iana_fixed_floor_sql: (String value, String offset) -> String
+
     def subday_date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions, AggregationDate formatter, String unit, Integer bucket_offset, Integer minimum) -> aggregation_date_histogram
 
     def subday_rounding_sql: (String value, ?inline: bool) -> String
