@@ -82,6 +82,33 @@ types nor type errors should be suppressed as a workaround.
 
 ## Verified environment
 
+Core search checkpoint (2026-09-17, code through `80e223d`): Ruby 4.0.1 with
+Rails 8.1.3.1 and 8.0.5.1 / JSON 2 passed the full Lead suite on each version:
+**942 tests / 5,329 assertions, zero failures/errors, 98.05% line coverage**
+(2,617 / 2,669 executable lines). Each run has the same 31 approved Lead-only
+exclusions and ten production-plan skips documented in [Lead CI](lead-ci.md).
+
+The focused production TIN gate passed **89 tests / 513 assertions with no
+failures, errors, or skips**. It covers actual Rails HTTP requests, the varied
+268-document relevance corpus, the deterministic 10,000-record Faker Tolkien
+stress corpus, query execution, page/countless/keyset pagination, and real
+Searchkick coexistence. No further main-search defect was found in the code and
+test audit. Secondary compatibility options remain documented follow-ups under
+the user's practical-search priority; this is not a complete Searchkick parity
+claim.
+
+```sh
+direnv exec . env -u TINKICK_TEST_BACKEND -u COVERAGE bundle exec ruby -Itest -e 'ARGV.replace(["--fail-fast", "--seed", "3170"]); %w[rails_app_test relevance_test stress_test integration/query_test integration/countless_test integration/pagination_test integration/keyset_test integration/model_test].each { |name| require_relative "test/#{name}" }'
+direnv exec . env PGHOST=127.0.0.1 PGPORT=55432 PGUSER=postgres PGPASSWORD=tinkick-ci-only PGSSLMODE=disable TINKICK_TEST_BACKEND=lead bundle exec rake coverage TESTOPTS='--fail-fast --seed=2094'
+direnv exec . env PGHOST=127.0.0.1 PGPORT=55432 PGUSER=postgres PGPASSWORD=tinkick-ci-only PGSSLMODE=disable TINKICK_TEST_BACKEND=lead BUNDLE_GEMFILE=/private/tmp/tinkick-rails-8.0.Gemfile JSON_VERSION='< 3' bundle exec rake coverage TESTOPTS='--fail-fast --seed=2094'
+direnv exec . bundle exec rake rbs:format rbs:quality steep rubocop build
+```
+
+RBS/Steep passed; RuboCop inspected 173 Ruby files with no offenses. The generated
+gem is `pkg/tinkick-0.1.0.alpha.1.gem`, and coverage is in `coverage/index.html`.
+The test-only connection overrides above do not modify `.envrc` or `dev.ejson`.
+Remote GitHub CI and gem publication have not been run.
+
 Native scoring and JSONB conversions checkpoint (`083a11b`, 2026-09-17):
 Ruby 4.0.1 / Rails 8.1.3.1 passed **103 tests / 590 assertions** in 83 seconds
 for conversion queries, fluent controls, model defaults, existing query/relation

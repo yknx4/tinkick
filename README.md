@@ -5,10 +5,11 @@ Searchkick-style search for Ruby and Rails, backed by
 PostgreSQL table is the datasource. PostgreSQL maintains the search indexes when
 rows change; there is no second document store to synchronize.
 
-**Status: alpha.** The implemented API covers model registration, lazy search
-relations, word and phrase queries, distance-one typo matching, scalar filters,
-ordering, model/raw-row results, and pagination. This is a compatibility project,
-not yet a complete drop-in replacement. This guide covers the feature surface of
+**Status: alpha.** Core search includes word, phrase, partial and exact matching,
+native typo tolerance, SQL/JSONB filters, relevance boosts, highlighting, facets,
+model/raw-row results, and page, keyset and countless pagination. The priority is
+practical Rails search with native TIN performance, not complete Searchkick API
+parity. This guide covers the feature surface of
 the [Searchkick 6.1.2 reference README](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/README.md),
 including features that still need native integration or a different application design.
 
