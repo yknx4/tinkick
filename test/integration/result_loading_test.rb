@@ -117,6 +117,105 @@ class ResultLoadingTest < TinkickIntegrationTest
     refute statements.any? { |sql| sql.include?('FROM "tinkick_test_reviews"') }
   end
 
+  def test_scope_results_filters_only_the_ranked_page_without_changing_totals
+    callback = ->(records) { records.where(name: "Green Pear") }
+    first = Product.search("*", order: :id, limit: 1, scope_results: callback)
+    second = Product.search("*", order: :id, limit: 1, page: 2, scope_results: callback)
+
+    assert_empty first
+    assert_equal 2, first.total_count
+    assert_equal 2, first.next_page
+    assert_equal ["Green Pear"], second.map(&:name)
+    assert_equal 2, second.total_count
+  end
+
+  def test_scope_results_preserves_search_order_scores_and_association_loading
+    search = Product.search("*", order: :id, includes: :reviews, scope_results: ->(records) { records.order(name: :asc) })
+
+    assert_equal ["Red Apple", "Green Pear"], search.map(&:name)
+    assert_equal [1.0, 1.0], search.with_score.map { |_record, score| score }
+    assert search.all? { |product| product.association(:reviews).loaded? }
+    assert_empty capture_queries { search.each { |product| product.reviews.map(&:body) } }
+  end
+
+  def test_scope_results_is_lazy_cached_and_ignored_for_raw_results
+    calls = 0
+    callback = ->(records) {
+                 calls += 1
+                 records.where(name: "Red Apple") }
+    search = Product.search("*", scope_results: callback)
+
+    assert_equal 2, search.total_count
+    assert_equal 0, calls
+    assert_equal ["Red Apple"], search.map(&:name)
+    assert_empty capture_queries { search.with_score.to_a }
+    assert_equal 1, calls
+    assert_equal 2, Product.search("*", load: false, scope_results: callback).length
+    assert_equal 1, calls
+  end
+
+  def test_scope_results_does_not_instantiate_excluded_page_records
+    instantiations = []
+    listener = ->(_name, _start, _finish, _id, payload) { instantiations << payload[:record_count] }
+    search = Product.search("*", limit: 1, order: :id, scope_results: ->(records) { records.where(name: "Green Pear") })
+
+    ActiveSupport::Notifications.subscribed(listener, "instantiation.active_record") { assert_empty search }
+
+    assert_equal 0, instantiations.sum
+  end
+
+  def test_scope_results_cannot_expand_the_search_page_or_remove_search_filters
+    callback = ->(records) { records.unscope(:where) }
+    search = Product.search("*", where: { name: "Red Apple" }, scope_results: callback)
+
+    assert_equal ["Red Apple"], search.map(&:name)
+    assert_equal 1, search.total_count
+  end
+
+  def test_fluent_scope_results_preserves_source_and_supports_loaded_guards
+    original = Product.search("*")
+    callback = ->(records) { records.where(name: "Red Apple") }
+    filtered = original.scope_results(callback)
+
+    assert_equal ["Red Apple"], filtered.map(&:name)
+    assert_equal 2, original.length
+    assert_raises(Tinkick::Error) { filtered.scope_results!(callback) }
+    changed = Product.search("*")
+    assert_same changed, changed.scope_results!(callback)
+    assert_equal 2, changed.scope_results(nil).length
+    assert_equal ["Red Apple"], changed.map(&:name)
+  end
+
+  def test_scope_results_preserves_keyset_navigation_when_a_page_is_filtered_empty
+    callback = ->(records) { records.where(name: "Green Pear") }
+    first = Product.search("*", keyset: true, limit: 1, scope_results: callback)
+
+    assert_empty first
+    assert first.has_next_page?
+    refute first.out_of_range?
+    refute_nil first.next_cursor
+    second = Product.search("*", keyset: true, after: first.next_cursor, limit: 1, scope_results: callback)
+    assert_equal ["Green Pear"], second.map(&:name)
+    refute second.has_next_page?
+  end
+
+  def test_scope_results_warns_once_about_extra_query_and_unchanged_totals
+    original_logger = Product.logger
+    output = StringIO.new
+    Product.logger = Logger.new(output)
+    search = Product.search("*", scope_results: ->(records) { records.where(name: "Red Apple") })
+
+    search.to_a
+    search.to_a
+
+    assert_equal 1, output.string.scan("scope_results runs a second").length
+    assert_includes output.string, "page-bounded"
+    assert_includes output.string, "total_count"
+    assert_includes output.string, "where:"
+  ensure
+    Product.logger = original_logger
+  end
+
   private
 
   def capture_queries

@@ -12,7 +12,7 @@ module Tinkick
     def_delegators :results, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary
     attr_reader :current_page, :padding
 
-    def initialize(query, page: 1, padding: 0, total_entries: nil, load: true, includes: nil, model_includes: nil)
+    def initialize(query, page: 1, padding: 0, total_entries: nil, load: true, includes: nil, model_includes: nil, scope_results: nil)
       if query.keyset? && (page != 1 || !padding.zero?)
         raise InvalidQueryError, "keyset pagination does not accept page or padding; use after: with next_cursor"
       end
@@ -23,6 +23,7 @@ module Tinkick
       @load = load
       @includes = includes
       @model_includes = model_includes
+      @scope_results = scope_results
       unless load
         @query.model.logger&.warn("Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
       end
@@ -107,7 +108,11 @@ module Tinkick
     end
 
     def out_of_range?
-      return empty? if @query.countless?
+      if @query.countless?
+        return @query.rows.empty? if @load && @scope_results
+
+        return empty?
+      end
 
       current_page > total_pages
     end
@@ -133,8 +138,7 @@ module Tinkick
       @results ||= record_pairs.map(&:first)
     end
 
-    def model_records
-      records = @query.records
+    def preload_records(records)
       associations = [@includes, @model_includes&.[](@query.model)].compact.flatten #: Array[association_spec]
       unless associations.empty?
         ActiveRecord::Associations::Preloader.new(records: records, associations: associations).call
@@ -142,9 +146,38 @@ module Tinkick
       records
     end
 
+    def scoped_record_pairs(scope)
+      rows = @query.rows
+      return [] if rows.empty?
+
+      primary_key = @query.model.primary_key
+      unless primary_key.is_a?(String)
+        raise InvalidQueryError, "scope_results requires a single model primary key"
+      end
+      @query.model.logger&.warn("Tinkick: scope_results runs a second, page-bounded Active Record query after search pagination. It can remove page results without changing total_count; prefer where: for filters that should affect search totals or pagination.")
+      identifiers = rows.map { |row| row.fetch(primary_key) }
+      loaded = scope.call(@query.model.all).where(primary_key => identifiers).to_a #: Array[ActiveRecord::Base]
+      indexed = loaded.to_h { |record| [record[primary_key], record] }
+      # @type var pairs: Array[[ActiveRecord::Base, Float]]
+      pairs = rows.filter_map do |row|
+        record = indexed[row.fetch(primary_key)]
+        next unless record
+
+        score = row.fetch("_tinkick_score") #: Float | BigDecimal
+        [record, score.to_f]
+      end
+      preload_records(pairs.map(&:first))
+      pairs
+    end
+
     def record_pairs
       @record_pairs ||= if @load
-        model_records.map { |record| [record, record[:_tinkick_score].to_f] }
+        scope = @scope_results
+        if scope
+          scoped_record_pairs(scope)
+        else
+          preload_records(@query.records).map { |record| [record, record[:_tinkick_score].to_f] }
+        end
       else
         @query.rows.map do |row|
           # Query projects a numeric score alongside the arbitrary model fields.

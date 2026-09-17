@@ -18,14 +18,14 @@ module Tinkick
       :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score,
       :has_next_page?, :next_cursor, :aggregations
 
-    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil)
+    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil)
       @model = model
       @term = term
       @options = {
         fields: fields, misspellings: misspellings, where: where, order: order,
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding,
         match: match, operator: operator, load: load, total_entries: total_entries,
-        countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes,
+        countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results,
       }
       query
     end
@@ -89,6 +89,16 @@ module Tinkick
     def model_includes!(values)
       check_loaded
       @options[:model_includes] = (@options[:model_includes] || {}).merge(values)
+      self
+    end
+
+    def scope_results(value)
+      clone.scope_results!(value)
+    end
+
+    def scope_results!(value)
+      check_loaded
+      @options[:scope_results] = value
       self
     end
 
@@ -367,7 +377,7 @@ module Tinkick
     def execute
       load_value = @options[:load]
       @results ||= Results.new(query, page: page_number, padding: page_padding,
-        total_entries: @options[:total_entries], load: load_value.nil? ? true : load_value, includes: @options[:includes], model_includes: @options[:model_includes])
+        total_entries: @options[:total_entries], load: load_value.nil? ? true : load_value, includes: @options[:includes], model_includes: @options[:model_includes], scope_results: @options[:scope_results])
     end
   end
 
