@@ -1027,12 +1027,19 @@ only selected columns plus required highlight inputs; hidden inputs stay out of
 the source and raw result attributes. Large pages or long fields increase transfer
 and presentation work, so set a suitable page limit.
 
+`:exact`, `:text_start`, `:text_middle`, and `:text_end` also support highlights.
+They mark the complete matching field, reflecting Searchkick's whole-field
+analysis. A small fragment size does not split that complete match span. Each
+SQL field is checked against the same search predicate in a bound page batch,
+so a record matching another field does not create a false highlight. Fuzzy
+whole-field highlighting retains the matching path's optional dependencies and
+cost warnings.
+
 Native highlighting preserves document HTML. `encoder: "html"` escapes source
 text separately from trusted highlight tags; returned strings are not marked
 HTML-safe. Do not mark untrusted native output `html_safe`.
 
-Custom index analysis and SQL whole-field highlighting
-remain adapter work and raise actionable argument errors instead of returning
+Custom index analysis remains adapter work and raises an argument error instead of returning
 incorrect spans. Explicit native highlighting applies default analysis even when
 an index uses different analysis; merely passing the index's query is insufficient.
 A model `highlight:` declaration is not yet accepted. See
