@@ -1,0 +1,50 @@
+<%
+require "faker"
+previous_random = Faker::Config.random
+begin
+  Faker::Config.random = Random.new(314159)
+  categories = %w[fantasy travel food technical]
+  documents = Array.new(9_992) do |index|
+    character = Faker::Fantasy::Tolkien.character
+    location = Faker::Fantasy::Tolkien.location
+    poem = Faker::Fantasy::Tolkien.poem
+    category = categories.fetch(index % categories.size)
+    subject = case category
+    when "fantasy"
+      "A historian compares family records, regional traditions, and old maps."
+    when "travel"
+      "A visitor books train tickets and guesthouses, checking museum hours and walking routes."
+    when "food"
+      "A cook prepares lentil soup, roasted vegetables, sourdough bread, and warm tea."
+    else
+      "An engineer reviews database backups, transaction isolation, network retries, and storage capacity."
+    end
+    body = "#{character} writes from #{location}. #{subject} The journal discusses #{poem}."
+    body += " A later chapter records practical questions and observations from the previous season." * (index % 4)
+    { id: index + 1, title: "#{category.capitalize} notes #{index}: #{location}", body: body, category: category }
+  end
+ensure
+  Faker::Config.random = previous_random
+end
+
+controls = [
+  ["Frequent lighting instructions", "Carry a mithril lantern beside the ladder. Keep a mithril lantern near the doorway. Store a mithril lantern by the entrance."],
+  ["Ordinary equipment instructions", "Carry a mithril lantern beside the ladder. Keep a wooden basket near the doorway. Store a wooden basket by the entrance."],
+  ["Concise lighting instructions", "A mithril lantern guides miners home."],
+  ["Extended travel journal", "A mithril lantern guides miners home. " + "Porters record weather, repair boots, prepare meals, and inspect the river crossing. " * 30],
+  ["Ordered watch report", "Gondolin sentries guard the northern gate after sunset."],
+  ["Reversed watch report", "The sentries Gondolin appoints protect the northern gate."],
+  ["Experienced watch report", "Gondolin veteran sentries guard the northern gate."],
+  ["Navigation workshop", "Mapmakers restore a mithril astrolabe before departure."],
+]
+controls.each_with_index do |(title, body), index|
+  documents << { id: 9_993 + index, title: title, body: body, category: "control" }
+end
+%>
+<% documents.each do |document| %>
+document_<%= document[:id] %>:
+  id: <%= document[:id] %>
+  title: <%= document[:title].to_json %>
+  body: <%= document[:body].to_json %>
+  category: <%= document[:category].to_json %>
+<% end %>
