@@ -30,7 +30,7 @@ module Tinkick
 
         # @type var metric_names: Array[aggregation_metric_name]
         metric_names = [:avg, :cardinality, :max, :min, :sum]
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :histogram, :date_histogram, :keyed, :time_zone, :format, :include, :exclude, *metric_names]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :histogram, :date_histogram, :keyed, :time_zone, :format, :include, :exclude, :missing, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
         metrics = metric_names.select { |metric| options.key?(metric) }
@@ -42,6 +42,9 @@ module Tinkick
         end
         if (options.key?(:include) || options.key?(:exclude)) && (range_kinds.any? || metrics.any? || histogram_kinds.any?)
           raise ArgumentError, "include and exclude apply only to terms aggregations"
+        end
+        if options.key?(:missing) && (range_kinds.any? || metrics.any? || histogram_kinds.any?)
+          raise ArgumentError, "Top-level missing applies only to terms aggregations; put metric defaults inside the metric hash"
         end
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
         raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
@@ -75,11 +78,11 @@ module Tinkick
           terms((options[:field] || name).to_s, options)
         else
           metric = metrics.fetch(0)
-          metric_options = options.fetch(metric)
-          unless metric_options.is_a?(Hash) && (metric_options.keys - [:field]).empty?
-            raise ArgumentError, "Metric options must be a hash containing a field"
+          metric_options = options.fetch(metric) #: aggregation_metric_options
+          unless metric_options.is_a?(Hash) && (metric_options.keys - [:field, :missing]).empty?
+            raise ArgumentError, "Metric options must be a hash containing field and/or missing"
           end
-          calculate_metric(metric, (metric_options[:field] || name).to_s, options[:where])
+          calculate_metric(metric, (metric_options[:field] || name).to_s, options[:where], missing: metric_options[:missing])
         end
         [name.to_s, result]
       end
@@ -351,14 +354,14 @@ module Tinkick
       scope = @scope
       conditions = options[:where]
       scope = Filter.new(@model).apply(scope, conditions) if conditions
-      values = values_relation(scope, field)
+      values = values_relation(scope, field, missing: options[:missing])
       counts = @unscoped.from(values, :tinkick_values)
         .where(Arel.sql("_tinkick_value IS NOT NULL"))
         .group(Arel.sql("_tinkick_value"))
         .select(Arel.sql("_tinkick_value AS _tinkick_key, COUNT(*) AS _tinkick_count"))
       if minimum.zero?
         @model.logger&.warn("Tinkick: min_doc_count: 0 reads the model's scoped term dictionary in addition to matching documents. This can cost more for many distinct values.")
-        dictionary = @unscoped.from(values_relation(@dictionary_scope, field), :tinkick_values)
+        dictionary = @unscoped.from(values_relation(@dictionary_scope, field, missing: options[:missing]), :tinkick_values)
           .where(Arel.sql("_tinkick_value IS NOT NULL"))
           .select(Arel.sql("_tinkick_value AS _tinkick_key")).distinct
         counts = @unscoped.with(tinkick_dictionary: dictionary, tinkick_matching_counts: counts)
@@ -406,9 +409,9 @@ module Tinkick
       end
     end
 
-    def calculate_metric(metric, field, conditions)
+    def calculate_metric(metric, field, conditions, missing: nil)
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
-      values = values_relation(scope, field, unique: false)
+      values = values_relation(scope, field, unique: false, missing: missing)
       column = @model.columns_hash.fetch(field)
       unless metric == :cardinality || [:integer, :decimal, :float].include?(column.type)
         raise InvalidQueryError, "#{metric} requires a numeric aggregation column"
@@ -514,7 +517,7 @@ module Tinkick
       raise ArgumentError, "Range bounds must be finite numbers"
     end
 
-    def values_relation(scope, field, unique: true)
+    def values_relation(scope, field, unique: true, missing: nil)
       column = @model.columns_hash[field]
       raise MissingFieldError, "#{@model.name} has no aggregation column #{field.inspect}; add it with a Rails migration" unless column
       if [:json, :jsonb].include?(column.type)
@@ -531,12 +534,18 @@ module Tinkick
         documents = scope.select(Arel.sql("#{identifier} AS _tinkick_document_id, #{value} AS _tinkick_value")).distinct
         if column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
           @model.logger&.warn("Tinkick: array aggregations expand matching array values in PostgreSQL before calculating buckets or metrics. Use selective filters for frequent facets.")
-          elements = @unscoped.from(documents, :tinkick_documents)
-            .joins(Arel.sql("CROSS JOIN LATERAL unnest(tinkick_documents._tinkick_value) AS tinkick_elements(value)"))
-            .select(Arel.sql("_tinkick_document_id, tinkick_elements.value AS _tinkick_value"))
+          join = "LATERAL unnest(tinkick_documents._tinkick_value) AS tinkick_elements(value)"
+          elements = if missing.nil?
+            @unscoped.from(documents, :tinkick_documents).joins(Arel.sql("CROSS JOIN #{join}"))
+              .select(Arel.sql("_tinkick_document_id, tinkick_elements.value AS _tinkick_value"))
+          else
+            @unscoped.from(documents, :tinkick_documents)
+              .joins(Arel.sql("LEFT JOIN #{join} ON tinkick_elements.value IS NOT NULL"))
+              .select(Arel.sql("_tinkick_document_id, COALESCE(tinkick_elements.value, ?) AS _tinkick_value", missing))
+          end
           unique ? elements.distinct : elements
         else
-          documents
+          missing.nil? ? documents : scope.select(Arel.sql("#{identifier} AS _tinkick_document_id, COALESCE(#{value}, ?) AS _tinkick_value", missing)).distinct
         end
       end
     end

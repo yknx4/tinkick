@@ -3,7 +3,7 @@ module Tinkick
 
   type aggregation_metric_name = :avg | :cardinality | :max | :min | :sum
 
-  type aggregation_metric_options = { ?field: String | Symbol }
+  type aggregation_metric_options = { ?field: String | Symbol, ?missing: filter_scalar }
 
   type aggregation_range_bound = Numeric | String | Date | Time | nil
 
@@ -19,7 +19,7 @@ module Tinkick
 
   type aggregation_term_filter = String | Array[filter_scalar] | Regexp | Hash[String | Symbol, Integer]
 
-  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?include: aggregation_term_filter, ?exclude: aggregation_term_filter, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?histogram: aggregation_histogram_options, ?date_histogram: aggregation_date_histogram_options, ?keyed: bool, ?time_zone: String | Integer | Float, ?format: String, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
+  type aggregation_options = { ?field: String | Symbol, ?missing: filter_scalar, ?limit: Integer, ?include: aggregation_term_filter, ?exclude: aggregation_term_filter, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?histogram: aggregation_histogram_options, ?date_histogram: aggregation_date_histogram_options, ?keyed: bool, ?time_zone: String | Integer | Float, ?format: String, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
 
   type aggregation_spec = Array[String | Symbol] | Hash[String | Symbol, aggregation_options]
 
@@ -77,13 +77,13 @@ module Tinkick
 
     def term_filter: (ActiveRecord::Relation query, aggregation_term_filter value, exclude: bool) -> ActiveRecord::Relation
 
-    def calculate_metric: (aggregation_metric_name metric, String field, filter_conditions? conditions) -> aggregation_metric
+    def calculate_metric: (aggregation_metric_name metric, String field, filter_conditions? conditions, ?missing: filter_scalar) -> aggregation_metric
 
     def range_aggregation: (String field, Array[aggregation_range_options] ranges, aggregation_options options, ?dates: bool) -> aggregation_ranges
 
     def numeric_bound: (aggregation_range_bound value) -> Float?
 
-    def values_relation: (ActiveRecord::Relation scope, String field, ?unique: bool) -> ActiveRecord::Relation
+    def values_relation: (ActiveRecord::Relation scope, String field, ?unique: bool, ?missing: filter_scalar) -> ActiveRecord::Relation
 
     def order_sql: (aggregation_order order) -> String
 
