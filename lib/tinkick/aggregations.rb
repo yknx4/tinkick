@@ -27,13 +27,17 @@ module Tinkick
 
         # @type var metric_names: Array[aggregation_metric_name]
         metric_names = [:avg, :cardinality, :max, :min, :sum]
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, *metric_names]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :keyed, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
         metrics = metric_names.select { |metric| options.key?(metric) }
         raise ArgumentError, "Each aggregation must select only one metric" if metrics.length > 1
+        raise ArgumentError, "Ranges cannot be combined with a metric" if options.key?(:ranges) && !metrics.empty?
+        raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && !options.key?(:ranges)
 
-        result = if metrics.empty?
+        result = if options.key?(:ranges)
+          numeric_ranges((options[:field] || name).to_s, options.fetch(:ranges), options)
+        elsif metrics.empty?
           terms((options[:field] || name).to_s, options)
         else
           metric = metrics.fetch(0)
@@ -111,6 +115,79 @@ module Tinkick
       result["value"] = 0.0 if metric == :sum && value.nil?
       result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
       result
+    end
+
+    def numeric_ranges(field, ranges, options)
+      raise ArgumentError, "ranges must be a nonempty array" unless ranges.is_a?(Array) && !ranges.empty?
+      raise ArgumentError, "keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
+
+      buckets = ranges.map do |range|
+        unless range.is_a?(Hash) && (range.keys - [:from, :to, :key]).empty?
+          raise ArgumentError, "Each range must contain only from, to, or key"
+        end
+        lower = numeric_bound(range[:from])
+        upper = numeric_bound(range[:to])
+        key = range[:key]
+        raise ArgumentError, "Range key must be a string" unless key.nil? || key.is_a?(String)
+
+        # @type var entry: aggregation_range_bucket
+        entry = { "key" => key || "#{lower || "*"}-#{upper || "*"}", "doc_count" => 0 }
+        entry["from"] = lower if lower
+        entry["to"] = upper if upper
+        entry
+      end.sort_by { |entry| [entry.fetch("from", -Float::INFINITY), entry.fetch("to", Float::INFINITY)] }
+      conditions = options[:where]
+      scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
+      values = values_relation(scope, field)
+      unless [:integer, :decimal, :float].include?(@model.columns_hash.fetch(field).type)
+        raise InvalidQueryError, "ranges requires a numeric aggregation column"
+      end
+
+      # @type var binds: Array[Float]
+      binds = []
+      selections = buckets.each_with_index.map do |entry, index|
+        predicates = ["_tinkick_value IS NOT NULL"]
+        { "from" => ">=", "to" => "<" }.each do |bound, operator|
+          value = entry[bound]
+          next unless value.is_a?(Float)
+
+          predicates << "_tinkick_value::double precision #{operator} ?"
+          binds << value
+        end
+        "COUNT(DISTINCT _tinkick_document_id) FILTER (WHERE #{predicates.join(" AND ")}) AS _tinkick_range_#{index}"
+      end
+      query = @model.unscoped.from(values, :tinkick_values).select(Arel.sql(selections.join(", "), *binds))
+      # @type var counts: Hash[String, Integer]
+      counts = @model.with_connection { |connection| connection.select_one(query) } || {}
+      buckets.each_with_index { |entry, index| entry["doc_count"] = counts.fetch("_tinkick_range_#{index}", 0) }
+      response_buckets = if options[:keyed]
+        buckets.to_h do |entry|
+          # @type var keyed_bucket: aggregation_keyed_range_bucket
+          keyed_bucket = { "doc_count" => entry.fetch("doc_count") }
+          lower = entry["from"]
+          upper = entry["to"]
+          keyed_bucket["from"] = lower if lower
+          keyed_bucket["to"] = upper if upper
+          [entry.fetch("key"), keyed_bucket]
+        end
+      else
+        buckets
+      end
+      # @type var result: aggregation_ranges
+      result = { "buckets" => response_buckets }
+      result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
+      result
+    end
+
+    def numeric_bound(value)
+      return if value.nil?
+
+      number = Float(value)
+      raise ArgumentError, "Range bounds must be finite numbers" unless number.is_a?(Float) && number.finite?
+
+      number
+    rescue TypeError
+      raise ArgumentError, "Range bounds must be finite numbers"
     end
 
     def values_relation(scope, field, unique: true)

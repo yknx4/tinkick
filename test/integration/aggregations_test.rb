@@ -191,6 +191,52 @@ class AggregationsTest < TinkickIntegrationTest
     assert_empty aggregate(tags: { min_doc_count: 0 }).fetch("tags").fetch("buckets")
   end
 
+  def test_numeric_ranges_include_lower_bound_and_exclude_upper_bound
+    result = aggregate(id: { ranges: [{ from: 20_000, to: 30_000 }, { from: 10_007 }, { to: 10_004 }, { from: 10_004, to: 10_007 }] }).fetch("id")
+
+    assert_equal [
+      { "key" => "*-10004.0", "to" => 10_004.0, "doc_count" => 3 },
+      { "key" => "10004.0-10007.0", "from" => 10_004.0, "to" => 10_007.0, "doc_count" => 3 },
+      { "key" => "10007.0-*", "from" => 10_007.0, "doc_count" => 2 },
+      { "key" => "20000.0-30000.0", "from" => 20_000.0, "to" => 30_000.0, "doc_count" => 0 },
+    ], result.fetch("buckets")
+    refute @scope.loaded?
+  end
+
+  def test_numeric_array_ranges_count_documents_once_in_each_overlapping_bucket
+    SearchProduct.where(id: 10_001).update_all(ratings: [1, 1, nil, 10])
+    scope = @scope.joins("CROSS JOIN generate_series(1, 2) AS duplicate_rows")
+    result = Tinkick::Aggregations.new(SearchProduct, scope.limit(1)).call(
+      scores: { field: :ratings, ranges: [{ to: 10 }, { from: 5, to: 20 }, { from: 100 }], where: { name: ["amber", "blue"] } },
+    ).fetch("scores")
+
+    assert_equal [5, 2, 0], result.fetch("buckets").map { |bucket| bucket.fetch("doc_count") }
+    assert_equal 5, result.fetch("doc_count")
+  end
+
+  def test_numeric_ranges_support_custom_keys_keyed_results_and_empty_values
+    spec = { ratings: { ranges: [{ key: "under ten", to: 10 }, { key: "all" }], keyed: true } }
+    result = aggregate(spec).fetch("ratings")
+
+    assert_equal({ "under ten" => { "to" => 10.0, "doc_count" => 8 }, "all" => { "doc_count" => 8 } }, result.fetch("buckets"))
+    SearchProduct.where(id: 10_001..10_008).update_all(ratings: [nil])
+    assert_equal [0, 0], aggregate(spec).fetch("ratings").fetch("buckets").values.map { |bucket| bucket.fetch("doc_count") }
+    assert_equal [0, 0], Tinkick::Aggregations.new(SearchProduct, @scope.none).call(spec).fetch("ratings").fetch("buckets").values.map { |bucket| bucket.fetch("doc_count") }
+  end
+
+  def test_numeric_ranges_validate_fields_bounds_and_options
+    assert_raises(Tinkick::InvalidQueryError) { aggregate(name: { ranges: [{ from: 0 }] }) }
+    assert_raises(Tinkick::MissingFieldError) { aggregate(missing: { ranges: [{ from: 0 }] }) }
+    assert_raises(ArgumentError) { aggregate(id: { ranges: [] }) }
+    assert_raises(ArgumentError) { aggregate(id: { ranges: [{ from: "0); DROP TABLE x --" }] }) }
+    assert_raises(ArgumentError) { aggregate(id: { ranges: [{ to: Float::INFINITY }] }) }
+    assert_raises(ArgumentError) { aggregate(id: { ranges: [{ unexpected: 1 }] }) }
+    assert_raises(ArgumentError) { aggregate(id: { ranges: [{ from: 0 }], sum: {} }) }
+    assert_raises(ArgumentError) { aggregate(name: { keyed: true }) }
+
+    assert_equal [{ "key" => "10004.5-10006.0", "from" => 10_004.5, "to" => 10_006.0, "doc_count" => 1 }], aggregate(id: { ranges: [{ from: "10004.5", to: 10_006 }] }).fetch("id").fetch("buckets")
+  end
+
   private
 
   def aggregate(spec)
