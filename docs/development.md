@@ -11,6 +11,14 @@ direnv exec . bundle install
 direnv exec . bundle exec rbs collection install
 ```
 
+The Rails 8.0 matrix uses `JSON_VERSION='< 3'`. Rails 8.0.5.1's encoder passes
+`quirks_mode`, which JSON 3 removed; the integration checkpoint reproduced that
+failure. Rails 8.1 is tested with JSON 3. The Gemfile exposes `JSON_VERSION` for
+these dependency combinations, and CI resolves each combination separately.
+Applications on Rails 8.0 should likewise constrain `json` below 3 until they
+upgrade to a Rails release with compatible encoding. Tinkick does not patch
+Rails or impose that constraint on applications using newer Rails.
+
 Use `tinkick_development` for development and `tinkick_test` for integration
 tests. The test helper checks `current_database()` before running any Rails
 migrations. It requires a real TIN extension and never substitutes another
@@ -52,3 +60,25 @@ The endpoint router rejects some standalone function and array-subquery shapes.
 Native helper probes using a catalog row as an execution anchor worked. Test
 the actual SQL produced by each feature; do not infer support solely from a
 PostgreSQL function's presence in the catalog.
+
+## Rails application and Faker data
+
+`test/dummy` is a Rails application with a searchable Tolkien character model,
+HTML view, JSON endpoint, and real controller requests. Its ERB fixtures use
+`Faker::Fantasy::Tolkien.character`, `.location`, `.race`, and `.poem`, with a
+fixed seed and restoration of Faker's previous random generator. The 64 records
+are repeatable synthetic combinations, not assertions about Tolkien's canon.
+
+```sh
+direnv exec . bundle exec ruby -Itest test/rails_app_test.rb --fail-fast
+```
+
+Its table and four TIN indexes are created by the shared Rails migration harness
+in `tinkick_test`; writes made by individual tests roll back. The HTTP tests
+assert both the stored values and actual TIN SQL. They do not fake search results
+or stub Active Record, PostgreSQL, or TIN.
+
+The router rejects the dynamic PL/pgSQL used by Rails' optional fixture foreign
+key audit. The dummy app has no foreign keys and explicitly disables that audit;
+this setting does not alter the gem or consuming applications. Changes that add
+associations to this app must add real foreign-key validation coverage.

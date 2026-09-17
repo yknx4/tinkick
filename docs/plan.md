@@ -2,8 +2,10 @@
 
 ## Confirmed design
 
-- Ruby 4.x+ and Rails/Active Record 8.x+; retain Searchkick caller-facing names
-  wherever the TIN backend can honor their behavior.
+- Ruby 4.x+ and Rails/Active Record 8.x+; retain supported Searchkick query
+  options and result interfaces while using the `Tinkick` namespace, `tinkick`
+  declaration and `tinkick_search` entry point. Add `search` only if it is free.
+  Both gems must coexist during a transition; never alias the Searchkick constant.
 - Query the model's own PostgreSQL table. No document table, copied JSON
   datasource, importer, synchronization callbacks/jobs, or data reindexing.
 - Use `search_data` as a schema sanity check. Every declared field must exist
@@ -13,6 +15,15 @@
   PostgreSQL generated columns. Schema/index changes happen in migrations.
   Supply Rails migrations that consuming applications can import.
 - Preserve the existing `.envrc` and `dev.ejson` development/test setup.
+- Prefer native TIN query performance over identical Searchkick scores or tie
+  ordering. Preserve public options and result interfaces; distinguish ranking
+  differences from changes to matching eligibility. Known slow compatibility
+  paths must warn through the model logger.
+- Retain `load: false` for compatibility, with a logger warning recommending
+  migration to normal model results. Both modes query through Active Record.
+- Add opt-in keyset pagination over stable columns and countless pagination
+  that retains relevance ordering. Preserve existing page/offset behavior.
+  Recommend cursors for traversal and avoid automatic counts when unnecessary.
 
 ## Milestones and exit evidence
 
@@ -29,11 +40,12 @@ the library/signatures/docs and exclude local secrets.
 
 ### 1. Model registration and field validation
 
-Add the Active Record integration and `searchkick` declaration using failing
+Add the Active Record integration and `tinkick` declaration using failing
 Minitest coverage first. Validate field existence/types, the PostgreSQL adapter,
 and required extension/index prerequisites with actionable errors. Keep model
 declaration usable during migration/bootstrap commands; perform schema checks
-at an explicit validation point or first use after migrations, as decided below.
+at first use after migrations. Evaluate `search_data` on a new model instance;
+explain failures that require persisted records or associations.
 
 `search_data` validation tests must cover existing and missing columns, string
 and symbol keys, generated columns, an empty table, and a method requiring real
@@ -55,7 +67,8 @@ identifiers, and escape TINQL separately. Preserve model primary keys; never
 expose `ctid` as application identity.
 
 Load only the requested page and compute counts independently in SQL. Keep
-scoring in the TIN scan query; prove stable pagination under tied scores. Explicitly
+scoring in the TIN scan query and preserve its native top-k path. Explicit user
+ordering can make tied pages deterministic; do not force a sort for default ties. Explicitly
 resolve the legacy 10,000 default versus bounded application pagination before
 choosing a different default. Include default-scope/tenant isolation tests.
 
@@ -111,14 +124,12 @@ be necessary operationally; Tinkick will not implement the latter as data copy.
 
 ## Decisions before implementation
 
-1. **How `search_data` exposes field names:** existing methods return values from
-   instances and may traverse associations or vary keys by record. Resolve when
-   and on which instance validation runs, and what to require when it cannot
-   discover keys safely. A declared `searchable`/`filterable` field list can be
-   validated without reading rows, but must not silently bypass `search_data`.
-2. **Compatibility loading:** decide whether Tinkick supplies a `Searchkick`
-   constant alias automatically or through an explicit compatibility require.
-   Detect coexistence with the actual Searchkick gem. Do not overwrite it.
+1. **Field schema:** validate `search_data` keys on a new instance, including an
+   empty table. The user approved this policy. Methods that cannot run on a new
+   instance must raise migration/configuration guidance. Never sample a saved row.
+2. **Coexistence:** use distinct Tinkick names and preserve existing `search`
+   methods. Verify both gem declaration orders and an application-defined search.
+   The user explicitly rejected a Searchkick namespace alias.
 3. **Removed lifecycle calls:** decide whether legacy `.reindex`, callback
    controls and refresh calls raise migration guidance or selected calls are
    documented no-ops. There is no reindexing implementation in either case.
@@ -144,11 +155,30 @@ query compilation, unloaded attribute wrappers, and the extension installer.
 RBS uses a pinned maintained Rails signature collection with concrete corrections
 for the Rails 8 APIs used by these features.
 
-These internal pieces do not yet provide `Model.search`. Query execution and
-per-column index migration generation are the next increments. Public model
-registration, lazy relations/results, default analysis/fuzziness, and the broader
-compatibility contracts remain unfinished. Native capability observations and
-adapter implementation status are recorded separately in the compatibility docs.
+Ranked query execution, per-column index migrations, an internal full-field
+highlighting helper, and distance-one fuzzy transpositions are implemented.
+Native `tin.score` preserves
+dense-term elision. Single-field first-page queries retain top-k; forced tie sorts,
+multiple field predicates, and even explicit `OFFSET 0` can change that plan.
+The normal query omits zero offsets and artificial exact/fuzzy boosts. Slow-path
+warnings and additive cursor/countless APIs help callers choose intentionally.
+
+Public `tinkick` registration and `tinkick_search` now compose the query, relation,
+and result layers. The real Searchkick gem is a development dependency for
+coexistence tests, with existing methods preserved. Generated fields have live
+migration/update tests. An actual Rails app exercises requests using seeded
+Faker Tolkien data. Broader matching, analysis, aggregations, result metadata,
+and compatibility contracts remain unfinished and must not be advertised as
+supported. Native observations and adapter status remain separate in the docs.
+
+The [268-document corpus](../test/dummy/test/fixtures/tinkick_test_documents.yml)
+now provides related and unrelated prose plus controlled term frequency, document
+length, field-boundary, phrase-order, and typo cases. The
+[relevance tests](../test/relevance_test.rb) assert meaningful result sets and
+ranking relationships without hard-coding cross-engine scores or a tie order.
+[Executed query plans](query-plans.md) record the actual SQL, returned rows, and
+small-data performance evidence. Small fixtures remain for narrow API contracts;
+production-scale relevance and load testing remain application-specific work.
 
 ## Test environment and documentation status
 
@@ -164,5 +194,5 @@ substitute PostgreSQL built-in full-text search.
 
 Integration checks now connect and migrate only the dedicated test database. Outline status:
 not applicable; no Outline integration is configured. Customer-facing impact:
-README and local compatibility/migration planning docs only; no supported
-search feature is advertised as already available.
+README and local compatibility/migration docs, plus a runnable Rails fixture
+application; implemented features are distinguished from unfinished targets.
