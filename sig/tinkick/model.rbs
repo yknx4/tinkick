@@ -18,7 +18,7 @@ module Tinkick
 
     def tinkick_options: () -> model_options?
 
-    def tinkick_search: (?Object? term, ?fields: model_fields?, ?misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol?, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?exclude: exclusion_phrases, ?select: source_selection?, ?highlight: highlight_options, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost) -> Relation
+    def tinkick_search: (?Object? term, ?fields: model_fields?, ?misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol?, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?exclude: exclusion_phrases, ?select: source_selection?, ?highlight: highlight_options, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost, ?boost_by_recency: recency_boost_spec) -> Relation
 
     def tinkick_expand_fields: (model_fields fields, match: Symbol) -> model_fields
 

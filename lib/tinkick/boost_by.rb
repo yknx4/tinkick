@@ -1,16 +1,23 @@
 # frozen_string_literal: true
 
 require_relative "filter"
+require_relative "recency_boost"
 
 module Tinkick
   class BoostBy
     MAX_SCORE = 3.4028234663852886e38
 
-    def initialize(model, specification, boost_where: nil, boost: nil)
+    def initialize(model, specification, boost_where: nil, boost: nil, boost_by_recency: nil)
       @model = model
       @sums = [] #: Array[[String, String]]
       @multipliers = [] #: Array[[String, String]]
       @warned = false
+      @numeric_scoring = false
+      @recency_spec = boost_by_recency
+      @now = Time.now
+      unless !boost_by_recency || boost_by_recency.is_a?(Hash)
+        raise ArgumentError, "boost_by_recency must be a field options hash"
+      end
       @conditions = conditional_functions(boost_where)
       @conditional_scoring = @conditions.any? { |_condition, weight| weight.positive? }
       return unless specification || boost
@@ -48,17 +55,20 @@ module Tinkick
         SQL
         (multiply ? @multipliers : @sums) << [present, checked]
       end
+      @numeric_scoring = !entries.empty?
     end
 
     def empty?
-      @sums.empty? && @multipliers.empty? && @conditions.empty?
+      recency = @recency_spec
+      @sums.empty? && @multipliers.empty? && @conditions.empty? && (!recency || recency.empty?)
     end
 
     def score_sql(base_score)
+      compile_recency if @recency_spec
       compile_conditions unless @conditions.empty?
       return base_score if empty?
 
-      unless @warned
+      if !@warned && (@numeric_scoring || @conditional_scoring)
         message = if @conditional_scoring
           "Tinkick: conditional boost_where scoring evaluates filters for matching rows and can sort results instead of using native TIN top-k. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets."
         else
@@ -71,6 +81,20 @@ module Tinkick
     end
 
     private
+
+    def compile_recency
+      compiler = RecencyBoost.new(@model, @recency_spec, now: @now)
+      functions = compiler.functions
+      single = @sums.length + @conditions.length + functions.length == 1
+      functions.each_with_index do |function, index|
+        # A lone unfiltered function uses FIRST upstream; a SUM group whose
+        # matched weights are all zero retains the identity instead.
+        next if !single && compiler.weights.fetch(index).zero?
+
+        @sums << function
+      end
+      @recency_spec = nil
+    end
 
     def conditional_functions(specification)
       return [] unless specification
