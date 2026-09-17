@@ -1,0 +1,15 @@
+module Tinkick
+  class QueryText
+    @connection: ActiveRecord::ConnectionAdapters::AbstractAdapter
+
+    def initialize: (ActiveRecord::ConnectionAdapters::AbstractAdapter connection) -> void
+
+    def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: bool) -> String
+
+    private
+
+    def tokens: (String term) -> Array[String]
+
+    def quote: (String term) -> String
+  end
+end
