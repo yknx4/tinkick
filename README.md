@@ -1714,9 +1714,31 @@ PlanetScale router rejects some standalone helper/SRF SQL shapes. Inspect the
 query actually executed rather than assuming every PostgreSQL expression works
 through the router. See [native functions](https://planetscale.com/docs/postgres/search/reference/functions).
 
-Use `sql.active_record` notifications and your Rails logger for timing and query
-counts. Searchkick-specific Lograge `searchkick_runtime`, `opaque_id`, and profiling
-response hooks are not supplied.
+Tinkick publishes ActiveSupport notifications for executed operations:
+
+| Event | Measured operation |
+| --- | --- |
+| `search.tinkick` | A model/raw/projected page fetch, or an unloaded raw `pluck` |
+| `count.tinkick` | An explicit SQL result count |
+| `aggregations.tinkick` | The requested SQL aggregations |
+
+```ruby
+ActiveSupport::Notifications.subscribe(/\.tinkick\z/) do |event|
+  Rails.logger.info("#{event.payload[:name]}: #{event.duration.round(1)}ms")
+end
+```
+
+Payloads contain a readable `:name` and the model name in `:model`. ActiveSupport
+adds exception details when execution fails; the original error still raises.
+Constructing a lazy relation and reading cached results emit no new event.
+Countless pages do not emit count events unless a count is explicitly requested.
+Events have their own Tinkick namespace so both gems' subscribers can coexist.
+
+These durations cover the logical operation, which may issue several SQL queries;
+use `sql.active_record` notifications and the Rails logger for SQL and query
+counts. Elasticsearch request bodies are not notification payloads. Searchkick's
+Lograge `searchkick_runtime`, `opaque_id`, and profiling response hooks are not
+supplied.
 
 ## Performance and consistency
 
