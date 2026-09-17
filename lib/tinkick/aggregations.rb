@@ -29,7 +29,7 @@ module Tinkick
 
         # @type var metric_names: Array[aggregation_metric_name]
         metric_names = [:avg, :cardinality, :max, :min, :sum]
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :keyed, :time_zone, *metric_names]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :keyed, :time_zone, :format, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
         metrics = metric_names.select { |metric| options.key?(metric) }
@@ -38,6 +38,7 @@ module Tinkick
         raise ArgumentError, "Each aggregation must select only one range kind or metric" if range_kinds.length + metrics.length > 1
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
         raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
+        raise ArgumentError, "format applies only to date aggregations" if options.key?(:format) && !options.key?(:date_ranges)
 
         result = if options.key?(:date_ranges)
           range_aggregation((options[:field] || name).to_s, options.fetch(:date_ranges), options, dates: true)
@@ -127,7 +128,7 @@ module Tinkick
       raise ArgumentError, "ranges must be a nonempty array" unless ranges.is_a?(Array) && !ranges.empty?
       raise ArgumentError, "keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
 
-      date_values = dates ? AggregationDate.new(time_zone: options[:time_zone], now: @now) : nil
+      date_values = dates ? AggregationDate.new(format: options[:format], time_zone: options[:time_zone], now: @now) : nil
       buckets = ranges.map do |range|
         unless range.is_a?(Hash) && (range.keys - [:from, :to, :key]).empty?
           raise ArgumentError, "Each range must contain only from, to, or key"

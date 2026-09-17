@@ -9,7 +9,7 @@ module Tinkick
 
   type aggregation_range_options = { ?from: aggregation_range_bound, ?to: aggregation_range_bound, ?key: String }
 
-  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?keyed: bool, ?time_zone: String, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
+  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?keyed: bool, ?time_zone: String, ?format: String, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
 
   type aggregation_spec = Array[String | Symbol] | Hash[String | Symbol, aggregation_options]
 

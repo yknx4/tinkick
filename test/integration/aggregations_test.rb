@@ -307,6 +307,50 @@ class AggregationsTest < TinkickIntegrationTest
     assert_raises(ArgumentError) { aggregate(id: { time_zone: "UTC", ranges: [{}] }) }
   end
 
+  def test_public_date_range_format_controls_counts_keys_and_boundaries
+    create_date_values
+    search = Tinkick::Relation.new(AggregationDateValue, "chronicle", fields: [:name], misspellings: false, limit: 1,
+      aggs: { calendar: { field: :recorded_at, format: "yyyy/MM/dd", time_zone: "+01:00", date_ranges: [
+        { to: "2026/01/02" }, { from: "2026/01/02", to: "2026/01/03" }, { from: "2026/01/03" },
+      ] } })
+    buckets = search.aggs.fetch("calendar").fetch("buckets")
+
+    assert_equal [0, 3, 1], buckets.map { |bucket| bucket.fetch("doc_count") }
+    assert_equal ["*-2026/01/02", "2026/01/02-2026/01/03", "2026/01/03-*"], buckets.map { |bucket| bucket.fetch("key") }
+    assert_equal "2026/01/02", buckets.fetch(1).fetch("from_as_string")
+    assert_equal "2026/01/03", buckets.fetch(1).fetch("to_as_string")
+    assert_equal Time.utc(2026, 1, 1, 23).to_i * 1_000, buckets.fetch(1).fetch("from")
+  end
+
+  def test_date_range_format_alternatives_and_numeric_formats_preserve_counts
+    create_date_values
+    evaluator = Tinkick::Aggregations.new(AggregationDateValue, AggregationDateValue.where("name ==> ?", "chronicle"))
+    january_second = Time.utc(2026, 1, 2).to_i * 1_000
+    january_third = Time.utc(2026, 1, 3).to_i * 1_000
+    [
+      ["yyyy/MM/dd||strict_date_optional_time||epoch_millis", "2026-01-02T00:00:00Z", january_third, "2026/01/02"],
+      ["yyyyMMdd", 20260102, 20260103, "20260102"],
+      ["epoch_millis", january_second, january_third, january_second.to_s],
+    ].each do |pattern, lower, upper, label|
+      result = evaluator.call(recorded_at: { format: pattern, keyed: true, date_ranges: [{ key: "middle", from: lower, to: upper }] })
+        .fetch("recorded_at").fetch("buckets").fetch("middle")
+
+      assert_equal 2, result.fetch("doc_count")
+      assert_equal january_second, result.fetch("from")
+      assert_equal label, result.fetch("from_as_string")
+    end
+  end
+
+  def test_date_range_format_rejects_invalid_formats_and_other_aggregation_kinds
+    evaluator = Tinkick::Aggregations.new(AggregationDateValue, AggregationDateValue.all)
+
+    error = assert_raises(ArgumentError) { evaluator.call(recorded_at: { format: "yyyy 'unfinished", date_ranges: [{}] }) }
+    assert_includes error.message, "Unclosed quote"
+    assert_raises(ArgumentError) { evaluator.call(recorded_at: { format: "yyyy/MM/dd", date_ranges: [{ from: "2026/02/30" }] }) }
+    error = assert_raises(ArgumentError) { aggregate(id: { format: "0.00", ranges: [{}] }) }
+    assert_includes error.message, "format applies only to date"
+  end
+
   private
 
   def create_date_values
