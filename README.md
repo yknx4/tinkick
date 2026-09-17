@@ -1917,14 +1917,21 @@ production throughput claims.
 Repository tests use `tinkick_test`; development uses `tinkick_development`.
 Standard PostgreSQL environment variables come from direnv locally. The harness
 checks `current_database()` before Rails migrations, uses test-owned table names,
-and never substitutes a different search engine. Separate fixture processes must
-not run concurrently against this shared test database.
+and requires TIN or Lead installed on the server. Keep `.envrc` and `dev.ejson`
+unchanged. Separate fixture processes must not share the same test database.
 
-CI serializes the Rails matrix and requires the configured test database secrets
-(`PGHOST`, `PGUSER`, `PGPASSWORD`, with optional `PGPORT`/`PGSSLMODE`). It does not
-install a pretend local TIN extension or run Elasticsearch setup actions. See
-[the workflow](.github/workflows/ci.yml); a configured matrix is not a claim that a
-remote CI run has completed.
+Each CI matrix job runs an isolated PostgreSQL 18.6 server with
+[PlanetScale Lead](https://github.com/planetscale/lead), without PlanetScale
+secrets; the jobs can run in parallel. GitHub uses Docker/Buildx, while local
+reproduction uses Apple's `container` tool. PostgreSQL comes from a pinned
+prebuilt image. Intermediate Rust/Lead layers use the GitHub Actions cache with
+`mode=max`; a warm local build reported all layers `CACHED`.
+
+Exactly 31 observed failing tests are temporarily excluded on Lead
+pending upstream fixes. Production-only plan assertions are gated separately;
+both remain active against PlanetScale TIN. See [Lead CI](docs/lead-ci.md) for
+the limitations and reproduction steps, and [the workflow](.github/workflows/ci.yml)
+for configuration. This is not a claim that remote CI has completed.
 
 ## Reference and unsupported options
 

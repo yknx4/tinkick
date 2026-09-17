@@ -22,9 +22,10 @@ Rails release. Tinkick does not patch Rails.
 
 Use `tinkick_development` for development and `tinkick_test` for integration
 tests. The test helper checks `current_database()` before running any Rails
-migrations. It requires a real TIN extension and never substitutes another
-search engine. Test-owned tables use the `tinkick_test_` prefix. Rails also
-creates its migration tracking tables. Fixture tests run in transactions;
+migrations. The server must have the `tin` extension files installed, supplied
+by PlanetScale TIN or by Lead for isolated CI. Test-owned tables use the
+`tinkick_test_` prefix. Rails also creates its migration tracking tables.
+Fixture tests run in transactions;
 schema migrations remain installed in the dedicated test database.
 
 Do not run separate fixture test processes concurrently against this database.
@@ -32,10 +33,26 @@ The stress and relevance corpora share a table but use different fixture paths.
 Rails caches fixture sets without their paths, so the stress test clears that
 cache before setup and after teardown. Preserve both boundaries when changing
 the corpus harness; otherwise test order can substitute the wrong dataset.
-CI serializes Rails matrix jobs and workflow runs for the same reason. CI needs
-repository secrets `PGHOST`, `PGUSER`, `PGPASSWORD`, and optionally `PGPORT`
-(default 5432) and `PGSSLMODE` (default require). Credentials must access only
-the intended test environment. Local environment files are not uploaded.
+Each CI matrix job has its own Lead server and database, so those jobs can run
+in parallel without sharing fixtures. CI needs no PlanetScale secrets. Local
+`.envrc` and `dev.ejson` remain unchanged and are not uploaded.
+
+## CI with Lead
+
+GitHub Actions uses Docker/Buildx to build PostgreSQL with PlanetScale's
+[Lead extension](https://github.com/planetscale/lead). Local reproduction uses
+Apple's `container` tool. The image starts from pinned, prebuilt PostgreSQL
+18.6; it compiles Lead, not PostgreSQL. GitHub Actions caches intermediate Rust
+and Lead build layers with `mode=max`. A repeated local build reported all
+layers `CACHED`.
+
+Lead is a non-production implementation for application tests. Exactly 31
+observed failing tests are temporarily excluded only when
+`TINKICK_TEST_BACKEND=lead`, pending upstream fixes. Production TIN plan
+assertions are gated separately because Lead does not implement production
+top-k execution. These exclusions do not establish full compatibility; the
+default PlanetScale TIN path retains those checks. See [Lead CI](lead-ci.md)
+for the exact limitations, cache configuration, and reproduction commands.
 
 ## Checks
 

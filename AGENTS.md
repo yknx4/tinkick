@@ -20,9 +20,13 @@ It MUST be api compatible with searchkick, with the exception of low level featu
 
 Use rails migrations for any change, migrations should be importable to projects that use this gem. 
 
-Since TIN is still a development feature that is not yet available as a local plugin, there will be 2 databases. 
-
-tinkick_development for development and tinkick_test for testing. The connection parameters will be available in the environment using direnv with standard postgres environment variables.
+Use `tinkick_development` for development and `tinkick_test` for testing. Preserve
+the local `.envrc` and `dev.ejson`, which supply standard PostgreSQL connection
+variables. CI uses an isolated PostgreSQL server with PlanetScale's Lead
+extension in each matrix job, without PlanetScale secrets. Lead has documented
+semantic and production-plan limitations; keep its explicit test exclusions
+separate from the default PlanetScale TIN checks. See [Lead CI](docs/lead-ci.md)
+for reproduction, caching, and the current exclusions.
 
 ## Operating Rules
 
