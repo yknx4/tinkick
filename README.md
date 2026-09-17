@@ -632,7 +632,7 @@ fuzzy matching without interpreting their analyzed punctuation as match-all. See
 | `:word` | Available | Disable misspellings for exact token matching. |
 | `:phrase` | Available | Ordered adjacent tokens. |
 | `:word_start`, `:word_middle`, `:word_end` | Available | Native token wildcards; dictionary patterns for one edit; SQL refinement for two edits. |
-| `:text_start`, `:text_middle`, `:text_end` | Available | Whole-field SQL matching with optional `unaccent`; zero, one, or two edits. |
+| `:text_start`, `:text_middle`, `:text_end` | Available | Whole-field SQL matching; requires `unaccent` when used. Supports zero, one, or two edits. |
 | `:exact` | Available globally and per field | Case-sensitive, accent-sensitive whole-field SQL equality; ignores misspellings. |
 | Mixed per-field match modes | Available | Each field keeps its own mode; SQL/TIN branches are combined and deduplicated in PostgreSQL. |
 
