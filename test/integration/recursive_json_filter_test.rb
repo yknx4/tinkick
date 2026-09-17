@@ -46,7 +46,7 @@ class RecursiveJsonFilterTest < TinkickIntegrationTest
     assert_equal ["Red Apple"], names(field => { like: "Product 100\\%\\_\\A%" })
     assert_equal ["Red Apple"], names(field => { ilike: "product%" })
     assert_equal ["Red Apple"], names(field => { prefix: "Product 100%_\\" })
-    assert_equal ["Red Apple"], names(field => /Product.*/)
+    assert_equal ["Red Apple"], names(field => { regexp: "Product.*" })
     assert_empty names(field => { prefix: "Product') OR TRUE --" })
   end
 
