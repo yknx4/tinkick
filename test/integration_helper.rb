@@ -4,6 +4,10 @@ require_relative "test_helper"
 require "active_record"
 require "active_support/test_case"
 
+# Rails' test helper includes these callbacks on this same class. Including them
+# on a subclass first would run fixture setup and teardown twice after app boot.
+ActiveSupport::TestCase.include(ActiveRecord::TestFixtures)
+
 ActiveRecord::Base.establish_connection(adapter: "postgresql", database: "tinkick_test")
 
 ActiveRecord::Base.with_connection do |connection|
@@ -20,8 +24,6 @@ class SearchProduct < ActiveRecord::Base
 end
 
 class TinkickIntegrationTest < ActiveSupport::TestCase
-  include ActiveRecord::TestFixtures
-
   self.fixture_paths = [File.expand_path("fixtures", __dir__)]
   self.use_transactional_tests = true
   set_fixture_class(tinkick_test_products: SearchProduct)
