@@ -110,6 +110,62 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     assert_equal([@first.id, @second.id].sort, search("FooBar").map(&:id).sort)
   end
 
+  def test_fuzzy_whitespace_tokens_escape_native_query_syntax_and_preserve_prefixes
+    ['a(b)', 'a[b]', 'a"b', "a\\b", "a~b", "a^b", "a*b", "a?b", "AND"].each do |term|
+      @first.update!(name: term)
+      @second.update!(name: "Z#{term[1..]}")
+
+      assert_equal([@first.id, @second.id].sort, search(term, misspellings: true).map(&:id).sort, term)
+      assert_equal([@first.id], search(term, misspellings: { prefix_length: 1 }).map(&:id), term)
+      assert_equal([@first.id, @second.id].sort,
+        search(term, misspellings: { transpositions: false }).map(&:id).sort, term)
+    end
+  end
+
+  def test_fuzzy_preserved_tokens_support_transpositions_and_long_whole_words
+    @first.update!(name: "a(b)")
+    @second.update!(name: "Unrelated")
+    assert_equal([@first.id], search("ab()", misspellings: true).map(&:id))
+    assert_empty(search("ab()", misspellings: { transpositions: false }))
+
+    term = "A" * 90
+    @first.update!(name: term)
+    @second.update!(name: "A" * 45 + "B" + "A" * 44)
+    assert_equal([@first.id, @second.id].sort, search(term, misspellings: true).map(&:id).sort)
+    assert_empty(search(term.downcase, misspellings: true))
+  end
+
+  def test_fuzzy_partials_keep_preserved_index_tokens_and_per_field_controls
+    { word_start: "ANXtail", word_middle: "leadANXtail", word_end: "leadANX" }.each do |mode, name|
+      @first.update!(name: name, description: "Unrelated")
+      @second.update!(name: "and", description: "AND")
+      fields = [{ name: mode }, :description]
+      options = { fields: fields, misspellings: { fields: [:name], prefix_length: 2 } }
+
+      assert_equal([@first.id, @second.id].sort, search("AND", **options).map(&:id).sort)
+      assert_equal([@second.id], search("AND", **options.merge(misspellings: { fields: [], prefix_length: 2 })).map(&:id))
+      assert_equal([@second.id], search("AND", **options.merge(misspellings: { fields: [:name], prefix_length: 3 })).map(&:id))
+    end
+  end
+
+  def test_fifty_character_fuzzy_literals_match_insertions_and_keep_native_top_k
+    term = "A" * 49 + ")"
+    @first.update!(name: term)
+    @second.update!(name: "A" * 49 + "X)")
+    statements = []
+    callback = ->(_name, _start, _finish, _id, payload) { statements << payload.slice(:sql, :binds) }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      assert_equal([@first.id, @second.id].sort, search(term, misspellings: true, limit: 10).map(&:id).sort)
+    end
+    statement = statements.find { |entry| entry.fetch(:sql).include?(" AS _tinkick_score") }
+    plan = Product.connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}",
+      "Tinkick Preserved Fuzzy Explain", statement.fetch(:binds))
+    assert_includes(plan, "Text Search Scan")
+    assert_includes(plan, '"Top K": "10"')
+    refute_includes(plan, "osa_distance")
+    assert_equal([@first.id], search(term, misspellings: { prefix_length: 50 }).map(&:id))
+  end
+
   private
 
   def search(term, **options)

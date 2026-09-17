@@ -39,7 +39,10 @@ module Tinkick
       return exact if distance.zero?
 
       words.map do |word|
-        if ["*", "#"].include?(word)
+        if ["*", "#"].include?(word) || /[()\[\]"~^]/.match?(word)
+          if word.length > 50
+            raise ArgumentError, "Fuzzy tokens containing TINQL delimiters longer than 50 characters require SQL refinement"
+          end
           fuzzy_pattern(word, :word, distance, prefix, transpositions)
         else
           fuzzy(word, distance, prefix, transpositions)
@@ -136,7 +139,7 @@ module Tinkick
         alternatives << characters.dup.insert(index, ".")
       end
 
-      patterns = alternatives.select { |candidate| candidate.length.between?(1, 50) }.map(&:join).uniq
+      patterns = alternatives.select { |candidate| candidate.length.positive? && (match == :word || candidate.length <= 50) }.map(&:join).uniq
       return "" if patterns.empty?
 
       leading = [:word_middle, :word_end].include?(match) ? ".*" : ""
