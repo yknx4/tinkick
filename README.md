@@ -345,7 +345,8 @@ different from `load(false)`.
 
 `took`, `response`, `hits`, `with_hit`, `each_with_hit`, `with_details`, `error`,
 `missing_records`, `model_name`, `entry_name`, `misspellings?`, suggestions,
-aggregation metadata, and public highlight result methods are not implemented.
+and public highlight result methods are not implemented. Aggregation metadata
+is available through `aggs` and `aggregations`.
 Do not expect Elasticsearch `_index`, `_shards`, `_source`, scroll IDs, or JSON
 response envelopes. Use ActiveRecord instrumentation for timing and explicitly
 serialize the visible records for an HTTP response.
@@ -648,35 +649,62 @@ libraries can be integrated independently, but are not bundled or verified here.
 
 ## Aggregations and facets
 
-`aggs`, `aggregations`, `smart_aggs`, per-aggregation options, and the aggregation
-response envelope are not implemented. PostgreSQL can perform aggregates directly.
-Recipe, returning a Ruby hash rather than Searchkick buckets:
+`aggs`, `aggregations`, `smart_aggs`, and fluent `.aggs` are available. Aggregations
+use all matching rows before pagination; they do not instantiate the matching
+models. Results are cached on that search relation.
 
 ```ruby
-matches = Product.where("name ==> ?", "apple").where(in_stock: true)
-counts = matches.group(:category).count
-average_price = matches.average(:price)
+results = Product.search("coffee", limit: 20, aggs: [:category])
+results.aggs["category"]["buckets"]
+# [{"key" => "drinks", "doc_count" => 32}, ...]
+
+Product.search("coffee").aggs(:category).aggs(
+  average_price: {avg: {field: :price}},
+  price: {ranges: [{to: 10}, {from: 10, to: 25}, {from: 25}]}
+).aggs
 ```
 
-Use the complete filtered SQL scope, not `Product.search(...).to_a`, for totals.
-These other upstream features need explicit SQL equivalents and result mapping:
-
-| Feature | Application SQL direction |
+| Feature | Available behavior |
 | --- | --- |
-| Terms, limit, ordering, minimum count | `GROUP BY`, aggregate ordering, `LIMIT`, `HAVING count(*) >= ...` |
-| Range and date-range buckets | `CASE` or filtered aggregates with explicit interval boundaries |
-| Numeric histogram | A chosen bucket-width expression |
-| Date histogram | `date_trunc` with explicit timezone and interval semantics |
-| Average, min, max, sum | SQL aggregate functions |
-| Cardinality | `count(DISTINCT column)` with defined NULL behavior |
-| Nested aggregations | Multiple grouping levels or separate bounded queries |
-| Per-facet filters / smart facets | Separate scopes that intentionally retain or remove each facet's own filter |
-| Scripted aggregations | Reviewed SQL expressions; Elasticsearch/Painless scripts are excluded |
+| Terms | `field`, `limit` (default 1,000), `min_doc_count` (default 1), and `_key`/`_count` ordering |
+| Numeric ranges | Inclusive `from`, exclusive `to`, overlapping and empty buckets, optional `key`, and `keyed: true` |
+| Metrics | `avg`, `min`, `max`, `sum`, and exact `cardinality` |
+| Per-aggregation filters | `where` limits that aggregation without changing the record results |
+| Smart facets | Enabled by default; a facet ignores its own top-level `where` field while retaining other filters |
 
-Do not describe `smart_aggs` as simply grouping the final result page or applying
-all final filters unchanged. Its self-filter behavior needs a compatibility
-adapter. TIN documents restrictions for some aggregate/window query shapes;
-materialized CTEs can be required. Check the real plan and
+```ruby
+Product.search("coffee", where: {category: "drinks", in_stock: true},
+  aggs: {category: {limit: 20, order: {_key: :asc}}})
+# Records remain drinks; category buckets include other in-stock categories.
+
+Product.search("coffee", where: {category: "drinks"},
+  aggs: [:category], smart_aggs: false)
+# Category buckets now use the complete record filter.
+```
+
+The fluent `.smart_aggs(false)` modifier is equivalent. Smart facet removal only
+examines top-level filter keys, matching Searchkick's behavior. If a facet has its
+own `where` and other global filters remain, Searchkick's merge rule applies:
+global filters are merged with the facet's filters, and the latter win duplicate
+keys. Authorization belongs in a model/database scope that facet selection cannot
+remove; do not use a removable facet filter as the only tenant boundary.
+
+`.aggs` returns flattened buckets/metrics; `.aggregations` retains Searchkick's
+filtered aggregation envelope and `doc_count`. Both return `nil` when no
+aggregations were requested. Array terms count a document once per distinct
+value; numeric metrics use every non-null array value. Numeric ranges count each
+matching document once per bucket. Null values do not create buckets.
+
+`min_doc_count: 0` reads the model's scoped dictionary so unmatched values can
+produce zero-count buckets. It logs a warning because broad dictionaries cost
+more. Array aggregation and exact `COUNT(DISTINCT)` cardinality also warn about
+workload-dependent cost. Aggregations issue bounded SQL result queries, with
+sorting and bucket limits in PostgreSQL, rather than grouping Ruby records.
+
+Date ranges/histograms, nested aggregations, and additional aggregate options
+remain adapter implementation work. Elasticsearch/Painless scripts are not SQL;
+use a reviewed persisted/generated column or an explicit application SQL query
+for scripted calculations. Check representative plans against TIN's
 [SQL shape guidance](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
 
 ## Highlighting
