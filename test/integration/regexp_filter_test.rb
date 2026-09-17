@@ -89,6 +89,14 @@ class RegexpFilterTest < TinkickIntegrationTest
     assert_includes error.message, "\\b"
   end
 
+  def test_empty_absolute_pattern_matches_only_empty_values
+    SearchProduct.find(1).update!(name: "")
+
+    assert_equal [1], matches(/\A\z/)
+    assert_equal [1], matches(/\A()\z/)
+    assert_equal [1, 2, 3, 4, 5, 6, 7, 8], matches(//)
+  end
+
   def test_public_search_composes_regex_with_native_tin_and_warns
     previous_logger = SearchProduct.logger
     output = StringIO.new

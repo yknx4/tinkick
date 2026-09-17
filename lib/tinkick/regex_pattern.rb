@@ -14,7 +14,7 @@ module Tinkick
     end
 
     def compile
-      expression = union
+      expression = @characters.empty? ? "" : union
       raise InvalidQueryError, "Invalid regular expression near position #{@position}" if peek
 
       "\\A(?:#{expression})\\Z"
