@@ -48,10 +48,9 @@ module Tinkick
       return spans if term.empty? || term == "*" || texts.all?(&:nil?)
 
       analysis = configuration(analysis)
-      if analysis.fetch("tokenizer") == "unicode" && ["long_tokens", "max_token_bytes", "graphemes"].any? do |name|
-        analysis.fetch(name) != WordMatch::ANALYSIS_DEFAULTS.fetch(name)
-      end
-        raise ArgumentError, "Custom phrase position reconstruction for changed Unicode removal policies is not implemented yet"
+      if analysis.fetch("tokenizer") == "unicode" && analysis.fetch("position_gaps") == "preserve" &&
+          analysis.fetch("long_tokens") != "split"
+        raise ArgumentError, "Custom Unicode phrase positions for preserved long-token removal gaps are not implemented yet"
       end
       @connection.logger&.warn("Tinkick: custom-analysis phrase highlighting reconstructs token positions from additional page-text analysis queries. Work grows with page text and matching phrase witnesses.")
       groups, streams = phrase_occurrences([term, *texts], analysis)

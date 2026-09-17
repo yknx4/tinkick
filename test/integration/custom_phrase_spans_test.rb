@@ -103,7 +103,56 @@ class CustomPhraseSpansTest < Minitest::Test
     assert_equal [[]], locate(["aa bb"], "*")
   end
 
-  def test_unproven_unicode_removal_policies_are_explicit_until_the_next_position_proof
+  def test_unicode_small_split_limits_map_complete_phrase_fragment_witnesses
+    source = "aa-abcdefghij-bb"
+
+    assert_equal [[[7, 16]]], locate([source], "efgh ij bb", max_token_bytes: "4")
+    assert_equal [[]], locate([source], "abcd bb", max_token_bytes: "4")
+  end
+
+  def test_unicode_collapsed_discarded_terms_use_consecutive_stored_positions
+    assert_equal [[[0, 16]], []], locate(["aa-abcdefghij-bb", "aa cc bb"], "aa bb",
+      max_token_bytes: "4", long_tokens: "discard", position_gaps: "collapse")
+    assert_equal [[[0, 16]]], locate(["aa-abcdefghij-bb"], "aa abcd bb",
+      max_token_bytes: "4", long_tokens: "truncate", position_gaps: "collapse")
+  end
+
+  def test_unicode_grapheme_filtering_happens_before_phrase_position_counting
+    source = "aa © $ 😀 *️⃣ bb"
+
+    assert_equal [[[0, source.length]]], locate([source], "aa bb", graphemes: "discard")
+    assert_equal [[[3, 8]]], locate([source], "© $ 😀", graphemes: "retain")
+    assert_equal [[]], locate([source], "aa bb", graphemes: "retain")
+  end
+
+  def test_unicode_multibyte_split_phrases_keep_case_accent_and_source_offsets
+    source = "aa ÉÉééX bb"
+    options = { max_token_bytes: "4", case_folding: "preserve", accent_folding: "preserve" }
+
+    assert_equal [[[5, 11]]], locate([source], "éé X bb", **options)
+    assert_equal [[]], locate([source], "ÉÉ X bb", **options)
+  end
+
+  def test_unicode_split_keycap_tokens_share_the_original_source_grapheme
+    source = "aa *️⃣*⃣ bb"
+
+    assert_equal [[[3, 11]]], locate([source], "*️⃣*⃣ bb", max_token_bytes: "4", accent_folding: "preserve")
+    assert_equal [[[6, 11]]], locate([source], "*⃣ bb", max_token_bytes: "4", accent_folding: "preserve")
+  end
+
+  def test_unicode_maximum_byte_limit_keeps_fragments_beyond_a_reference_token
+    source = "#{'x' * 2700} bb"
+
+    assert_equal [[[2692, 2703]]], locate([source], "#{'x' * 8} bb", max_token_bytes: "2692")
+  end
+
+  def test_unicode_normalization_can_shrink_a_source_grapheme_beyond_the_token_limit
+    source = "a#{"\u0301" * 1500}tail bb"
+
+    assert_equal [[[0, source.length]]], locate([source], "atai l bb", max_token_bytes: "4")
+  end
+
+  def test_unicode_preserved_discard_gaps_remain_explicit_until_reconstructed
     error = assert_raises(ArgumentError) do
       locate(["aa toolong bb"], "aa bb", max_token_bytes: "4", long_tokens: "discard")
     end
