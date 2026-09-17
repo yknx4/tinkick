@@ -41,11 +41,11 @@ module Tinkick
         when :_not
           predicates(value).map { |predicate| negate(predicate) }
         else
-          column, array_type, json_path = column_reference(field)
+          column, array_type, json_path, enum_values = column_reference(field)
           if json_path
             json_predicates(column, json_path, value)
           else
-            field_predicates(column, value, array_type: array_type)
+            field_predicates(column, value, array_type: array_type, enum_values: enum_values)
           end
         end
       end
@@ -81,7 +81,9 @@ module Tinkick
       reference = @model.with_connection do |connection|
         "#{connection.quote_table_name(@model.table_name)}.#{connection.quote_column_name(name)}"
       end
-      [reference, array_type, json_path]
+      # @type var enum_values: Hash[String, filter_scalar]?
+      enum_values = @model.defined_enums[name] if path.empty?
+      [reference, array_type, json_path, enum_values]
     end
 
     def json_predicates(column, path, value)
@@ -194,7 +196,7 @@ module Tinkick
       @model.logger&.warn("Tinkick: this JSONB filter scans values in #{column}; ordinary GIN indexes cannot extract selective equality keys for range, pattern, or missing-value checks. Consider an indexed persisted or generated scalar column for frequent filters.")
     end
 
-    def field_predicates(column, value, array_type: nil)
+    def field_predicates(column, value, array_type: nil, enum_values: nil)
       element = array_type ? "tinkick_filter_element.value" : column
       case value
       when Range
@@ -205,17 +207,17 @@ module Tinkick
         filters = value.flat_map do |operator, operand|
           case operator
           when :in
-            [equality(column, operand, array_type: array_type)]
+            [equality(column, operand, array_type: array_type, enum_values: enum_values)]
           when :all
             raise ArgumentError, "all requires an array of values" unless operand.is_a?(Array)
 
-            operand.map { |entry| equality(column, entry, array_type: array_type) }
+            operand.map { |entry| equality(column, entry, array_type: array_type, enum_values: enum_values) }
           when :exists
             [existence(column, operand, array_type: array_type)]
           when :like, :ilike, :prefix
             [element_predicate(column, text_predicate(element, operator, operand), array_type)]
           when :not, :_not
-            [negate(equality(column, operand, array_type: array_type))]
+            [negate(equality(column, operand, array_type: array_type, enum_values: enum_values))]
           when :gt, :gte, :lt, :lte
             comparisons << comparison(element, operator, operand)
             []
@@ -226,11 +228,11 @@ module Tinkick
         filters << element_predicate(column, combine(comparisons, "AND"), array_type) unless comparisons.empty?
         filters
       else
-        [equality(column, value, array_type: array_type)]
+        [equality(column, value, array_type: array_type, enum_values: enum_values)]
       end
     end
 
-    def equality(column, value, array_type: nil)
+    def equality(column, value, array_type: nil, enum_values: nil)
       if value.is_a?(Regexp)
         element = array_type ? "tinkick_filter_element.value" : column
         return element_predicate(column, text_predicate(element, :regexp, value), array_type)
@@ -238,13 +240,18 @@ module Tinkick
       if value.is_a?(Array)
         return ["FALSE", []] if value.empty?
 
-        combine(value.map { |entry| equality(column, entry, array_type: array_type) }, "OR")
+        combine(value.map { |entry| equality(column, entry, array_type: array_type, enum_values: enum_values) }, "OR")
       elsif value.nil?
         if array_type
           negate(element_predicate(column, ["tinkick_filter_element.value IS NOT NULL", []], array_type))
         else
           ["#{column} IS NULL", []]
         end
+      elsif enum_values
+        label = scalar(value).as_json.to_s
+        return ["FALSE", []] unless enum_values.key?(label)
+
+        equality(column, enum_values.fetch(label))
       elsif array_type
         ["#{column} @> ARRAY[?]::#{array_type}", [scalar(value)]]
       else

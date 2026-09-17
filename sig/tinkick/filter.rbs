@@ -19,7 +19,7 @@ module Tinkick
 
     def predicates: (filter_value conditions) -> Array[filter_predicate]
 
-    def column_reference: (String | Symbol field) -> [ String, String?, Array[String]? ]
+    def column_reference: (String | Symbol field) -> [ String, String?, Array[String]?, Hash[String, filter_scalar]? ]
 
     def json_predicates: (String column, Array[String] path, filter_value value) -> Array[filter_predicate]
 
@@ -33,9 +33,9 @@ module Tinkick
 
     def warn_json_scan: (String column) -> void
 
-    def field_predicates: (String column, filter_value value, ?array_type: String?) -> Array[filter_predicate]
+    def field_predicates: (String column, filter_value value, ?array_type: String?, ?enum_values: Hash[String, filter_scalar]?) -> Array[filter_predicate]
 
-    def equality: (String column, filter_value value, ?array_type: String?) -> filter_predicate
+    def equality: (String column, filter_value value, ?array_type: String?, ?enum_values: Hash[String, filter_scalar]?) -> filter_predicate
 
     def existence: (String column, filter_value value, ?array_type: String?) -> filter_predicate
 
