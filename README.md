@@ -1003,10 +1003,11 @@ calculation and sorting cost; counts and aggregation membership remain unchanged
 `nil`, `false` and `{}` disable the option. A single zero-weight recency function
 zeros scores; multiple functions whose applicable weights are all zero retain
 the original score, matching the upstream sum-group behavior.
+See the [native recency query plans](docs/recency-plans.md) for a reproducible
+small-corpus comparison.
 
-`boost_by_distance`, `indices_boost`, and `conversions`/`conversions_v2` remain
-adapter work. The [conversion scoring contract](docs/conversions-contract.md)
-records the pinned data shapes, score composition, and remaining proof items.
+`boost_by_distance` and `indices_boost` still require geographic and multi-model
+query support.
 
 Recipe: rank a bounded SQL search with application-owned numeric weights:
 
@@ -1022,15 +1023,74 @@ the text score. Recency needs a date-based expression; demotion needs a lower
 weight; personalized purchase history needs a join or persisted feature column.
 Profile the actual plan before using these recipes at scale.
 
-### Tracking and performant conversions
+### Conversion ranking
 
-`track`, Searchjoy integration, conversion-field selection, a separate conversion
-query term, and `stem_conversions` are not implemented. You can record query and
-conversion events in application tables, aggregate them with SQL, and maintain a
-numeric or JSONB feature column through your own job. Updating such a column
-needs no search-document reindex. Caching a derived feature can avoid computing
-association aggregates per result, but the aggregation, update schedule, and
-ranking formula remain application responsibilities.
+Store query/count pairs in a real JSONB model column. Create it through a Rails
+migration, then declare it for conversion scoring:
+
+```ruby
+class AddConversionCountsToProducts < ActiveRecord::Migration[8.0]
+  def change
+    add_column :products, :conversion_counts, :jsonb, default: {}, null: false
+  end
+end
+
+class Product < ApplicationRecord
+  tinkick searchable: [:name], conversions_v2: [:conversion_counts]
+end
+
+product.update!(conversion_counts: {"red apple" => 5, "green apple" => 2})
+Product.search("red apple") # v2 is enabled when no legacy fields are declared
+Product.search("apple", conversions_v2: {term: "red apple", factor: 0.5})
+Product.search("apple", conversions_v2: false)
+```
+
+Legacy `conversions:` (alias `conversions_v1:`) and `conversions_v2:` model
+declarations accept one or multiple column names; the same field cannot belong to
+both. Query `conversions:` replaces the legacy selection with a name or array;
+`false` or `[]` disables it. Query `conversions_v2:` accepts a name, `true` for all
+declared v2 fields, or `{field:, term:, factor:}`. The factor defaults to 1; zero
+skips the v2 JSONB work entirely. `conversions_term:` overrides the lookup term for both versions,
+with a v2 hash's `term` taking precedence. Overrides use ordinary `to_s` after
+nil/false fallback.
+
+When both versions are declared, searches use legacy fields by default. Enabling
+v2 does not disable legacy, and disabling legacy does not enable v2. To switch
+explicitly, use:
+
+```ruby
+Product.search("apple", conversions: false, conversions_v2: true)
+Product.search("apple").conversions(false).conversions_v2(field: :conversion_counts, factor: 0.5)
+```
+
+Fluent conversion methods take one argument and return a clone. Their bang
+variants mutate an unloaded relation; v2 option hashes replace the previous hash.
+
+Tinkick adds selected counts to relevance before other boost multipliers; v2
+counts are multiplied by their factor. Conversion scoring changes ranking,
+without changing matching rows, counts or aggregation membership. Match-all
+`"*"` searches skip it. Column validation happens when scoring is requested.
+
+Keys are literal whole strings: dots are ordinary characters, and no stemming or
+accent folding occurs. By default, PostgreSQL `lower` compares keys and sums all
+matching case variants. A model declared with `case_sensitive: true` uses exact
+key lookup. `stem_conversions: true` raises `Tinkick::NotImplementedError`; persist
+normalized keys and supply the corresponding `conversions_term` instead.
+
+Missing keys, SQL NULL and JSON null contribute zero. Matching counts use native
+PostgreSQL numeric casts: numeric strings work, malformed values fail, and
+negative/nonfinite counts are rejected. Unrelated keys are not cast. Factors
+must be finite and nonnegative. Scoring logs its potential sorting cost and
+case-insensitive JSONB iteration per row. It needs no
+optional extension and does not promise native TIN top-k performance. See the
+[conversion contract](docs/conversions-contract.md) and
+[reproducible query plans](docs/conversion-plans.md).
+
+### Conversion tracking
+
+`track` and Searchjoy integration are not implemented. Applications own event
+storage, count aggregation and column updates; updating conversion counts needs
+no search-document reindex.
 
 The gem creates no conversion cron jobs, queues, or analytics storage. Searchjoy
 and other analytics tools require their own integration and privacy choices;
@@ -1788,14 +1848,17 @@ remote CI run has completed.
 The current model declaration accepts `searchable`, `default_fields`, `match`,
 the `word_start`/`word_middle`/`word_end` and `text_start`/`text_middle`/`text_end`
 field declarations, and `stem: false`.
+It also accepts `conversions`/`conversions_v1`, `conversions_v2`, and
+`stem_conversions: false` for native JSONB conversion ranking.
 The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
 `per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
 `countless`, `keyset`, `after`, `aggs`, `smart_aggs`, `includes`,
-`model_includes`, `scope_results`, `exclude`, `select`, and `highlight`.
+`model_includes`, `scope_results`, `exclude`, `select`, `highlight`,
+`conversions`, `conversions_v1`, `conversions_v2`, and `conversions_term`.
 Use the detailed sections above for their limits.
 Unknown keywords or methods are not compatibility no-ops.
 Features proven unsupported by TIN raise `Tinkick::NotImplementedError` with an
-explanation naming the backend limitation. Unfinished Tinkick adapters must not
+explanation naming the backend limitation. Unfinished Tinkick features must not
 be mislabeled as TIN limitations; invalid inputs remain validation errors.
 
 The following reference maps less common upstream options to their current status:
@@ -1813,7 +1876,8 @@ The following reference maps less common upstream options to their current statu
 | `case_sensitive`, `special_characters` | Implemented as native index-policy validation and SQL text normalization; migrate indexes to match explicit declarations. |
 | `language`, stemming options | `stem: false` is accepted. `stem: true`, `language`, `stemmer`, `stem_exclusion`, and `stemmer_override` raise `Tinkick::NotImplementedError` with migration guidance. |
 | `search_synonyms`, synonym file/reload | Not implemented; application synonym storage/expansion is a recipe. |
-| `conversions`, `conversions_v2`, `stem_conversions` | Not implemented; maintain SQL features and an explicit ranking formula. |
+| `conversions`, `conversions_v1`, `conversions_v2`, `conversions_term` | Native JSONB conversion ranking with field selection, term overrides and v2 factors; see the conversion contract. |
+| `stem_conversions` | Nil/false accepted. Stemming requests raise `Tinkick::NotImplementedError`; persist normalized keys and provide their lookup term. |
 | `exclude` | Available across selected fields; exact phrase negatives with mode-specific matching. |
 | `suggest`, `similar`, `emoji` | Not implemented; see the corresponding recipes. |
 | `locations`, `geo_shape`, `knn` | Not implemented; design explicit PostGIS/pgvector integration where available. |
@@ -1869,8 +1933,9 @@ actual plan when reporting a search bug; omit credentials and private records.
 Upgrading from Searchkick 5 or 6 is a backend migration, not merely a gem version
 change. Audit model options, derived fields, query methods, result consumers,
 background jobs, and relevance expectations. The supported keyword/fluent APIs
-cover part of Searchkick 6's builder interface; conversion-v2 migration and
-Searchkick's own upgrade tasks are not Tinkick procedures. Follow
+cover part of Searchkick 6's builder interface. Migrate conversion columns with
+Rails and select v2 explicitly as described above; Searchkick's index upgrade
+tasks are not Tinkick procedures. Follow
 [CHANGELOG.md](CHANGELOG.md) for Tinkick changes and rerun application search
 contracts before upgrading an alpha release.
 
