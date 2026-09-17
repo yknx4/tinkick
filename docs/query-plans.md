@@ -43,7 +43,7 @@ illustrative observations, not stable test constants. See the
 The same suite verifies that `Moria Balrog` matches the document containing both
 terms in one searched field, excludes a document with the terms split across
 fields, and excludes a partial match. Phrase tests distinguish `Gondolin sentries`
-from reversed or separated words. `astrolbae` recovers the intended `astrolabe`
+from reversed or separated words. `astrolbe` recovers the intended `astrolabe`
 document only when misspellings are enabled.
 
 ## Measured plans
@@ -166,22 +166,22 @@ and immediate visibility of database writes.
 
 ## Partial, exact, and mixed matching
 
-The separate [match-mode capture](benchmarks/2026-09-17-match-mode-plans.json)
-records eight actual queries against the same 268-document corpus, using Ruby
-4.0.1, Rails 8.1.3.1, PostgreSQL 18.6, and TIN 1.0.2. Each query requested five
-rows. Execution times below are individual warm-cache observations, not a
-throughput benchmark or evidence that one strategy is faster at production size.
+The [match-mode capture](benchmarks/2026-09-17-match-mode-plans.json) records
+seven native TIN/SQL query shapes against the same 268-document corpus, refreshed
+after the native-backend cleanup. The measurements used Ruby 4.0.1, Rails 8.1.3.1,
+PostgreSQL 18.6, and TIN 1.0.2. Each query requested five rows. These are individual
+warm-cache observations, not a throughput benchmark or evidence that one strategy
+is faster at production size.
 
 | Mode | Rows returned | Execution ms | Observed plan |
 | --- | ---: | ---: | --- |
-| Token prefix | 4 | 7.733 | TIN Text Search Scan, Top K 5, no Sort |
-| Token infix | 4 | 7.606 | TIN Text Search Scan, Top K 5, no Sort |
-| Token suffix | 4 | 6.997 | TIN Text Search Scan, Top K 5, no Sort |
-| Fuzzy token prefix | 5 | 6.221 | TIN dictionary pattern, Top K 5, no Sort |
-| Whole-field prefix | 2 | 2.632 | Sequential scan with normalized SQL predicate |
-| Whole-field substring | 4 | 2.827 | Sequential scan with normalized SQL predicate |
-| Whole-field exact | 1 | 0.119 | SQL equality; no TIN scoring |
-| Mixed whole-field prefix and token search | 4 | 0.830 | TIN/SQL Append, aggregate by ID, join, Sort |
+| Token prefix | 4 | 6.024 | TIN Text Search Scan, Top K 5, no Sort |
+| Token infix | 4 | 8.177 | TIN Text Search Scan, Top K 5, no Sort |
+| Token suffix | 4 | 7.504 | TIN Text Search Scan, Top K 5, no Sort |
+| Whole-field prefix | 2 | 2.691 | Sequential scan with normalized SQL predicate |
+| Whole-field substring | 4 | 2.761 | Sequential scan with normalized SQL predicate |
+| Whole-field exact | 1 | 0.087 | SQL equality; no TIN scoring |
+| Mixed whole-field prefix and token search | 4 | 0.944 | TIN/SQL Append, aggregate by ID, join, Sort |
 
 These plans support the warnings in the gem: whole-field normalization scans SQL
 rows, and combining SQL matching with native scores groups matching IDs before
@@ -191,8 +191,9 @@ an application B-tree index whose expression and collation match the predicate.
 The fixture title column has no such index, so this capture shows a scan.
 
 The native partial paths retain TIN's top-k execution shape. That does not bound
-dictionary expansion cost: broader wildcard or fuzzy patterns can still require
-more work. Use representative query text and data before choosing typo settings.
+dictionary expansion cost: broader wildcard patterns can still require more work.
+These partial modes require `misspellings: false`; fuzzy partial matching raises
+`Tinkick::NotImplementedError` instead of generating fuzzy patterns.
 
 Reproduce this capture after loading the normal relevance fixtures:
 

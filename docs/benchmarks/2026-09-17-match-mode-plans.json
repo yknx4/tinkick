@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-17T06:53:03Z",
+  "captured_at": "2026-09-17T16:17:57Z",
   "documents": 268,
   "ruby": "4.0.1",
   "rails": "8.1.3.1",
@@ -22,22 +22,22 @@
         {
           "id": 1001,
           "title": "A miner's lighting handbook",
-          "score": 13.71264
+          "score": 20.788258
         },
         {
           "id": 1003,
           "title": "A concise lighting note",
-          "score": 12.490117
+          "score": 19.217138
         },
         {
           "id": 1002,
           "title": "A miner's equipment handbook",
-          "score": 9.601043
+          "score": 14.088209
         },
         {
           "id": 1004,
           "title": "An expedition journal with a lighting note",
-          "score": 2.9453669
+          "score": 3.905424
         }
       ],
       "explain": [
@@ -46,16 +46,16 @@
             "Node Type": "Limit",
             "Parallel Aware": false,
             "Async Capable": false,
-            "Startup Cost": 2.2,
-            "Total Cost": 3.26,
-            "Plan Rows": 1,
+            "Startup Cost": 23.61,
+            "Total Cost": 26.63,
+            "Plan Rows": 3,
             "Plan Width": 404,
-            "Actual Startup Time": 3.495,
-            "Actual Total Time": 3.502,
+            "Actual Startup Time": 3.529,
+            "Actual Total Time": 3.538,
             "Actual Rows": 4.0,
             "Actual Loops": 1,
             "Disabled": false,
-            "Shared Hit Blocks": 286,
+            "Shared Hit Blocks": 289,
             "Shared Read Blocks": 0,
             "Shared Dirtied Blocks": 0,
             "Shared Written Blocks": 0,
@@ -78,17 +78,17 @@
                 "Custom Plan Provider": "Projector",
                 "Parallel Aware": false,
                 "Async Capable": false,
-                "Startup Cost": 2.2,
-                "Total Cost": 3.26,
-                "Plan Rows": 1,
+                "Startup Cost": 23.61,
+                "Total Cost": 26.63,
+                "Plan Rows": 3,
                 "Plan Width": 404,
-                "Actual Startup Time": 3.494,
-                "Actual Total Time": 3.499,
+                "Actual Startup Time": 3.528,
+                "Actual Total Time": 3.536,
                 "Actual Rows": 4.0,
                 "Actual Loops": 1,
                 "Disabled": false,
                 "Predicted Work": {
-                  "Rows": 1.0,
+                  "Rows": 3.0,
                   "Mutable Rows": 0.0,
                   "Posting Pages": 0.0,
                   "Position Pages": 0.0,
@@ -96,14 +96,14 @@
                   "Doclen Pages": 0.0,
                   "Candidate Blocks": 0.0,
                   "Exact Batches": 0.0,
-                  "Heap Pages": 1.0,
+                  "Heap Pages": 2.85,
                   "Filter TIDs": 0.0,
                   "Hash Rows": 0.0,
                   "Sort Rows": 0.0,
                   "Startup Pages": 0.0,
                   "Driver Rows": 0.0
                 },
-                "Shared Hit Blocks": 286,
+                "Shared Hit Blocks": 289,
                 "Shared Read Blocks": 0,
                 "Shared Dirtied Blocks": 0,
                 "Shared Written Blocks": 0,
@@ -128,12 +128,12 @@
                     "Async Capable": false,
                     "Relation Name": "tinkick_test_documents",
                     "Alias": "tinkick_test_documents",
-                    "Startup Cost": 2.2,
-                    "Total Cost": 2.2,
-                    "Plan Rows": 1,
+                    "Startup Cost": 23.61,
+                    "Total Cost": 23.61,
+                    "Plan Rows": 3,
                     "Plan Width": 404,
-                    "Actual Startup Time": 3.487,
-                    "Actual Total Time": 3.489,
+                    "Actual Startup Time": 3.521,
+                    "Actual Total Time": 3.523,
                     "Actual Rows": 4.0,
                     "Actual Loops": 1,
                     "Disabled": false,
@@ -141,11 +141,11 @@
                     "Query": "AND(REGEX(mithr.*), REGEX(lant.*))",
                     "Scoring": "dense-term elision",
                     "Predicted Work": {
-                      "Rows": 1.0,
-                      "Mutable Rows": 1.0,
-                      "Posting Pages": 0.0,
+                      "Rows": 3.0,
+                      "Mutable Rows": 0.26,
+                      "Posting Pages": 21.0,
                       "Position Pages": 0.0,
-                      "Full Posting Pages": 0.0,
+                      "Full Posting Pages": 21.0,
                       "Doclen Pages": 0.0,
                       "Candidate Blocks": 0.0,
                       "Exact Batches": 0.0,
@@ -154,17 +154,18 @@
                       "Hash Rows": 0.0,
                       "Sort Rows": 0.0,
                       "Startup Pages": 2.0,
-                      "Driver Rows": 0.0
+                      "Driver Rows": 67.0
                     },
                     "Top K": "5",
                     "Page Touches": {
-                      "Total": 7,
-                      "Approx MiB": 0.1,
-                      "Metadata": 7
+                      "Total": 22,
+                      "Approx MiB": 0.2,
+                      "Metadata": 10,
+                      "Term Map": 12
                     },
                     "Mutable Adapter": {
-                      "Storage Page Touches": 582,
-                      "Storage Approx MiB": 4.5
+                      "Storage Page Touches": 465,
+                      "Storage Approx MiB": 3.6
                     },
                     "Shared Hit Blocks": 285,
                     "Shared Read Blocks": 0,
@@ -188,7 +189,7 @@
             ]
           },
           "Planning": {
-            "Shared Hit Blocks": 16,
+            "Shared Hit Blocks": 267,
             "Shared Read Blocks": 0,
             "Shared Dirtied Blocks": 0,
             "Shared Written Blocks": 0,
@@ -205,9 +206,9 @@
             "Temp I/O Read Time": 0.0,
             "Temp I/O Write Time": 0.0
           },
-          "Planning Time": 1.888,
+          "Planning Time": 2.249,
           "Triggers": [],
-          "Execution Time": 7.733
+          "Execution Time": 6.024
         }
       ]
     },
@@ -226,22 +227,22 @@
         {
           "id": 1001,
           "title": "A miner's lighting handbook",
-          "score": 13.71264
+          "score": 20.788258
         },
         {
           "id": 1003,
           "title": "A concise lighting note",
-          "score": 12.490117
+          "score": 19.217138
         },
         {
           "id": 1002,
           "title": "A miner's equipment handbook",
-          "score": 9.601043
+          "score": 14.088209
         },
         {
           "id": 1004,
           "title": "An expedition journal with a lighting note",
-          "score": 2.9453669
+          "score": 3.905424
         }
       ],
       "explain": [
@@ -250,16 +251,16 @@
             "Node Type": "Limit",
             "Parallel Aware": false,
             "Async Capable": false,
-            "Startup Cost": 2.2,
-            "Total Cost": 3.26,
-            "Plan Rows": 1,
+            "Startup Cost": 23.61,
+            "Total Cost": 26.63,
+            "Plan Rows": 3,
             "Plan Width": 404,
-            "Actual Startup Time": 3.688,
-            "Actual Total Time": 3.694,
+            "Actual Startup Time": 3.66,
+            "Actual Total Time": 3.669,
             "Actual Rows": 4.0,
             "Actual Loops": 1,
             "Disabled": false,
-            "Shared Hit Blocks": 286,
+            "Shared Hit Blocks": 289,
             "Shared Read Blocks": 0,
             "Shared Dirtied Blocks": 0,
             "Shared Written Blocks": 0,
@@ -282,17 +283,17 @@
                 "Custom Plan Provider": "Projector",
                 "Parallel Aware": false,
                 "Async Capable": false,
-                "Startup Cost": 2.2,
-                "Total Cost": 3.26,
-                "Plan Rows": 1,
+                "Startup Cost": 23.61,
+                "Total Cost": 26.63,
+                "Plan Rows": 3,
                 "Plan Width": 404,
-                "Actual Startup Time": 3.686,
-                "Actual Total Time": 3.692,
+                "Actual Startup Time": 3.659,
+                "Actual Total Time": 3.667,
                 "Actual Rows": 4.0,
                 "Actual Loops": 1,
                 "Disabled": false,
                 "Predicted Work": {
-                  "Rows": 1.0,
+                  "Rows": 3.0,
                   "Mutable Rows": 0.0,
                   "Posting Pages": 0.0,
                   "Position Pages": 0.0,
@@ -300,14 +301,14 @@
                   "Doclen Pages": 0.0,
                   "Candidate Blocks": 0.0,
                   "Exact Batches": 0.0,
-                  "Heap Pages": 1.0,
+                  "Heap Pages": 2.85,
                   "Filter TIDs": 0.0,
                   "Hash Rows": 0.0,
                   "Sort Rows": 0.0,
                   "Startup Pages": 0.0,
                   "Driver Rows": 0.0
                 },
-                "Shared Hit Blocks": 286,
+                "Shared Hit Blocks": 289,
                 "Shared Read Blocks": 0,
                 "Shared Dirtied Blocks": 0,
                 "Shared Written Blocks": 0,
@@ -332,12 +333,12 @@
                     "Async Capable": false,
                     "Relation Name": "tinkick_test_documents",
                     "Alias": "tinkick_test_documents",
-                    "Startup Cost": 2.2,
-                    "Total Cost": 2.2,
-                    "Plan Rows": 1,
+                    "Startup Cost": 23.61,
+                    "Total Cost": 23.61,
+                    "Plan Rows": 3,
                     "Plan Width": 404,
-                    "Actual Startup Time": 3.68,
-                    "Actual Total Time": 3.682,
+                    "Actual Startup Time": 3.652,
+                    "Actual Total Time": 3.653,
                     "Actual Rows": 4.0,
                     "Actual Loops": 1,
                     "Disabled": false,
@@ -345,11 +346,11 @@
                     "Query": "AND(REGEX(.*ithr.*), REGEX(.*ante.*))",
                     "Scoring": "dense-term elision",
                     "Predicted Work": {
-                      "Rows": 1.0,
-                      "Mutable Rows": 1.0,
-                      "Posting Pages": 0.0,
+                      "Rows": 3.0,
+                      "Mutable Rows": 0.26,
+                      "Posting Pages": 21.0,
                       "Position Pages": 0.0,
-                      "Full Posting Pages": 0.0,
+                      "Full Posting Pages": 21.0,
                       "Doclen Pages": 0.0,
                       "Candidate Blocks": 0.0,
                       "Exact Batches": 0.0,
@@ -358,17 +359,18 @@
                       "Hash Rows": 0.0,
                       "Sort Rows": 0.0,
                       "Startup Pages": 2.0,
-                      "Driver Rows": 0.0
+                      "Driver Rows": 48.0
                     },
                     "Top K": "5",
                     "Page Touches": {
-                      "Total": 7,
-                      "Approx MiB": 0.1,
-                      "Metadata": 7
+                      "Total": 28,
+                      "Approx MiB": 0.2,
+                      "Metadata": 10,
+                      "Term Map": 18
                     },
                     "Mutable Adapter": {
-                      "Storage Page Touches": 582,
-                      "Storage Approx MiB": 4.5
+                      "Storage Page Touches": 465,
+                      "Storage Approx MiB": 3.6
                     },
                     "Shared Hit Blocks": 285,
                     "Shared Read Blocks": 0,
@@ -392,7 +394,7 @@
             ]
           },
           "Planning": {
-            "Shared Hit Blocks": 16,
+            "Shared Hit Blocks": 289,
             "Shared Read Blocks": 0,
             "Shared Dirtied Blocks": 0,
             "Shared Written Blocks": 0,
@@ -409,9 +411,9 @@
             "Temp I/O Read Time": 0.0,
             "Temp I/O Write Time": 0.0
           },
-          "Planning Time": 2.727,
+          "Planning Time": 3.907,
           "Triggers": [],
-          "Execution Time": 7.606
+          "Execution Time": 8.177
         }
       ]
     },
@@ -430,22 +432,22 @@
         {
           "id": 1001,
           "title": "A miner's lighting handbook",
-          "score": 13.71264
+          "score": 20.788258
         },
         {
           "id": 1003,
           "title": "A concise lighting note",
-          "score": 12.490117
+          "score": 19.217138
         },
         {
           "id": 1002,
           "title": "A miner's equipment handbook",
-          "score": 9.601043
+          "score": 14.088209
         },
         {
           "id": 1004,
           "title": "An expedition journal with a lighting note",
-          "score": 2.9453669
+          "score": 3.905424
         }
       ],
       "explain": [
@@ -454,16 +456,16 @@
             "Node Type": "Limit",
             "Parallel Aware": false,
             "Async Capable": false,
-            "Startup Cost": 2.2,
-            "Total Cost": 3.26,
-            "Plan Rows": 1,
+            "Startup Cost": 14.61,
+            "Total Cost": 17.63,
+            "Plan Rows": 3,
             "Plan Width": 404,
-            "Actual Startup Time": 3.653,
-            "Actual Total Time": 3.659,
+            "Actual Startup Time": 3.587,
+            "Actual Total Time": 3.595,
             "Actual Rows": 4.0,
             "Actual Loops": 1,
             "Disabled": false,
-            "Shared Hit Blocks": 286,
+            "Shared Hit Blocks": 289,
             "Shared Read Blocks": 0,
             "Shared Dirtied Blocks": 0,
             "Shared Written Blocks": 0,
@@ -486,17 +488,17 @@
                 "Custom Plan Provider": "Projector",
                 "Parallel Aware": false,
                 "Async Capable": false,
-                "Startup Cost": 2.2,
-                "Total Cost": 3.26,
-                "Plan Rows": 1,
+                "Startup Cost": 14.61,
+                "Total Cost": 17.63,
+                "Plan Rows": 3,
                 "Plan Width": 404,
-                "Actual Startup Time": 3.652,
-                "Actual Total Time": 3.657,
+                "Actual Startup Time": 3.586,
+                "Actual Total Time": 3.593,
                 "Actual Rows": 4.0,
                 "Actual Loops": 1,
                 "Disabled": false,
                 "Predicted Work": {
-                  "Rows": 1.0,
+                  "Rows": 3.0,
                   "Mutable Rows": 0.0,
                   "Posting Pages": 0.0,
                   "Position Pages": 0.0,
@@ -504,14 +506,14 @@
                   "Doclen Pages": 0.0,
                   "Candidate Blocks": 0.0,
                   "Exact Batches": 0.0,
-                  "Heap Pages": 1.0,
+                  "Heap Pages": 2.85,
                   "Filter TIDs": 0.0,
                   "Hash Rows": 0.0,
                   "Sort Rows": 0.0,
                   "Startup Pages": 0.0,
                   "Driver Rows": 0.0
                 },
-                "Shared Hit Blocks": 286,
+                "Shared Hit Blocks": 289,
                 "Shared Read Blocks": 0,
                 "Shared Dirtied Blocks": 0,
                 "Shared Written Blocks": 0,
@@ -536,12 +538,12 @@
                     "Async Capable": false,
                     "Relation Name": "tinkick_test_documents",
                     "Alias": "tinkick_test_documents",
-                    "Startup Cost": 2.2,
-                    "Total Cost": 2.2,
-                    "Plan Rows": 1,
+                    "Startup Cost": 14.61,
+                    "Total Cost": 14.61,
+                    "Plan Rows": 3,
                     "Plan Width": 404,
-                    "Actual Startup Time": 3.645,
-                    "Actual Total Time": 3.646,
+                    "Actual Startup Time": 3.581,
+                    "Actual Total Time": 3.582,
                     "Actual Rows": 4.0,
                     "Actual Loops": 1,
                     "Disabled": false,
@@ -549,11 +551,11 @@
                     "Query": "AND(REGEX(.*thril), REGEX(.*tern))",
                     "Scoring": "dense-term elision",
                     "Predicted Work": {
-                      "Rows": 1.0,
-                      "Mutable Rows": 1.0,
-                      "Posting Pages": 0.0,
+                      "Rows": 3.0,
+                      "Mutable Rows": 0.26,
+                      "Posting Pages": 12.0,
                       "Position Pages": 0.0,
-                      "Full Posting Pages": 0.0,
+                      "Full Posting Pages": 12.0,
                       "Doclen Pages": 0.0,
                       "Candidate Blocks": 0.0,
                       "Exact Batches": 0.0,
@@ -562,17 +564,18 @@
                       "Hash Rows": 0.0,
                       "Sort Rows": 0.0,
                       "Startup Pages": 2.0,
-                      "Driver Rows": 0.0
+                      "Driver Rows": 22.0
                     },
                     "Top K": "5",
                     "Page Touches": {
-                      "Total": 7,
-                      "Approx MiB": 0.1,
-                      "Metadata": 7
+                      "Total": 28,
+                      "Approx MiB": 0.2,
+                      "Metadata": 10,
+                      "Term Map": 18
                     },
                     "Mutable Adapter": {
-                      "Storage Page Touches": 582,
-                      "Storage Approx MiB": 4.5
+                      "Storage Page Touches": 445,
+                      "Storage Approx MiB": 3.5
                     },
                     "Shared Hit Blocks": 285,
                     "Shared Read Blocks": 0,
@@ -596,7 +599,7 @@
             ]
           },
           "Planning": {
-            "Shared Hit Blocks": 16,
+            "Shared Hit Blocks": 231,
             "Shared Read Blocks": 0,
             "Shared Dirtied Blocks": 0,
             "Shared Written Blocks": 0,
@@ -613,219 +616,9 @@
             "Temp I/O Read Time": 0.0,
             "Temp I/O Write Time": 0.0
           },
-          "Planning Time": 1.861,
+          "Planning Time": 2.844,
           "Triggers": [],
-          "Execution Time": 6.997
-        }
-      ]
-    },
-    {
-      "name": "fuzzy_word_start",
-      "term": "mitx",
-      "options": {
-        "match": "word_start",
-        "misspellings": true
-      },
-      "sql": "SELECT \"tinkick_test_documents\".*, tin.score(\"tinkick_test_documents\".ctid) AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"tinkick_test_documents\".\"body\" ==> $1)) ORDER BY _tinkick_score DESC LIMIT $2",
-      "binds": [
-        "MATCHES (mitx|.itx|itx|imtx|m.tx|mtx|mtix|mi.x|mix|mixt|mit.|mit|.mitx|m.itx|mi.tx|mit.x|mitx.).*",
-        5
-      ],
-      "results": [
-        {
-          "id": 1001,
-          "title": "A miner's lighting handbook",
-          "score": 6.85632
-        },
-        {
-          "id": 136,
-          "title": "Tar-Amandil reviews a database handbook",
-          "score": 6.387763
-        },
-        {
-          "id": 1003,
-          "title": "A concise lighting note",
-          "score": 6.2450585
-        },
-        {
-          "id": 1012,
-          "title": "A mountain workshop",
-          "score": 6.1037736
-        },
-        {
-          "id": 193,
-          "title": "Chronicles of Dori",
-          "score": 5.418548
-        }
-      ],
-      "explain": [
-        {
-          "Plan": {
-            "Node Type": "Limit",
-            "Parallel Aware": false,
-            "Async Capable": false,
-            "Startup Cost": 3.02,
-            "Total Cost": 7.9,
-            "Plan Rows": 5,
-            "Plan Width": 404,
-            "Actual Startup Time": 3.578,
-            "Actual Total Time": 3.587,
-            "Actual Rows": 5.0,
-            "Actual Loops": 1,
-            "Disabled": false,
-            "Shared Hit Blocks": 290,
-            "Shared Read Blocks": 0,
-            "Shared Dirtied Blocks": 0,
-            "Shared Written Blocks": 0,
-            "Local Hit Blocks": 0,
-            "Local Read Blocks": 0,
-            "Local Dirtied Blocks": 0,
-            "Local Written Blocks": 0,
-            "Temp Read Blocks": 0,
-            "Temp Written Blocks": 0,
-            "Shared I/O Read Time": 0.0,
-            "Shared I/O Write Time": 0.0,
-            "Local I/O Read Time": 0.0,
-            "Local I/O Write Time": 0.0,
-            "Temp I/O Read Time": 0.0,
-            "Temp I/O Write Time": 0.0,
-            "Plans": [
-              {
-                "Node Type": "Custom Scan",
-                "Parent Relationship": "Outer",
-                "Custom Plan Provider": "Projector",
-                "Parallel Aware": false,
-                "Async Capable": false,
-                "Startup Cost": 3.02,
-                "Total Cost": 7.9,
-                "Plan Rows": 5,
-                "Plan Width": 404,
-                "Actual Startup Time": 3.576,
-                "Actual Total Time": 3.585,
-                "Actual Rows": 5.0,
-                "Actual Loops": 1,
-                "Disabled": false,
-                "Predicted Work": {
-                  "Rows": 5.0,
-                  "Mutable Rows": 0.0,
-                  "Posting Pages": 0.0,
-                  "Position Pages": 0.0,
-                  "Full Posting Pages": 0.0,
-                  "Doclen Pages": 0.0,
-                  "Candidate Blocks": 0.0,
-                  "Exact Batches": 0.0,
-                  "Heap Pages": 4.61,
-                  "Filter TIDs": 0.0,
-                  "Hash Rows": 0.0,
-                  "Sort Rows": 0.0,
-                  "Startup Pages": 0.0,
-                  "Driver Rows": 0.0
-                },
-                "Shared Hit Blocks": 290,
-                "Shared Read Blocks": 0,
-                "Shared Dirtied Blocks": 0,
-                "Shared Written Blocks": 0,
-                "Local Hit Blocks": 0,
-                "Local Read Blocks": 0,
-                "Local Dirtied Blocks": 0,
-                "Local Written Blocks": 0,
-                "Temp Read Blocks": 0,
-                "Temp Written Blocks": 0,
-                "Shared I/O Read Time": 0.0,
-                "Shared I/O Write Time": 0.0,
-                "Local I/O Read Time": 0.0,
-                "Local I/O Write Time": 0.0,
-                "Temp I/O Read Time": 0.0,
-                "Temp I/O Write Time": 0.0,
-                "Plans": [
-                  {
-                    "Node Type": "Custom Scan",
-                    "Parent Relationship": "child",
-                    "Custom Plan Provider": "Text Search Scan",
-                    "Parallel Aware": false,
-                    "Async Capable": false,
-                    "Relation Name": "tinkick_test_documents",
-                    "Alias": "tinkick_test_documents",
-                    "Startup Cost": 3.02,
-                    "Total Cost": 3.02,
-                    "Plan Rows": 5,
-                    "Plan Width": 404,
-                    "Actual Startup Time": 3.569,
-                    "Actual Total Time": 3.571,
-                    "Actual Rows": 5.0,
-                    "Actual Loops": 1,
-                    "Disabled": false,
-                    "Index": "index_tinkick_test_documents_on_body",
-                    "Query": "REGEX((mitx|.itx|itx|imtx|m.tx|mtx|mtix|mi.x|mix|mixt|mit.|mit|.mitx|m.itx|mi.tx|mit.x|mitx.).*)",
-                    "Scoring": "dense-term elision",
-                    "Predicted Work": {
-                      "Rows": 8.0,
-                      "Mutable Rows": 8.0,
-                      "Posting Pages": 0.0,
-                      "Position Pages": 0.0,
-                      "Full Posting Pages": 0.0,
-                      "Doclen Pages": 0.0,
-                      "Candidate Blocks": 0.0,
-                      "Exact Batches": 0.0,
-                      "Heap Pages": 0.0,
-                      "Filter TIDs": 0.0,
-                      "Hash Rows": 0.0,
-                      "Sort Rows": 0.0,
-                      "Startup Pages": 2.0,
-                      "Driver Rows": 0.0
-                    },
-                    "Top K": "5",
-                    "Page Touches": {
-                      "Total": 7,
-                      "Approx MiB": 0.1,
-                      "Metadata": 7
-                    },
-                    "Mutable Adapter": {
-                      "Storage Page Touches": 619,
-                      "Storage Approx MiB": 4.8
-                    },
-                    "Shared Hit Blocks": 285,
-                    "Shared Read Blocks": 0,
-                    "Shared Dirtied Blocks": 0,
-                    "Shared Written Blocks": 0,
-                    "Local Hit Blocks": 0,
-                    "Local Read Blocks": 0,
-                    "Local Dirtied Blocks": 0,
-                    "Local Written Blocks": 0,
-                    "Temp Read Blocks": 0,
-                    "Temp Written Blocks": 0,
-                    "Shared I/O Read Time": 0.0,
-                    "Shared I/O Write Time": 0.0,
-                    "Local I/O Read Time": 0.0,
-                    "Local I/O Write Time": 0.0,
-                    "Temp I/O Read Time": 0.0,
-                    "Temp I/O Write Time": 0.0
-                  }
-                ]
-              }
-            ]
-          },
-          "Planning": {
-            "Shared Hit Blocks": 16,
-            "Shared Read Blocks": 0,
-            "Shared Dirtied Blocks": 0,
-            "Shared Written Blocks": 0,
-            "Local Hit Blocks": 0,
-            "Local Read Blocks": 0,
-            "Local Dirtied Blocks": 0,
-            "Local Written Blocks": 0,
-            "Temp Read Blocks": 0,
-            "Temp Written Blocks": 0,
-            "Shared I/O Read Time": 0.0,
-            "Shared I/O Write Time": 0.0,
-            "Local I/O Read Time": 0.0,
-            "Local I/O Write Time": 0.0,
-            "Temp I/O Read Time": 0.0,
-            "Temp I/O Write Time": 0.0
-          },
-          "Planning Time": 1.184,
-          "Triggers": [],
-          "Execution Time": 6.221
+          "Execution Time": 7.504
         }
       ]
     },
@@ -835,7 +628,7 @@
       "options": {
         "match": "text_start"
       },
-      "sql": "SELECT \"tinkick_test_documents\".*, 1.0 AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"public\".unaccent(lower(\"tinkick_test_documents\".\"body\")) LIKE $1)) ORDER BY _tinkick_score DESC LIMIT $2",
+      "sql": "SELECT \"tinkick_test_documents\".*, 1.0 AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"public\".unaccent(lower((\"tinkick_test_documents\".\"body\")::text)) COLLATE \"C\" LIKE $1)) ORDER BY _tinkick_score DESC LIMIT $2",
       "binds": [
         "a mithril%",
         5
@@ -862,8 +655,8 @@
             "Total Cost": 34.69,
             "Plan Rows": 1,
             "Plan Width": 432,
-            "Actual Startup Time": 2.528,
-            "Actual Total Time": 2.608,
+            "Actual Startup Time": 0.838,
+            "Actual Total Time": 2.665,
             "Actual Rows": 2.0,
             "Actual Loops": 1,
             "Disabled": false,
@@ -895,12 +688,12 @@
                 "Total Cost": 34.69,
                 "Plan Rows": 1,
                 "Plan Width": 432,
-                "Actual Startup Time": 2.526,
-                "Actual Total Time": 2.606,
+                "Actual Startup Time": 0.837,
+                "Actual Total Time": 2.663,
                 "Actual Rows": 2.0,
                 "Actual Loops": 1,
                 "Disabled": false,
-                "Filter": "(unaccent(lower(body)) ~~ 'a mithril%'::text)",
+                "Filter": "((unaccent(lower(body)))::text ~~ 'a mithril%'::text)",
                 "Rows Removed by Filter": 266,
                 "Shared Hit Blocks": 30,
                 "Shared Read Blocks": 0,
@@ -939,9 +732,9 @@
             "Temp I/O Read Time": 0.0,
             "Temp I/O Write Time": 0.0
           },
-          "Planning Time": 0.105,
+          "Planning Time": 0.102,
           "Triggers": [],
-          "Execution Time": 2.632
+          "Execution Time": 2.691
         }
       ]
     },
@@ -951,17 +744,12 @@
       "options": {
         "match": "text_middle"
       },
-      "sql": "SELECT \"tinkick_test_documents\".*, 1.0 AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"public\".unaccent(lower(\"tinkick_test_documents\".\"body\")) LIKE $1)) ORDER BY _tinkick_score DESC LIMIT $2",
+      "sql": "SELECT \"tinkick_test_documents\".*, 1.0 AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"public\".unaccent(lower((\"tinkick_test_documents\".\"body\")::text)) COLLATE \"C\" LIKE $1)) ORDER BY _tinkick_score DESC LIMIT $2",
       "binds": [
         "%mithril lantern%",
         5
       ],
       "results": [
-        {
-          "id": 1001,
-          "title": "A miner's lighting handbook",
-          "score": 1.0
-        },
         {
           "id": 1002,
           "title": "A miner's equipment handbook",
@@ -970,6 +758,11 @@
         {
           "id": 1003,
           "title": "A concise lighting note",
+          "score": 1.0
+        },
+        {
+          "id": 1001,
+          "title": "A miner's lighting handbook",
           "score": 1.0
         },
         {
@@ -988,8 +781,8 @@
             "Total Cost": 34.69,
             "Plan Rows": 1,
             "Plan Width": 432,
-            "Actual Startup Time": 2.729,
-            "Actual Total Time": 2.804,
+            "Actual Startup Time": 0.289,
+            "Actual Total Time": 2.74,
             "Actual Rows": 4.0,
             "Actual Loops": 1,
             "Disabled": false,
@@ -1021,12 +814,12 @@
                 "Total Cost": 34.69,
                 "Plan Rows": 1,
                 "Plan Width": 432,
-                "Actual Startup Time": 2.728,
-                "Actual Total Time": 2.801,
+                "Actual Startup Time": 0.287,
+                "Actual Total Time": 2.737,
                 "Actual Rows": 4.0,
                 "Actual Loops": 1,
                 "Disabled": false,
-                "Filter": "(unaccent(lower(body)) ~~ '%mithril lantern%'::text)",
+                "Filter": "((unaccent(lower(body)))::text ~~ '%mithril lantern%'::text)",
                 "Rows Removed by Filter": 264,
                 "Shared Hit Blocks": 30,
                 "Shared Read Blocks": 0,
@@ -1065,9 +858,9 @@
             "Temp I/O Read Time": 0.0,
             "Temp I/O Write Time": 0.0
           },
-          "Planning Time": 0.081,
+          "Planning Time": 0.087,
           "Triggers": [],
-          "Execution Time": 2.827
+          "Execution Time": 2.761
         }
       ]
     },
@@ -1103,8 +896,8 @@
             "Total Cost": 33.35,
             "Plan Rows": 1,
             "Plan Width": 432,
-            "Actual Startup Time": 0.086,
-            "Actual Total Time": 0.087,
+            "Actual Startup Time": 0.067,
+            "Actual Total Time": 0.068,
             "Actual Rows": 1.0,
             "Actual Loops": 1,
             "Disabled": false,
@@ -1136,8 +929,8 @@
                 "Total Cost": 33.35,
                 "Plan Rows": 1,
                 "Plan Width": 432,
-                "Actual Startup Time": 0.085,
-                "Actual Total Time": 0.085,
+                "Actual Startup Time": 0.066,
+                "Actual Total Time": 0.067,
                 "Actual Rows": 1.0,
                 "Actual Loops": 1,
                 "Disabled": false,
@@ -1180,9 +973,9 @@
             "Temp I/O Read Time": 0.0,
             "Temp I/O Write Time": 0.0
           },
-          "Planning Time": 0.105,
+          "Planning Time": 0.087,
           "Triggers": [],
-          "Execution Time": 0.119
+          "Execution Time": 0.087
         }
       ]
     },
@@ -1197,7 +990,7 @@
           "body"
         ]
       },
-      "sql": "WITH \"_tinkick_matches\" AS ( SELECT \"tinkick_test_documents\".\"id\" AS _tinkick_id, tin.full_score(\"tinkick_test_documents\".ctid) AS _tinkick_branch_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"tinkick_test_documents\".\"body\" ==> $1)) UNION ALL SELECT \"tinkick_test_documents\".\"id\" AS _tinkick_id, 1.0 AS _tinkick_branch_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"public\".unaccent(lower(\"tinkick_test_documents\".\"title\")) LIKE $2)) ) SELECT \"tinkick_test_documents\".*, _tinkick_ranked.score AS _tinkick_score FROM \"tinkick_test_documents\" INNER JOIN (\n  SELECT _tinkick_id, SUM(_tinkick_branch_score) AS score\n  FROM _tinkick_matches GROUP BY _tinkick_id\n) AS _tinkick_ranked ON _tinkick_ranked._tinkick_id = \"tinkick_test_documents\".\"id\" ORDER BY _tinkick_score DESC LIMIT $3",
+      "sql": "WITH \"_tinkick_matches\" AS ( SELECT \"tinkick_test_documents\".\"id\" AS _tinkick_id, tin.full_score(\"tinkick_test_documents\".ctid) AS _tinkick_branch_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"tinkick_test_documents\".\"body\" ==> $1)) UNION ALL SELECT \"tinkick_test_documents\".\"id\" AS _tinkick_id, 1.0 AS _tinkick_branch_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"public\".unaccent(lower((\"tinkick_test_documents\".\"title\")::text)) COLLATE \"C\" LIKE $2)) ) SELECT \"tinkick_test_documents\".*, _tinkick_ranked.score AS _tinkick_score FROM \"tinkick_test_documents\" INNER JOIN (\n  SELECT _tinkick_id, SUM(_tinkick_branch_score) AS score\n  FROM _tinkick_matches GROUP BY _tinkick_id\n) AS _tinkick_ranked ON _tinkick_ranked._tinkick_id = \"tinkick_test_documents\".\"id\" ORDER BY _tinkick_score DESC LIMIT $3",
       "binds": [
         "\"moria\"",
         "moria%",
@@ -1207,17 +1000,17 @@
         {
           "id": 1010,
           "title": "Moria water survey",
-          "score": 8.114729
+          "score": 9.672854
         },
         {
           "id": 1008,
           "title": "The northern mines",
-          "score": 7.0323853
+          "score": 8.551415
         },
         {
           "id": 217,
           "title": "Chronicles of Celepharn",
-          "score": 5.0049906
+          "score": 5.738903
         },
         {
           "id": 1009,
@@ -1231,16 +1024,16 @@
             "Node Type": "Limit",
             "Parallel Aware": false,
             "Async Capable": false,
-            "Startup Cost": 81.74,
-            "Total Cost": 81.75,
+            "Startup Cost": 111.89,
+            "Total Cost": 111.9,
             "Plan Rows": 5,
             "Plan Width": 404,
-            "Actual Startup Time": 0.531,
-            "Actual Total Time": 0.535,
+            "Actual Startup Time": 0.517,
+            "Actual Total Time": 0.521,
             "Actual Rows": 4.0,
             "Actual Loops": 1,
             "Disabled": false,
-            "Shared Hit Blocks": 85,
+            "Shared Hit Blocks": 86,
             "Shared Read Blocks": 0,
             "Shared Dirtied Blocks": 0,
             "Shared Written Blocks": 0,
@@ -1262,22 +1055,22 @@
                 "Parent Relationship": "Outer",
                 "Parallel Aware": false,
                 "Async Capable": false,
-                "Startup Cost": 81.74,
-                "Total Cost": 81.79,
-                "Plan Rows": 19,
+                "Startup Cost": 111.89,
+                "Total Cost": 112.0,
+                "Plan Rows": 44,
                 "Plan Width": 404,
-                "Actual Startup Time": 0.53,
-                "Actual Total Time": 0.533,
+                "Actual Startup Time": 0.517,
+                "Actual Total Time": 0.519,
                 "Actual Rows": 4.0,
                 "Actual Loops": 1,
                 "Disabled": false,
                 "Sort Key": [
-                  "(sum((tin.full_score(tinkick_test_documents_1.ctid)))) DESC"
+                  "_tinkick_ranked.score DESC"
                 ],
                 "Sort Method": "quicksort",
                 "Sort Space Used": 25,
                 "Sort Space Type": "Memory",
-                "Shared Hit Blocks": 85,
+                "Shared Hit Blocks": 86,
                 "Shared Read Blocks": 0,
                 "Shared Dirtied Blocks": 0,
                 "Shared Written Blocks": 0,
@@ -1295,22 +1088,23 @@
                 "Temp I/O Write Time": 0.0,
                 "Plans": [
                   {
-                    "Node Type": "Nested Loop",
+                    "Node Type": "Hash Join",
                     "Parent Relationship": "Outer",
                     "Parallel Aware": false,
                     "Async Capable": false,
                     "Join Type": "Inner",
-                    "Startup Cost": 54.76,
-                    "Total Cost": 81.42,
-                    "Plan Rows": 19,
+                    "Startup Cost": 77.77,
+                    "Total Cost": 111.16,
+                    "Plan Rows": 44,
                     "Plan Width": 404,
-                    "Actual Startup Time": 0.513,
-                    "Actual Total Time": 0.524,
+                    "Actual Startup Time": 0.502,
+                    "Actual Total Time": 0.514,
                     "Actual Rows": 4.0,
                     "Actual Loops": 1,
                     "Disabled": false,
                     "Inner Unique": true,
-                    "Shared Hit Blocks": 85,
+                    "Hash Cond": "(tinkick_test_documents.id = _tinkick_ranked._tinkick_id)",
+                    "Shared Hit Blocks": 86,
                     "Shared Read Blocks": 0,
                     "Shared Dirtied Blocks": 0,
                     "Shared Written Blocks": 0,
@@ -1328,25 +1122,58 @@
                     "Temp I/O Write Time": 0.0,
                     "Plans": [
                       {
-                        "Node Type": "Aggregate",
-                        "Strategy": "Sorted",
-                        "Partial Mode": "Simple",
+                        "Node Type": "Seq Scan",
                         "Parent Relationship": "Outer",
                         "Parallel Aware": false,
                         "Async Capable": false,
-                        "Startup Cost": 54.48,
-                        "Total Cost": 54.82,
-                        "Plan Rows": 19,
+                        "Relation Name": "tinkick_test_documents",
+                        "Alias": "tinkick_test_documents",
+                        "Startup Cost": 0.0,
+                        "Total Cost": 32.68,
+                        "Plan Rows": 268,
+                        "Plan Width": 400,
+                        "Actual Startup Time": 0.006,
+                        "Actual Total Time": 0.033,
+                        "Actual Rows": 268.0,
+                        "Actual Loops": 1,
+                        "Disabled": false,
+                        "Shared Hit Blocks": 30,
+                        "Shared Read Blocks": 0,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 0,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 0,
+                        "Shared I/O Read Time": 0.0,
+                        "Shared I/O Write Time": 0.0,
+                        "Local I/O Read Time": 0.0,
+                        "Local I/O Write Time": 0.0,
+                        "Temp I/O Read Time": 0.0,
+                        "Temp I/O Write Time": 0.0
+                      },
+                      {
+                        "Node Type": "Hash",
+                        "Parent Relationship": "Inner",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Startup Cost": 77.22,
+                        "Total Cost": 77.22,
+                        "Plan Rows": 44,
                         "Plan Width": 12,
-                        "Actual Startup Time": 0.476,
-                        "Actual Total Time": 0.48,
+                        "Actual Startup Time": 0.442,
+                        "Actual Total Time": 0.444,
                         "Actual Rows": 4.0,
                         "Actual Loops": 1,
                         "Disabled": false,
-                        "Group Key": [
-                          "tinkick_test_documents_1.id"
-                        ],
-                        "Shared Hit Blocks": 73,
+                        "Hash Buckets": 1024,
+                        "Original Hash Buckets": 1024,
+                        "Hash Batches": 1,
+                        "Original Hash Batches": 1,
+                        "Peak Memory Usage": 9,
+                        "Shared Hit Blocks": 56,
                         "Shared Read Blocks": 0,
                         "Shared Dirtied Blocks": 0,
                         "Shared Written Blocks": 0,
@@ -1364,26 +1191,21 @@
                         "Temp I/O Write Time": 0.0,
                         "Plans": [
                           {
-                            "Node Type": "Sort",
+                            "Node Type": "Subquery Scan",
                             "Parent Relationship": "Outer",
                             "Parallel Aware": false,
                             "Async Capable": false,
-                            "Startup Cost": 54.48,
-                            "Total Cost": 54.53,
-                            "Plan Rows": 19,
+                            "Alias": "_tinkick_ranked",
+                            "Startup Cost": 76.34,
+                            "Total Cost": 77.22,
+                            "Plan Rows": 44,
                             "Plan Width": 12,
-                            "Actual Startup Time": 0.471,
-                            "Actual Total Time": 0.473,
-                            "Actual Rows": 5.0,
+                            "Actual Startup Time": 0.433,
+                            "Actual Total Time": 0.436,
+                            "Actual Rows": 4.0,
                             "Actual Loops": 1,
                             "Disabled": false,
-                            "Sort Key": [
-                              "tinkick_test_documents_1.id"
-                            ],
-                            "Sort Method": "quicksort",
-                            "Sort Space Used": 25,
-                            "Sort Space Type": "Memory",
-                            "Shared Hit Blocks": 73,
+                            "Shared Hit Blocks": 56,
                             "Shared Read Blocks": 0,
                             "Shared Dirtied Blocks": 0,
                             "Shared Written Blocks": 0,
@@ -1401,20 +1223,29 @@
                             "Temp I/O Write Time": 0.0,
                             "Plans": [
                               {
-                                "Node Type": "Append",
-                                "Parent Relationship": "Outer",
+                                "Node Type": "Aggregate",
+                                "Strategy": "Hashed",
+                                "Partial Mode": "Simple",
+                                "Parent Relationship": "Subquery",
                                 "Parallel Aware": false,
                                 "Async Capable": false,
-                                "Startup Cost": 2.0,
-                                "Total Cost": 54.08,
-                                "Plan Rows": 19,
+                                "Startup Cost": 76.34,
+                                "Total Cost": 76.78,
+                                "Plan Rows": 44,
                                 "Plan Width": 12,
-                                "Actual Startup Time": 0.05,
-                                "Actual Total Time": 0.459,
-                                "Actual Rows": 5.0,
+                                "Actual Startup Time": 0.432,
+                                "Actual Total Time": 0.435,
+                                "Actual Rows": 4.0,
                                 "Actual Loops": 1,
                                 "Disabled": false,
-                                "Shared Hit Blocks": 73,
+                                "Group Key": [
+                                  "tinkick_test_documents_1.id"
+                                ],
+                                "Planned Partitions": 0,
+                                "HashAgg Batches": 1,
+                                "Peak Memory Usage": 32,
+                                "Disk Usage": 0,
+                                "Shared Hit Blocks": 56,
                                 "Shared Read Blocks": 0,
                                 "Shared Dirtied Blocks": 0,
                                 "Shared Written Blocks": 0,
@@ -1430,40 +1261,22 @@
                                 "Local I/O Write Time": 0.0,
                                 "Temp I/O Read Time": 0.0,
                                 "Temp I/O Write Time": 0.0,
-                                "Subplans Removed": 0,
                                 "Plans": [
                                   {
-                                    "Node Type": "Custom Scan",
-                                    "Parent Relationship": "Member",
-                                    "Custom Plan Provider": "Projector",
+                                    "Node Type": "Append",
+                                    "Parent Relationship": "Outer",
                                     "Parallel Aware": false,
                                     "Async Capable": false,
                                     "Startup Cost": 2.0,
-                                    "Total Cost": 19.28,
-                                    "Plan Rows": 18,
+                                    "Total Cost": 76.12,
+                                    "Plan Rows": 44,
                                     "Plan Width": 12,
-                                    "Actual Startup Time": 0.05,
-                                    "Actual Total Time": 0.067,
-                                    "Actual Rows": 3.0,
+                                    "Actual Startup Time": 0.031,
+                                    "Actual Total Time": 0.426,
+                                    "Actual Rows": 5.0,
                                     "Actual Loops": 1,
                                     "Disabled": false,
-                                    "Predicted Work": {
-                                      "Rows": 18.0,
-                                      "Mutable Rows": 0.0,
-                                      "Posting Pages": 0.0,
-                                      "Position Pages": 0.0,
-                                      "Full Posting Pages": 0.0,
-                                      "Doclen Pages": 0.0,
-                                      "Candidate Blocks": 0.0,
-                                      "Exact Batches": 0.0,
-                                      "Heap Pages": 13.54,
-                                      "Filter TIDs": 0.0,
-                                      "Hash Rows": 0.0,
-                                      "Sort Rows": 0.0,
-                                      "Startup Pages": 0.0,
-                                      "Driver Rows": 0.0
-                                    },
-                                    "Shared Hit Blocks": 43,
+                                    "Shared Hit Blocks": 56,
                                     "Shared Read Blocks": 0,
                                     "Shared Dirtied Blocks": 0,
                                     "Shared Written Blocks": 0,
@@ -1479,52 +1292,40 @@
                                     "Local I/O Write Time": 0.0,
                                     "Temp I/O Read Time": 0.0,
                                     "Temp I/O Write Time": 0.0,
+                                    "Subplans Removed": 0,
                                     "Plans": [
                                       {
                                         "Node Type": "Custom Scan",
-                                        "Parent Relationship": "child",
-                                        "Custom Plan Provider": "Text Search Scan",
+                                        "Parent Relationship": "Member",
+                                        "Custom Plan Provider": "Projector",
                                         "Parallel Aware": false,
                                         "Async Capable": false,
-                                        "Relation Name": "tinkick_test_documents",
-                                        "Alias": "tinkick_test_documents_1",
                                         "Startup Cost": 2.0,
-                                        "Total Cost": 4.89,
-                                        "Plan Rows": 18,
+                                        "Total Cost": 41.19,
+                                        "Plan Rows": 43,
                                         "Plan Width": 12,
-                                        "Actual Startup Time": 0.044,
-                                        "Actual Total Time": 0.059,
+                                        "Actual Startup Time": 0.03,
+                                        "Actual Total Time": 0.042,
                                         "Actual Rows": 3.0,
                                         "Actual Loops": 1,
                                         "Disabled": false,
-                                        "Index": "index_tinkick_test_documents_on_body",
-                                        "Query": "moria",
                                         "Predicted Work": {
-                                          "Rows": 18.0,
-                                          "Mutable Rows": 18.0,
+                                          "Rows": 43.0,
+                                          "Mutable Rows": 0.0,
                                           "Posting Pages": 0.0,
                                           "Position Pages": 0.0,
                                           "Full Posting Pages": 0.0,
                                           "Doclen Pages": 0.0,
                                           "Candidate Blocks": 0.0,
                                           "Exact Batches": 0.0,
-                                          "Heap Pages": 0.0,
+                                          "Heap Pages": 22.84,
                                           "Filter TIDs": 0.0,
                                           "Hash Rows": 0.0,
                                           "Sort Rows": 0.0,
-                                          "Startup Pages": 2.0,
+                                          "Startup Pages": 0.0,
                                           "Driver Rows": 0.0
                                         },
-                                        "Page Touches": {
-                                          "Total": 7,
-                                          "Approx MiB": 0.1,
-                                          "Metadata": 7
-                                        },
-                                        "Mutable Adapter": {
-                                          "Storage Page Touches": 133,
-                                          "Storage Approx MiB": 1.0
-                                        },
-                                        "Shared Hit Blocks": 41,
+                                        "Shared Hit Blocks": 26,
                                         "Shared Read Blocks": 0,
                                         "Shared Dirtied Blocks": 0,
                                         "Shared Written Blocks": 0,
@@ -1539,60 +1340,87 @@
                                         "Local I/O Read Time": 0.0,
                                         "Local I/O Write Time": 0.0,
                                         "Temp I/O Read Time": 0.0,
-                                        "Temp I/O Write Time": 0.0
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "Node Type": "Subquery Scan",
-                                    "Parent Relationship": "Member",
-                                    "Parallel Aware": false,
-                                    "Async Capable": false,
-                                    "Alias": "*SELECT* 2",
-                                    "Startup Cost": 0.0,
-                                    "Total Cost": 34.7,
-                                    "Plan Rows": 1,
-                                    "Plan Width": 12,
-                                    "Actual Startup Time": 0.385,
-                                    "Actual Total Time": 0.39,
-                                    "Actual Rows": 2.0,
-                                    "Actual Loops": 1,
-                                    "Disabled": false,
-                                    "Shared Hit Blocks": 30,
-                                    "Shared Read Blocks": 0,
-                                    "Shared Dirtied Blocks": 0,
-                                    "Shared Written Blocks": 0,
-                                    "Local Hit Blocks": 0,
-                                    "Local Read Blocks": 0,
-                                    "Local Dirtied Blocks": 0,
-                                    "Local Written Blocks": 0,
-                                    "Temp Read Blocks": 0,
-                                    "Temp Written Blocks": 0,
-                                    "Shared I/O Read Time": 0.0,
-                                    "Shared I/O Write Time": 0.0,
-                                    "Local I/O Read Time": 0.0,
-                                    "Local I/O Write Time": 0.0,
-                                    "Temp I/O Read Time": 0.0,
-                                    "Temp I/O Write Time": 0.0,
-                                    "Plans": [
+                                        "Temp I/O Write Time": 0.0,
+                                        "Plans": [
+                                          {
+                                            "Node Type": "Custom Scan",
+                                            "Parent Relationship": "child",
+                                            "Custom Plan Provider": "Text Search Scan",
+                                            "Parallel Aware": false,
+                                            "Async Capable": false,
+                                            "Relation Name": "tinkick_test_documents",
+                                            "Alias": "tinkick_test_documents_1",
+                                            "Startup Cost": 2.0,
+                                            "Total Cost": 16.78,
+                                            "Plan Rows": 43,
+                                            "Plan Width": 12,
+                                            "Actual Startup Time": 0.026,
+                                            "Actual Total Time": 0.036,
+                                            "Actual Rows": 3.0,
+                                            "Actual Loops": 1,
+                                            "Disabled": false,
+                                            "Index": "index_tinkick_test_documents_on_body",
+                                            "Query": "moria",
+                                            "Predicted Work": {
+                                              "Rows": 43.0,
+                                              "Mutable Rows": 3.79,
+                                              "Posting Pages": 3.0,
+                                              "Position Pages": 0.0,
+                                              "Full Posting Pages": 3.0,
+                                              "Doclen Pages": 2.0,
+                                              "Candidate Blocks": 21.88,
+                                              "Exact Batches": 0.0,
+                                              "Heap Pages": 0.0,
+                                              "Filter TIDs": 0.0,
+                                              "Hash Rows": 0.0,
+                                              "Sort Rows": 0.0,
+                                              "Startup Pages": 2.0,
+                                              "Driver Rows": 43.0
+                                            },
+                                            "Page Touches": {
+                                              "Total": 19,
+                                              "Approx MiB": 0.1,
+                                              "Metadata": 10,
+                                              "Term Map": 9
+                                            },
+                                            "Mutable Adapter": {
+                                              "Storage Page Touches": 69,
+                                              "Storage Approx MiB": 0.5
+                                            },
+                                            "Shared Hit Blocks": 24,
+                                            "Shared Read Blocks": 0,
+                                            "Shared Dirtied Blocks": 0,
+                                            "Shared Written Blocks": 0,
+                                            "Local Hit Blocks": 0,
+                                            "Local Read Blocks": 0,
+                                            "Local Dirtied Blocks": 0,
+                                            "Local Written Blocks": 0,
+                                            "Temp Read Blocks": 0,
+                                            "Temp Written Blocks": 0,
+                                            "Shared I/O Read Time": 0.0,
+                                            "Shared I/O Write Time": 0.0,
+                                            "Local I/O Read Time": 0.0,
+                                            "Local I/O Write Time": 0.0,
+                                            "Temp I/O Read Time": 0.0,
+                                            "Temp I/O Write Time": 0.0
+                                          }
+                                        ]
+                                      },
                                       {
-                                        "Node Type": "Seq Scan",
-                                        "Parent Relationship": "Subquery",
+                                        "Node Type": "Subquery Scan",
+                                        "Parent Relationship": "Member",
                                         "Parallel Aware": false,
                                         "Async Capable": false,
-                                        "Relation Name": "tinkick_test_documents",
-                                        "Alias": "tinkick_test_documents_2",
+                                        "Alias": "*SELECT* 2",
                                         "Startup Cost": 0.0,
-                                        "Total Cost": 34.69,
+                                        "Total Cost": 34.7,
                                         "Plan Rows": 1,
-                                        "Plan Width": 40,
-                                        "Actual Startup Time": 0.382,
-                                        "Actual Total Time": 0.386,
+                                        "Plan Width": 12,
+                                        "Actual Startup Time": 0.378,
+                                        "Actual Total Time": 0.382,
                                         "Actual Rows": 2.0,
                                         "Actual Loops": 1,
                                         "Disabled": false,
-                                        "Filter": "(unaccent(lower(title)) ~~ 'moria%'::text)",
-                                        "Rows Removed by Filter": 266,
                                         "Shared Hit Blocks": 30,
                                         "Shared Read Blocks": 0,
                                         "Shared Dirtied Blocks": 0,
@@ -1608,7 +1436,44 @@
                                         "Local I/O Read Time": 0.0,
                                         "Local I/O Write Time": 0.0,
                                         "Temp I/O Read Time": 0.0,
-                                        "Temp I/O Write Time": 0.0
+                                        "Temp I/O Write Time": 0.0,
+                                        "Plans": [
+                                          {
+                                            "Node Type": "Seq Scan",
+                                            "Parent Relationship": "Subquery",
+                                            "Parallel Aware": false,
+                                            "Async Capable": false,
+                                            "Relation Name": "tinkick_test_documents",
+                                            "Alias": "tinkick_test_documents_2",
+                                            "Startup Cost": 0.0,
+                                            "Total Cost": 34.69,
+                                            "Plan Rows": 1,
+                                            "Plan Width": 40,
+                                            "Actual Startup Time": 0.375,
+                                            "Actual Total Time": 0.379,
+                                            "Actual Rows": 2.0,
+                                            "Actual Loops": 1,
+                                            "Disabled": false,
+                                            "Filter": "((unaccent(lower(title)))::text ~~ 'moria%'::text)",
+                                            "Rows Removed by Filter": 266,
+                                            "Shared Hit Blocks": 30,
+                                            "Shared Read Blocks": 0,
+                                            "Shared Dirtied Blocks": 0,
+                                            "Shared Written Blocks": 0,
+                                            "Local Hit Blocks": 0,
+                                            "Local Read Blocks": 0,
+                                            "Local Dirtied Blocks": 0,
+                                            "Local Written Blocks": 0,
+                                            "Temp Read Blocks": 0,
+                                            "Temp Written Blocks": 0,
+                                            "Shared I/O Read Time": 0.0,
+                                            "Shared I/O Write Time": 0.0,
+                                            "Local I/O Read Time": 0.0,
+                                            "Local I/O Write Time": 0.0,
+                                            "Temp I/O Read Time": 0.0,
+                                            "Temp I/O Write Time": 0.0
+                                          }
+                                        ]
                                       }
                                     ]
                                   }
@@ -1617,44 +1482,6 @@
                             ]
                           }
                         ]
-                      },
-                      {
-                        "Node Type": "Index Scan",
-                        "Parent Relationship": "Inner",
-                        "Parallel Aware": false,
-                        "Async Capable": false,
-                        "Scan Direction": "Forward",
-                        "Index Name": "tinkick_test_documents_pkey",
-                        "Relation Name": "tinkick_test_documents",
-                        "Alias": "tinkick_test_documents",
-                        "Startup Cost": 0.27,
-                        "Total Cost": 1.39,
-                        "Plan Rows": 1,
-                        "Plan Width": 400,
-                        "Actual Startup Time": 0.01,
-                        "Actual Total Time": 0.01,
-                        "Actual Rows": 1.0,
-                        "Actual Loops": 4,
-                        "Disabled": false,
-                        "Index Cond": "(id = tinkick_test_documents_1.id)",
-                        "Rows Removed by Index Recheck": 0,
-                        "Index Searches": 4,
-                        "Shared Hit Blocks": 12,
-                        "Shared Read Blocks": 0,
-                        "Shared Dirtied Blocks": 0,
-                        "Shared Written Blocks": 0,
-                        "Local Hit Blocks": 0,
-                        "Local Read Blocks": 0,
-                        "Local Dirtied Blocks": 0,
-                        "Local Written Blocks": 0,
-                        "Temp Read Blocks": 0,
-                        "Temp Written Blocks": 0,
-                        "Shared I/O Read Time": 0.0,
-                        "Shared I/O Write Time": 0.0,
-                        "Local I/O Read Time": 0.0,
-                        "Local I/O Write Time": 0.0,
-                        "Temp I/O Read Time": 0.0,
-                        "Temp I/O Write Time": 0.0
                       }
                     ]
                   }
@@ -1663,7 +1490,7 @@
             ]
           },
           "Planning": {
-            "Shared Hit Blocks": 108,
+            "Shared Hit Blocks": 87,
             "Shared Read Blocks": 0,
             "Shared Dirtied Blocks": 0,
             "Shared Written Blocks": 0,
@@ -1680,9 +1507,9 @@
             "Temp I/O Read Time": 0.0,
             "Temp I/O Write Time": 0.0
           },
-          "Planning Time": 0.725,
+          "Planning Time": 0.586,
           "Triggers": [],
-          "Execution Time": 0.83
+          "Execution Time": 0.944
         }
       ]
     }

@@ -13,7 +13,6 @@ cases = {
   word_start: ["mithr lant", { match: :word_start }],
   word_middle: ["ithr ante", { match: :word_middle }],
   word_end: ["thril tern", { match: :word_end }],
-  fuzzy_word_start: ["mitx", { match: :word_start, misspellings: true }],
   text_start: ["a mithril", { match: :text_start }],
   text_middle: ["mithril lantern", { match: :text_middle }],
   exact: ["A cafe menu", { fields: [{ title: :exact }] }],
