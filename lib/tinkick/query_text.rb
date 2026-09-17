@@ -19,7 +19,7 @@ module Tinkick
       return "" if words.empty?
       return quote(term) if match == :phrase
 
-      words.map { |word| quote(word) }.join(" #{operator.upcase} ")
+      words.map { |word| literal(word) }.join(" #{operator.upcase} ")
     end
 
     private
@@ -39,6 +39,13 @@ module Tinkick
     def quote(term)
       escaped = term.gsub(/["\\_\[\]]/) { |character| "\\#{character}" }
       "\"#{escaped}\""
+    end
+
+    def literal(word)
+      # Keycap emoji normalize to punctuation that otherwise analyzes to nothing.
+      return "MATCHES #{Regexp.escape(word)}" if ["*", "#"].include?(word)
+
+      quote(word)
     end
   end
 end

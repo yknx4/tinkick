@@ -53,6 +53,17 @@ class QueryTextTest < TinkickIntegrationTest
     assert_empty(names("foo bar"))
   end
 
+  def test_keycap_emoji_remain_literal_dictionary_terms
+    tinkick_test_products(:red_apple).update!(name: "*️⃣ apple")
+    tinkick_test_products(:green_pear).update!(name: "#️⃣ pear")
+
+    assert_equal(["*️⃣ apple"], names("*️⃣"))
+    assert_equal(["#️⃣ pear"], names("#️⃣"))
+    assert_equal(["*️⃣ apple"], names("*️⃣ apple"))
+    assert_empty(names("*️⃣ pear"))
+    assert_equal(["*️⃣ apple"], names("*️⃣", match: :phrase))
+  end
+
   def test_phrase_requires_ordered_adjacent_words
     assert_equal(["Red Apple"], names("red apple", match: :phrase))
     assert_empty(names("apple red", match: :phrase))

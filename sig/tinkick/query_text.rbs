@@ -11,5 +11,7 @@ module Tinkick
     def tokens: (String term) -> Array[String]
 
     def quote: (String term) -> String
+
+    def literal: (String word) -> String
   end
 end
