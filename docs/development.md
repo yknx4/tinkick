@@ -16,9 +16,9 @@ The Rails 8.0 matrix uses `JSON_VERSION='< 3'`. Rails 8.0.5.1's encoder passes
 failure. Rails 8.1.3.1 JSONB decoding also fails with JSON 3's positional-argument
 change, so both matrix entries use JSON 2. The Gemfile exposes `JSON_VERSION` for
 these dependency combinations, and CI resolves each combination separately.
-Applications on Rails 8.0 should likewise constrain `json` below 3 until they
-upgrade to a Rails release with compatible encoding. Tinkick does not patch
-Rails or impose that constraint on applications using newer Rails.
+Applications on the verified Rails 8.0/8.1 releases should likewise constrain
+`json` below 3 until compatible encoding and decoding are verified on a newer
+Rails release. Tinkick does not patch Rails.
 
 Use `tinkick_development` for development and `tinkick_test` for integration
 tests. The test helper checks `current_database()` before running any Rails
@@ -37,13 +37,22 @@ the intended test environment. Local environment files are not uploaded.
 
 ```sh
 direnv exec . bundle exec rake
+direnv exec . bundle exec rake coverage
 direnv exec . bundle exec rake build
 ```
 
+The default task and `coverage` enforce at least 90% line coverage across all
+`lib/**/*.rb`, including generators. SimpleCov does not merge stale runs or hide
+unloaded production files. Reports are written to ignored `coverage/`. Targeted
+test commands run without the global coverage threshold; use the full coverage
+task for the final gate.
+
 For a targeted integration test, pass its actual path to Ruby with `-Itest` and
 `--fail-fast`. Run the touched files through `rubocop -A`, then RuboCop without
-autofix, followed by `rake rbs:format rbs:quality steep` before committing.
-Keep behavior and its meaningful tests together in a Conventional Commit.
+autofix, followed by `rake rbs:format rbs:quality steep` for final verification.
+Commit small behavior/test pairs progressively using Conventional Commits.
+Record regressions and fixes in follow-up commits; do not hold unrelated completed
+work until the entire suite is perfect or rewrite the development history.
 
 RBS uses the maintained `ruby/gem_rbs_collection` signatures pinned in
 `rbs_collection.lock.yaml`. The downloaded `.rbs_collection` is ignored.
