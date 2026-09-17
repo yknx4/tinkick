@@ -33,11 +33,12 @@ module Tinkick
 
       schema = tinkick_schema
       fields ||= options[:default_fields] || options[:searchable] || schema[:data_fields].select { |field| [:text, :citext].include?(schema[:columns].fetch(field).type) }
-      tinkick_validate_fields(schema, (options[:searchable] || []) + fields)
+      match ||= options[:match]
+      tinkick_validate_fields(schema, (options[:searchable] || []) + fields, match)
 
       Relation.new(self, term, fields: fields, misspellings: misspellings,
         where: where, order: order, limit: limit, offset: offset, page: page,
-        per_page: per_page, padding: padding, match: match || options[:match],
+        per_page: per_page, padding: padding, match: match,
         operator: operator, load: load, total_entries: total_entries,
         countless: countless, keyset: keyset, after: after)
     end
@@ -97,7 +98,7 @@ module Tinkick
       data.keys.map(&:to_s)
     end
 
-    def tinkick_validate_fields(schema, fields)
+    def tinkick_validate_fields(schema, fields, match)
       # @type self: singleton(ActiveRecord::Base)
       fields.each do |field|
         field = field.to_s
@@ -105,10 +106,12 @@ module Tinkick
         unless column
           raise MissingFieldError, "#{name} has no column #{field.inspect}; add a persisted or generated column with a Rails migration"
         end
-        unless [:text, :citext].include?(column.type)
+        text_types = match == :exact ? [:text, :citext, :string] : [:text, :citext]
+        array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+        unless !array && text_types.include?(column.type)
           raise InvalidQueryError, "#{name}.#{field} must be a text or citext column with a TIN index"
         end
-        unless schema[:index_fields].include?(field)
+        unless match == :exact || schema[:index_fields].include?(field)
           raise Error, "#{name}.#{field} requires a valid, nonpartial TIN index on the column; add a Rails migration with add_index #{table_name.inspect}, #{field.inspect}, using: :tin"
         end
       end

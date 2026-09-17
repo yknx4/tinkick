@@ -88,16 +88,25 @@ module Tinkick
         @fields.each do |field|
           column = @model.columns_hash[field]
           validate_column(field)
-          unless column && [:text, :citext].include?(column.type)
+          text_types = @match == :exact ? [:text, :citext, :string] : [:text, :citext]
+          array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+          unless column && !array && text_types.include?(column.type)
             raise InvalidQueryError, "#{@model.name}.#{field} must be a text or citext column with a TIN index"
           end
         end
 
-        compiled_query = QueryText.new(connection).compile(@term, operator: @operator, match: @match, misspellings: @misspellings)
+        compiled_query = if @match == :exact
+          @term
+        else
+          QueryText.new(connection).compile(@term, operator: @operator, match: @match, misspellings: @misspellings)
+        end
         @compiled_query = compiled_query
         relation = Filter.new(@model).apply(@model.all, @where)
         if compiled_query == "*"
           relation
+        elsif @match == :exact
+          predicates = @fields.map { |field| "#{quoted_column(field)}::text COLLATE \"C\" = ?" }.join(" OR ")
+          relation.where(Arel.sql("(#{predicates})", *Array.new(@fields.length, @term)))
         elsif compiled_query.empty?
           relation.none
         else
@@ -154,7 +163,7 @@ module Tinkick
 
     def score_sql
       # Native scoring permits dense-term elision and the index's top-k path.
-      if @compiled_query == "*" || @compiled_query == ""
+      if @match == :exact || @compiled_query == "*" || @compiled_query == ""
         "1.0"
       elsif @fields.length > 1
         # Native dense-term elision can lose matches in TIN's multi-index plan.

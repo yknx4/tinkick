@@ -24,7 +24,7 @@ module Tinkick
 
     def tinkick_data_fields: (Hash[String, ActiveRecord::ConnectionAdapters::Column] columns) -> Array[String]
 
-    def tinkick_validate_fields: (model_schema schema, model_fields fields) -> void
+    def tinkick_validate_fields: (model_schema schema, model_fields fields, Symbol match) -> void
   end
 end
 
