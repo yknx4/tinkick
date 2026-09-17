@@ -15,7 +15,8 @@ class IanaCalendarHistogramsTest < TinkickIntegrationTest
       [first, last].each_with_index { |instant, index| create_value(instant, index) }
       search = Tinkick::Relation.new(IanaCalendarValue, "observation", fields: [:name], misspellings: false, smart_aggs: false,
         where: { recorded_at: { gte: first, lte: last } },
-        aggs: { events: { date_histogram: { field: :recorded_at, calendar_interval: :day, time_zone: "America/New_York" } } })
+        aggs: { events: { where: { recorded_at: { gte: first, lte: last } },
+                          date_histogram: { field: :recorded_at, calendar_interval: :day, time_zone: "America/New_York" } } })
       instantiated = []
       buckets = nil
       ActiveSupport::Notifications.subscribed(->(*arguments) { instantiated << arguments.last[:record_count] }, "instantiation.active_record") do
