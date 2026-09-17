@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "json"
+
 module Tinkick
   class Filter
     def initialize(model)
@@ -34,27 +36,114 @@ module Tinkick
         when :_not
           predicates(value).map { |predicate| negate(predicate) }
         else
-          column, array_type = column_reference(field)
-          field_predicates(column, value, array_type: array_type)
+          column, array_type, json_path = column_reference(field)
+          if json_path
+            json_predicates(column, json_path, value)
+          else
+            field_predicates(column, value, array_type: array_type)
+          end
         end
       end
     end
 
     def column_reference(field)
-      name = field.to_s
+      parts = field.to_s.split(".", -1)
+      name = parts.fetch(0, "")
+      path = parts.drop(1)
       column = @model.columns_hash[name]
       unless column
         raise MissingFieldError, "#{@model.name} has no column #{name.inspect}; add it with a Rails migration before filtering"
       end
-      if [:json, :jsonb].include?(column.type)
-        raise InvalidQueryError, "Filtering #{name.inspect} requires JSON semantics that are not implemented yet"
+      if column.type == :json
+        raise InvalidQueryError, "Filtering #{name.inspect} requires a JSONB column; convert it with a Rails migration"
       end
       array_type = "#{column.sql_type}[]" if column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+      if column.type == :jsonb && !array_type
+        raise ArgumentError, "JSONB paths require non-empty components" if path.any?(&:empty?)
+
+        json_path = "$#{path.map { |part| ".#{JSON.generate(part)}" }.join}[*]"
+      elsif !path.empty?
+        raise InvalidQueryError, "Dotted filter #{field.inspect} requires a JSONB root column"
+      end
 
       reference = @model.with_connection do |connection|
         "#{connection.quote_table_name(@model.table_name)}.#{connection.quote_column_name(name)}"
       end
-      [reference, array_type]
+      [reference, array_type, json_path]
+    end
+
+    def json_predicates(column, path, value)
+      if value.is_a?(Range)
+        # @type var bounds: Hash[String | Symbol, filter_value]
+        bounds = {}
+        lower = value.begin
+        upper = value.end
+        bounds[:gte] = lower if lower && lower != -Float::INFINITY
+        bounds[value.exclude_end? ? :lt : :lte] = upper if upper && upper != Float::INFINITY
+        return json_predicates(column, path, bounds)
+      end
+      return [json_equality(column, path, value)] unless value.is_a?(Hash)
+
+      # @type var comparisons: Array[String]
+      comparisons = []
+      filters = value.flat_map do |operator, operand|
+        case operator
+        when :in
+          [json_equality(column, path, operand)]
+        when :all
+          raise ArgumentError, "all requires an array of values" unless operand.is_a?(Array)
+
+          operand.map { |entry| json_equality(column, path, entry) }
+        when :not, :_not
+          [negate(json_equality(column, path, operand))]
+        when :exists
+          unless operand == true || operand == false
+            raise ArgumentError, "Passing a value other than true or false to exists is not supported"
+          end
+          missing = json_equality(column, path, nil)
+          [operand ? negate(missing) : missing]
+        when :like, :ilike, :prefix
+          [json_text_predicate(column, path, operator, operand)]
+        when :gt, :gte, :lt, :lte
+          comparison = { gt: ">", gte: ">=", lt: "<", lte: "<=" }.fetch(operator)
+          comparisons << "@ #{comparison} #{JSON.generate(scalar(operand))}"
+          []
+        else
+          raise ArgumentError, "Unknown where operator: #{operator.inspect}"
+        end
+      end
+      unless comparisons.empty?
+        warn_json_scan(column)
+        filters << json_match(column, path, comparisons.join(" && "))
+      end
+      filters
+    end
+
+    def json_equality(column, path, value)
+      if value.is_a?(Array)
+        return ["FALSE", []] if value.empty?
+
+        combine(value.map { |entry| json_equality(column, path, entry) }, "OR")
+      elsif value.nil?
+        warn_json_scan(column)
+        negate(json_match(column, path, '@.type() != "null" && @.type() != "array" && @.type() != "object"'))
+      else
+        json_match(column, path, "@ == #{JSON.generate(scalar(value))}")
+      end
+    end
+
+    def json_match(column, path, condition)
+      ["#{column} @@ ?::jsonpath", ["exists(#{path} ? (#{condition}))"]]
+    end
+
+    def json_text_predicate(column, path, operator, value)
+      sql, binds = text_predicate("tinkick_filter_element.value #>> '{}'", operator, value)
+      warn_json_scan(column)
+      ["EXISTS (SELECT 1 FROM jsonb_path_query(#{column}, ?::jsonpath) AS tinkick_filter_element(value) WHERE jsonb_typeof(tinkick_filter_element.value) = 'string' AND #{sql})", [path, *binds]]
+    end
+
+    def warn_json_scan(column)
+      @model.logger&.warn("Tinkick: this JSONB filter scans values in #{column}; ordinary GIN indexes cannot extract selective equality keys for range, pattern, or missing-value checks. Consider an indexed persisted or generated scalar column for frequent filters.")
     end
 
     def field_predicates(column, value, array_type: nil)

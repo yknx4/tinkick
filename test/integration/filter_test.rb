@@ -279,6 +279,127 @@ class FilterTest < TinkickIntegrationTest
     SearchProduct.logger = original_logger
   end
 
+  def test_jsonb_dotted_scalar_filters_preserve_types_and_tin_scope
+    scope = SearchProduct.where("description ==> ?", "fruit")
+    red_products = filter(scope, "metadata.details.color" => "red")
+    set_metadata_values
+
+    assert_equal(["Red Apple"], red_products.pluck(:name))
+    assert_equal(["Red Apple"], filter(scope, "metadata.year" => 2026).pluck(:name))
+    assert_equal(["Green Pear"], filter(scope, "metadata.available" => false).pluck(:name))
+    assert_empty(filter(scope, "metadata.year" => "2026"))
+    assert_empty(filter(scope.where("name ==> ?", "pear"), "metadata.details.color" => "red"))
+  end
+
+  def test_jsonb_arrays_support_membership_all_and_negation
+    set_metadata_values
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, "metadata.tags" => "red").pluck(:name))
+    assert_equal(["Green Pear", "Red Apple"], filter(SearchProduct.all, "metadata.tags" => { in: ["red", "green"] }).order(:name).pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, "metadata.tags" => { all: ["red", "fruit"] }).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, "metadata.tags" => { not: "red" }).pluck(:name))
+    assert_empty(filter(SearchProduct.all, "metadata.tags" => []))
+    assert_equal(2, filter(SearchProduct.all, "metadata.tags" => { all: [] }).count)
+    assert_empty(filter(SearchProduct.all, _not: { "metadata.tags" => { all: ["red", "green"] } }))
+  end
+
+  def test_jsonb_missing_null_and_empty_arrays_have_no_indexed_values
+    set_metadata_values
+    SearchProduct.create!(name: "Empty array", metadata: { tags: [] })
+    SearchProduct.create!(name: "JSON null", metadata: { tags: nil })
+    SearchProduct.create!(name: "Missing key", metadata: {})
+    SearchProduct.create!(name: "Null array", metadata: { tags: [nil] })
+    SearchProduct.create!(name: "SQL null", metadata: nil)
+    absent = ["Empty array", "JSON null", "Missing key", "Null array", "SQL null"]
+
+    assert_equal(absent, filter(SearchProduct.all, "metadata.tags" => nil).order(:name).pluck(:name))
+    assert_equal(absent, filter(SearchProduct.all, "metadata.tags" => { exists: false }).order(:name).pluck(:name))
+    assert_equal(["Green Pear", "Red Apple"], filter(SearchProduct.all, "metadata.tags" => { exists: true }).order(:name).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, "metadata.tags" => { not: [nil, "red"] }).pluck(:name))
+
+    tinkick_test_products(:red_apple).update!(metadata: { tags: "" })
+    tinkick_test_products(:green_pear).update!(metadata: { tags: false })
+    assert_equal(["Green Pear", "Red Apple"], filter(SearchProduct.all, "metadata.tags" => { exists: true }).order(:name).pluck(:name))
+  end
+
+  def test_jsonb_dotted_fields_flatten_object_arrays_independently
+    tinkick_test_products(:red_apple).update!(metadata: { variants: [{ color: "red", size: "small" }, { color: "green", size: "large" }] })
+    tinkick_test_products(:green_pear).update!(metadata: { variants: [{ color: "yellow", size: "large" }] })
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, "metadata.variants.color" => "red", "metadata.variants.size" => "large").pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, "metadata.variants.color" => { all: ["red", "green"] }).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, "metadata.variants.color" => { not: "red" }).pluck(:name))
+  end
+
+  def test_jsonb_range_bounds_must_match_the_same_numeric_element
+    set_metadata_values
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, "metadata.ratings" => { gt: 26, lt: 36 }).pluck(:name))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, "metadata.ratings" => 26...36).pluck(:name))
+    assert_empty(filter(SearchProduct.all, "metadata.ratings" => 20...32))
+    assert_equal(["Red Apple"], filter(SearchProduct.all, "metadata.ratings" => 20..32).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, "metadata.ratings" => ...19).pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, _not: { "metadata.ratings" => { gt: 26, lt: 36 } }).pluck(:name))
+  end
+
+  def test_jsonb_text_filters_preserve_wildcards_and_backslashes
+    product = tinkick_test_products(:red_apple)
+    product.update!(metadata: { tags: ["Product 100%_\\ABC", "red"] })
+
+    assert_equal([product.id], filter(SearchProduct.all, "metadata.tags" => { like: "Product 100\\%\\_\\A%" }).ids)
+    assert_equal([product.id], filter(SearchProduct.all, "metadata.tags" => { ilike: "product%" }).ids)
+    assert_equal([product.id], filter(SearchProduct.all, "metadata.tags" => { prefix: "Product 100%_\\" }).ids)
+    assert_empty(filter(SearchProduct.all, "metadata.tags" => { prefix: "product" }))
+  end
+
+  def test_jsonb_paths_and_values_cannot_change_the_query
+    set_metadata_values
+    key = "quoted\" ? (@ == 1) --"
+    tinkick_test_products(:red_apple).update!(metadata: { key => "literal" })
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, "metadata.#{key}" => "literal").pluck(:name))
+    assert_empty(filter(SearchProduct.all, "metadata.#{key}" => "literal\") || true --"))
+    assert_empty(filter(SearchProduct.all, "metadata.tags" => "red') OR TRUE --"))
+    assert_raises(Tinkick::MissingFieldError) { filter(SearchProduct.all, "missing.tags" => "red") }
+    assert_raises(ArgumentError) { filter(SearchProduct.all, "metadata..tags" => "red") }
+    assert_raises(Tinkick::InvalidQueryError) { filter(SearchProduct.all, "name.tags" => "red") }
+  end
+
+  def test_jsonb_membership_can_use_a_gin_index
+    set_metadata_values
+    SearchProduct.with_connection do |connection|
+      connection.execute("SET LOCAL enable_seqscan = off")
+      relation = filter(SearchProduct.all, "metadata.tags" => "red")
+      plan = connection.select_values("EXPLAIN #{relation.to_sql}").join("\n")
+
+      assert_includes(plan, "index_tinkick_test_products_on_metadata")
+      assert_includes(plan, "Index Cond")
+    end
+  end
+
+  def test_jsonb_root_scalars_and_arrays_can_be_filtered
+    tinkick_test_products(:red_apple).update!(metadata: ["red", "fruit"])
+    tinkick_test_products(:green_pear).update!(metadata: "green")
+
+    assert_equal(["Red Apple"], filter(SearchProduct.all, metadata: "red").pluck(:name))
+    assert_equal(["Green Pear"], filter(SearchProduct.all, metadata: "green").pluck(:name))
+  end
+
+  def test_jsonb_non_indexable_operations_warn
+    set_metadata_values
+    output = StringIO.new
+    original_logger = SearchProduct.logger
+    SearchProduct.logger = Logger.new(output, level: Logger::WARN)
+
+    filter(SearchProduct.all, "metadata.tags" => "red").load
+    assert_empty(output.string)
+    filter(SearchProduct.all, "metadata.ratings" => 26..36).load
+    assert_includes(output.string, "JSONB")
+    assert_includes(output.string, "GIN")
+  ensure
+    SearchProduct.logger = original_logger
+  end
+
   private
 
   def filter(scope, conditions)
@@ -288,5 +409,10 @@ class FilterTest < TinkickIntegrationTest
   def set_array_values
     tinkick_test_products(:red_apple).update!(tags: ["fruit", "red", nil], ratings: [19, 32, 42])
     tinkick_test_products(:green_pear).update!(tags: ["fruit", "green"], ratings: [13, 40, 52])
+  end
+
+  def set_metadata_values
+    tinkick_test_products(:red_apple).update!(metadata: { details: { color: "red" }, tags: ["fruit", "red", nil], ratings: [19, 32, 42], year: 2026, available: true })
+    tinkick_test_products(:green_pear).update!(metadata: { details: { color: "green" }, tags: ["fruit", "green"], ratings: [13, 40, 52], year: 2025, available: false })
   end
 end

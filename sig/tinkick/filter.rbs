@@ -18,7 +18,17 @@ module Tinkick
 
     def predicates: (filter_value conditions) -> Array[filter_predicate]
 
-    def column_reference: (String | Symbol field) -> [ String, String? ]
+    def column_reference: (String | Symbol field) -> [ String, String?, String? ]
+
+    def json_predicates: (String column, String path, filter_value value) -> Array[filter_predicate]
+
+    def json_equality: (String column, String path, filter_value value) -> filter_predicate
+
+    def json_match: (String column, String path, String condition) -> filter_predicate
+
+    def json_text_predicate: (String column, String path, :like | :ilike | :prefix operator, filter_value value) -> filter_predicate
+
+    def warn_json_scan: (String column) -> void
 
     def field_predicates: (String column, filter_value value, ?array_type: String?) -> Array[filter_predicate]
 
