@@ -72,7 +72,7 @@ module Tinkick
     private
 
     def numeric_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :interval, :offset, :min_doc_count, :order, :keyed]
+      unknown = options.keys - [:field, :interval, :offset, :min_doc_count, :order, :keyed, :extended_bounds, :hard_bounds]
       raise ArgumentError, "Unknown histogram options: #{unknown.join(", ")}" unless unknown.empty?
 
       interval = numeric_bound(options[:interval])
@@ -82,6 +82,11 @@ module Tinkick
       minimum = options.fetch(:min_doc_count, 0)
       raise ArgumentError, "Histogram min_doc_count must be a nonnegative integer" unless minimum.is_a?(Integer) && minimum >= 0
       raise ArgumentError, "Histogram keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
+      extended_min, extended_max = histogram_bounds(options.fetch(:extended_bounds, {}))
+      hard_min, hard_max = histogram_bounds(options.fetch(:hard_bounds, {}))
+      if (extended_min && hard_min && extended_min < hard_min) || (extended_max && hard_max && extended_max > hard_max)
+        raise ArgumentError, "Extended bounds must be within hard bounds"
+      end
 
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
       values = values_relation(scope, field)
@@ -94,10 +99,17 @@ module Tinkick
       counts = @model.unscoped.from(ordinals, :tinkick_ordinals)
         .group(Arel.sql("_tinkick_ordinal"))
         .select(Arel.sql("_tinkick_ordinal, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count"))
+      # Elasticsearch checks numeric hard bounds before adding the histogram offset.
+      counts = counts.where(Arel.sql("_tinkick_ordinal * ? >= ?", interval, hard_min)) if hard_min
+      counts = counts.where(Arel.sql("_tinkick_ordinal * ? <= ?", interval, hard_max)) if hard_max
       query = if minimum.zero?
         @model.logger&.warn("Tinkick: histogram min_doc_count: 0 generates empty buckets across the matching numeric range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
+        lower = extended_min && ((extended_min - offset) / interval).floor
+        upper = extended_max && ((extended_max - offset) / interval).floor
+        bounds = @model.unscoped.from("tinkick_histogram_counts")
+          .select(Arel.sql("LEAST(MIN(_tinkick_ordinal), ?)::numeric AS lower, GREATEST(MAX(_tinkick_ordinal), ?)::numeric AS upper", lower, upper))
         @model.unscoped.with(tinkick_histogram_counts: counts)
-          .from("(SELECT MIN(_tinkick_ordinal)::numeric AS lower, MAX(_tinkick_ordinal)::numeric AS upper FROM tinkick_histogram_counts) AS tinkick_bounds")
+          .from(bounds, :tinkick_bounds)
           .joins("CROSS JOIN LATERAL generate_series(lower, upper, 1) AS tinkick_series(_tinkick_ordinal)")
           .joins("LEFT JOIN tinkick_histogram_counts USING (_tinkick_ordinal)")
           .select(Arel.sql("_tinkick_ordinal::double precision * ? + ? AS _tinkick_key, COALESCE(_tinkick_count, 0) AS _tinkick_count", interval, offset))
@@ -114,6 +126,18 @@ module Tinkick
       result = { "buckets" => options[:keyed] ? buckets.to_h { |bucket| [bucket.fetch("key").to_s, bucket] } : buckets }
       result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
       result
+    end
+
+    def histogram_bounds(bounds)
+      unless bounds.is_a?(Hash) && (bounds.keys - [:min, :max]).empty?
+        raise ArgumentError, "Histogram bounds must be a hash containing only min and max"
+      end
+
+      lower = numeric_bound(bounds[:min])
+      upper = numeric_bound(bounds[:max])
+      raise ArgumentError, "Histogram bounds max must be greater than or equal to min" if lower && upper && upper < lower
+
+      [lower, upper]
     end
 
     def terms(field, options)

@@ -56,6 +56,9 @@ class HistogramsTest < TinkickIntegrationTest
     assert_equal [{ "key" => 0.0, "doc_count" => 2 }, { "key" => 10.0, "doc_count" => 2 }, { "key" => 20.0, "doc_count" => 1 }],
       result.fetch("samples").fetch("buckets")
     refute scope.loaded?
+
+    bounded = Tinkick::Aggregations.new(SearchProduct, scope).call(samples: { histogram: { field: :ratings, interval: 10, hard_bounds: { min: 10, max: 20 } } })
+    assert_equal [{ "key" => 10.0, "doc_count" => 2 }, { "key" => 20.0, "doc_count" => 1 }], bounded.fetch("samples").fetch("buckets")
   end
 
   def test_filters_apply_before_bucketing_without_instantiating_records
@@ -93,6 +96,55 @@ class HistogramsTest < TinkickIntegrationTest
 
       assert_includes error.message, "inside histogram:"
     end
+  end
+
+  def test_extended_bounds_expand_empty_buckets_without_filtering_matching_values
+    buckets = histogram(interval: 10, extended_bounds: { min: -30, max: 40 }).fetch("buckets")
+
+    assert_equal [-30.0, -20.0, -10.0, 0.0, 10.0, 20.0, 30.0, 40.0], buckets.map { |bucket| bucket.fetch("key") }
+    assert_equal [0, 1, 2, 2, 0, 2, 0, 0], buckets.map { |bucket| bucket.fetch("doc_count") }
+    assert_equal histogram(interval: 10), histogram(interval: 10, extended_bounds: { min: 0, max: 10 })
+    assert_equal histogram(interval: 10, min_doc_count: 1), histogram(interval: 10, min_doc_count: 1, extended_bounds: { min: -30, max: 40 })
+  end
+
+  def test_extended_bounds_generate_buckets_for_empty_scopes_and_allow_partial_bounds
+    evaluator = Tinkick::Aggregations.new(HistogramValue, HistogramValue.none)
+    buckets = evaluator.call(prices: { histogram: { field: :price, interval: 10, extended_bounds: { min: -9, max: 19 } } })
+      .fetch("prices").fetch("buckets")
+
+    assert_equal [{ "key" => -10.0, "doc_count" => 0 }, { "key" => 0.0, "doc_count" => 0 }, { "key" => 10.0, "doc_count" => 0 }], buckets
+    [{ min: 0 }, { max: 20 }, { min: nil, max: nil }, {}].each do |bounds|
+      assert_empty evaluator.call(prices: { histogram: { field: :price, interval: 10, extended_bounds: bounds } }).fetch("prices").fetch("buckets")
+    end
+    partial = histogram(interval: 10, extended_bounds: { max: 40 }).fetch("buckets")
+    assert_equal [-20.0, -10.0, 0.0, 10.0, 20.0, 30.0, 40.0], partial.map { |bucket| bucket.fetch("key") }
+  end
+
+  def test_hard_bounds_filter_numeric_bucket_ordinals_with_inclusive_endpoints
+    buckets = histogram(interval: 10, hard_bounds: { min: -10, max: 20 }).fetch("buckets")
+
+    assert_equal [-10.0, 0.0, 10.0, 20.0], buckets.map { |bucket| bucket.fetch("key") }
+    assert_equal [2, 2, 0, 2], buckets.map { |bucket| bucket.fetch("doc_count") }
+    shifted = histogram(interval: 10, offset: 5, hard_bounds: { min: 0, max: 10 }).fetch("buckets")
+    assert_equal [{ "key" => 5.0, "doc_count" => 1 }, { "key" => 15.0, "doc_count" => 2 }], shifted
+    assert_equal [-20.0, -10.0], histogram(interval: 10, hard_bounds: { max: -10 }).fetch("buckets").map { |bucket| bucket.fetch("key") }
+    assert_equal [0.0, 10.0, 20.0], histogram(interval: 10, hard_bounds: { min: 0 }).fetch("buckets").map { |bucket| bucket.fetch("key") }
+    assert_empty histogram(interval: 10, hard_bounds: { min: 50 }).fetch("buckets")
+    assert_equal histogram(interval: 10), histogram(interval: 10, hard_bounds: {}, extended_bounds: {})
+  end
+
+  def test_histogram_bounds_validate_types_endpoints_and_combined_limits
+    [:extended_bounds, :hard_bounds].each do |kind|
+      [nil, 1, { min: 2, max: 1 }, { min: Float::INFINITY }, { max: Float::NAN }, { other: 0 }, { min: "invalid" }].each do |bounds|
+        assert_raises(ArgumentError) { histogram(interval: 10, kind => bounds) }
+      end
+    end
+    [{ min: -10, max: 10 }, { min: 0, max: 30 }].each do |bounds|
+      error = assert_raises(ArgumentError) { histogram(interval: 10, min_doc_count: 1, extended_bounds: bounds, hard_bounds: { min: 0, max: 20 }) }
+      assert_includes error.message, "Extended bounds must be within hard bounds"
+    end
+    assert_equal histogram(interval: 10, hard_bounds: { min: -10, max: 20 }),
+      histogram(interval: 10, hard_bounds: { min: -10, max: 20 }, extended_bounds: { min: 0, max: 10 })
   end
 
   private
