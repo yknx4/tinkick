@@ -68,14 +68,14 @@ does not reproduce the ranking policy.
 
 Source: [query.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/lib/searchkick/query.rb).
 
-| Family | Work required |
+| Family | Verified scope and remaining work |
 | --- | --- |
-| Boolean filters | Equality, negation, arrays/`in`, `all`, ranges, `gt/gte/lt/lte`, `exists`, `_and`, `_or`, `_not`, legacy `or`; test NULL and missing-field semantics. |
-| String filters | `like`, `ilike`, prefix, Ruby Regexp and `regexp`; prove regex dialect compatibility. |
-| Matching | Whole-word, phrase, exact, word start/middle/end, text start/middle/end, exclusions; token boundaries differ from whole-field boundaries. |
-| Misspellings | Distance, stable prefix, per-field selection, below-count retry, transpositions, expansion limits; TIN does not document every Searchkick control. |
-| Ranking | Field boosts, numeric boosts, `boost_where`, recency, conversions and model boosts need ranking tests and query-plan measurements. |
-| Aggregations | Terms, ranges/date ranges, histograms, avg/min/max/sum/cardinality, per-aggregation filters, limits/order, minimum counts, smart facets; aggregate in SQL. |
+| Boolean filters | Equality, negation, arrays/`in`, `all`, ranges, `gt/gte/lt/lte`, `exists`, `_and`, `_or`, `_not`, and legacy `or` have real database coverage, including NULL/missing semantics. Nested JSON correlation and additional scalar types remain adapter work. |
+| String filters | `like`, `ilike`, prefix, and Ruby Regexp translation are implemented. Raw-string `regexp` with Lucene optional syntax remains adapter work. |
+| Matching | Whole-word, phrase, exact, word start/middle/end, text start/middle/end, mixed modes, and exclusions are implemented; token boundaries differ from whole-field boundaries. |
+| Misspellings | Native and SQL refinement paths cover distance, stable prefixes, per-field selection, below-count retry, and transpositions. Explicit expansion caps remain adapter work; native uncapped default eligibility is intentional. |
+| Ranking | Native field boosts and SQL field weights are tested; [captured plans](query-plans.md#native-and-sql-field-weights) show native top-k versus SQL grouping/sorting. Public numeric boosts, `boost_where`, recency, conversions and model boosts remain adapter work. |
+| Aggregations | Terms, numeric/date ranges and histograms, metrics, per-aggregation filters, limits/order, minimum counts, smart facets, and numeric/date bounds are implemented in SQL. IANA subday/fixed intervals, advanced formats and nested shapes remain adapter work. |
 | Analysis | `stem: false` uses native matching; requests for stemming or language analyzers raise `Tinkick::NotImplementedError` with migration guidance. Synonyms and emoji-name expansion remain adapter work; native absence does not prove an adapter implementation impossible. |
 | Beyond lexical search | Suggestions, similar items, geospatial, KNN, semantic/hybrid search and RRF need separate implementation designs. No absence claim follows from an unimplemented adapter. TIN's overview describes pgvector composition for hybrid retrieval. |
 
