@@ -1,0 +1,17 @@
+# Rails 8 interfaces missing from the collection's generated signatures.
+module ActiveRecord
+  module ConnectionHandling
+    def with_connection: [T] (?prevent_permanent_checkout: bool) { (ConnectionAdapters::AbstractAdapter) -> T } -> T
+  end
+end
+
+module Arel
+  # Arel accepts arbitrary Ruby bind values and delegates casting to the adapter.
+  def self.sql: (String sql_string, *Object? positional_binds, ?retryable: bool, **Object? named_binds) -> (Nodes::SqlLiteral | Nodes::BoundSqlLiteral)
+              | ...
+
+  module Nodes
+    class BoundSqlLiteral < NodeExpression
+    end
+  end
+end

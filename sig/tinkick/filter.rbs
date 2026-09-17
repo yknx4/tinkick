@@ -1,0 +1,37 @@
+module Tinkick
+  type filter_scalar = String | Symbol | Numeric | Date | Time | bool | nil
+
+  type filter_value = filter_scalar | Array[filter_value] | Range[filter_scalar] | Hash[String | Symbol, filter_value]
+
+  type filter_conditions = Hash[String | Symbol, filter_value]
+
+  type filter_predicate = [ String, Array[filter_scalar] ]
+
+  class Filter
+    @model: singleton(ActiveRecord::Base)
+
+    def initialize: (singleton(ActiveRecord::Base) model) -> void
+
+    def apply: (ActiveRecord::Relation scope, filter_conditions conditions) -> ActiveRecord::Relation
+
+    private
+
+    def predicates: (filter_value conditions) -> Array[filter_predicate]
+
+    def quoted_column: (String | Symbol field) -> String
+
+    def field_predicates: (String column, filter_value value) -> Array[filter_predicate]
+
+    def equality: (String column, filter_value value) -> filter_predicate
+
+    def comparison: (String column, :gt | :gte | :lt | :lte operator, filter_value value) -> filter_predicate
+
+    def range_predicate: (String column, Range[filter_scalar] range) -> filter_predicate
+
+    def scalar: (filter_value value) -> filter_scalar
+
+    def negate: (filter_predicate predicate) -> filter_predicate
+
+    def combine: (Array[filter_predicate] predicates, "AND" | "OR" operator) -> filter_predicate
+  end
+end
