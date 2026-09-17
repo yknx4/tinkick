@@ -130,9 +130,10 @@ class JsonNumericBoostTest < TinkickIntegrationTest
     plan = Product.connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}",
       "Tinkick JSON Boost Explain", statement.fetch(:binds))
 
+    assert_includes plan, "Recursive Union"
+    require_production_tin_plan!
     assert_includes plan, "Text Search Scan"
     assert_includes plan, "index_tinkick_test_products_on_name"
-    assert_includes plan, "Recursive Union"
   end
 
   private

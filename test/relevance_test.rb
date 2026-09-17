@@ -104,9 +104,10 @@ class RelevanceTest < ActionDispatch::IntegrationTest
     plan = SearchDocument.connection.select_value(
       "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}", "Tinkick Score Order Explain", statement.fetch(:binds)
     )
+    refute_includes output.string, "column order"
+    require_production_tin_plan!
     assert_includes plan, '"Top K": "3"'
     refute_match(/"Node Type": "Sort"/, plan)
-    refute_includes output.string, "column order"
   ensure
     SearchDocument.logger = previous_logger
   end

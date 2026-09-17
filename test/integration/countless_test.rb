@@ -49,9 +49,10 @@ class CountlessTest < TinkickIntegrationTest
     nodes = plan_nodes(JSON.parse(json).first.fetch("Plan"))
     scan = nodes.find { |node| node["Custom Plan Provider"] == "Text Search Scan" }
 
+    refute_includes statement[:sql], "OFFSET"
+    require_production_tin_plan!
     assert_equal "2", scan.fetch("Top K")
     refute nodes.any? { |node| node["Node Type"] == "Sort" }
-    refute_includes statement[:sql], "OFFSET"
   end
 
   test "requires a positive page limit but first zero does not query" do

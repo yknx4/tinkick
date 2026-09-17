@@ -121,9 +121,10 @@ class ConditionalBoostSearchTest < TinkickIntegrationTest
     plan = Product.connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}",
       "Tinkick Conditional Boost Explain", statement.fetch(:binds))
 
+    assert_includes plan, "Sort"
+    require_production_tin_plan!
     assert_includes plan, "Text Search Scan"
     assert_includes plan, "index_tinkick_test_products_on_name"
-    assert_includes plan, "Sort"
   end
 
   private

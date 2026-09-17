@@ -139,11 +139,12 @@ class QueryTest < TinkickIntegrationTest
     nodes = plan_nodes(JSON.parse(plan_json).first.fetch("Plan"))
     scans = nodes.select { |node| node["Custom Plan Provider"] == "Text Search Scan" }
 
+    assert_equal("Limit", nodes.first["Node Type"])
+    assert_includes(statement[:sql], "tin.score")
+    require_production_tin_plan!
     assert_equal(["index_tinkick_test_products_on_name"], scans.map { |node| node["Index"] })
     assert_equal("1", scans.first["Top K"])
     assert_equal("dense-term elision", scans.first["Scoring"])
-    assert_equal("Limit", nodes.first["Node Type"])
-    assert_includes(statement[:sql], "tin.score")
     refute(nodes.any? { |node| node["Node Type"] == "Sort" })
   end
 

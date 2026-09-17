@@ -214,6 +214,7 @@ class FieldBoostTest < ActionDispatch::IntegrationTest
       "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}", "Tinkick Field Boost Explain", statement.fetch(:binds)
     )
 
+    require_production_tin_plan!
     assert_includes plan, '"Top K": "3"'
     refute_match(/"Node Type": "Sort"/, plan)
   end

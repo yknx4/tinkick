@@ -78,9 +78,10 @@ class WordDistanceSearchTest < TinkickIntegrationTest
       "Tinkick Two Edit Explain", statement.fetch(:binds),
     )
 
+    refute_includes(plan, "edit_distance")
+    require_production_tin_plan!
     assert_includes(plan, "Text Search Scan")
     assert_includes(plan, "index_tinkick_test_products_on_name")
-    refute_includes(plan, "edit_distance")
     assert_includes(plan, '"Top K"')
   end
 

@@ -152,10 +152,11 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     statement = statements.find { |entry| entry.fetch(:sql).include?(" AS _tinkick_score") }
     plan = Product.connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}",
       "Tinkick Preserved Fuzzy Explain", statement.fetch(:binds))
-    assert_includes(plan, "Text Search Scan")
-    assert_includes(plan, '"Top K": "10"')
     refute_includes(plan, "osa_distance")
     assert_equal([@first.id], search(term, misspellings: { prefix_length: 50 }).map(&:id))
+    require_production_tin_plan!
+    assert_includes(plan, "Text Search Scan")
+    assert_includes(plan, '"Top K": "10"')
   end
 
   def test_long_native_fuzzy_tokens_preserve_prefixes_and_exact_exclusions

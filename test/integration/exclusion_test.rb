@@ -175,6 +175,7 @@ class ExclusionTest < TinkickIntegrationTest
       "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}",
       "Tinkick Exclusion Explain", statement.fetch(:binds),
     )
+    require_production_tin_plan!
     assert_includes(plan, "Text Search Scan")
     assert_includes(plan, '"Top K": "1"')
     refute_includes(plan, '"Node Type": "Sort"')

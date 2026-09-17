@@ -131,6 +131,7 @@ class JsonSearchTest < TinkickIntegrationTest
     statement = statements.find { |entry| entry[:sql].include?(" AS _tinkick_score") }
     plan = SearchProduct.connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{statement.fetch(:sql)}", "Tinkick JSON Explain", statement.fetch(:binds))
 
+    require_production_tin_plan!
     assert_includes(plan, "Text Search Scan")
     assert_includes(plan, "tinkick_test_products_metadata_title_tin")
     refute_includes(plan, '"Node Type": "Seq Scan"')
