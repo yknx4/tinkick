@@ -1,0 +1,22 @@
+module Tinkick
+  type keyset_value = Integer | String | Date | Time | BigDecimal
+
+  class Keyset
+    @model: singleton(ActiveRecord::Base)
+    @order: Array[[ String, String ]]
+
+    def initialize: (singleton(ActiveRecord::Base) model, query_order? order) -> void
+    def order_sql: () -> String
+    def apply: (ActiveRecord::Relation relation, String cursor) -> ActiveRecord::Relation
+    def encode: (Hash[String, result_value] attributes) -> String
+
+    private
+
+    def decode: (String cursor) -> Array[keyset_value]
+    def cast_value: (String field, result_value value) -> keyset_value
+    def serialize_value: (result_value value) -> (Integer | String)
+    def normalize_order: (query_order value) -> Array[[ String, String ]]
+    def validate_column: (String field) -> void
+    def quoted_column: (String field) -> String
+  end
+end

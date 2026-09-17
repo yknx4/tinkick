@@ -19,5 +19,6 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency("activerecord", ">= 8.0")
+  spec.add_dependency("base64", ">= 0.2")
   spec.add_dependency("pg", ">= 1.6")
 end

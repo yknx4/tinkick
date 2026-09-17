@@ -1,6 +1,21 @@
 # Rails 8 interfaces missing from the collection's generated signatures.
 module ActiveRecord
+  module ModelSchema
+    module ClassMethods
+      # Ruby 4 / Rails 8 permits a type lookup without a fallback block.
+      def type_for_attribute: (String | Symbol attribute_name) -> ActiveModel::Type::Value
+                            | ...
+    end
+  end
+
   module ConnectionAdapters
+    module PostgreSQL
+      class Column
+        def array: () -> bool
+                 | ...
+      end
+    end
+
     class Column
       def type: () -> Symbol
     end
