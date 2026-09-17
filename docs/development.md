@@ -65,22 +65,33 @@ types nor type errors should be suppressed as a workaround.
 
 ## Verified environment
 
-Checkpoint at code commit `5cb5c66` (2026-09-17): Ruby 4.0.1 / Rails 8.1.3.1
-passed `bundle exec rake coverage`: **537 tests, 3,341 assertions, no failures,
-errors, or skips**, with **97.82% line coverage** (2,154 / 2,202 executable lines).
-This includes the fixed 10,000-record stress test and took 569 seconds
-against the remote test database. `rake rbs:format rbs:quality steep rubocop build`
-passed: 50 type-checked files and 107 Ruby files with no offenses. The generated
-`pkg/tinkick-0.1.0.alpha.1.gem` contains 66 files, including all three migration
-templates, without local secrets, test files, or coverage artifacts.
+Checkpoint at code commit `ba2f3fe` (2026-09-17): Ruby 4.0.1 / Rails 8.1.3.1
+passed `bundle exec rake coverage TESTOPTS='--seed=2078'`: **646 tests, 4,167
+assertions, no failures, errors, or skips**, with **98.00% line coverage**
+(2,506 / 2,557 executable lines). This includes the fixed 10,000-record stress
+test and took 708 seconds against the remote test database.
+`rake rbs:format rbs:quality steep rubocop build` passed: 52 type-checked files
+and 124 Ruby files with no offenses. The subsequently added highlight EXPLAIN
+script also passed scoped RuboCop. The generated
+`pkg/tinkick-0.1.0.alpha.1.gem` includes all four migration templates and their
+shared SQL template, without local secrets, test files, or coverage artifacts.
+
+The first seed-2078 run exposed Rails reusing the stress fixture set for the
+relevance corpus. Commit `ba2f3fe` fixes the cache boundaries; both corpus orders
+passed in one process before rerunning the full suite. The earlier checkpoint
+at `5cb5c66` passed 537 tests / 3,341 assertions with 97.82% coverage under its
+own test order.
 
 A separate Rails 8.0.5.1 / JSON 2 run at the earlier `5409f2f` checkpoint passed
 **82 tests and 565 assertions** for
 date parsing, aggregations, public facets, association loading, JSONB search,
 two-edit words, phrase options, whole-field matching, and the 10,000-record stress
 test. This was a targeted compatibility run, not the full Rails 8.0 suite.
-These are local results; remote CI was not run. Later feature commits still
-need their own targeted checks and a final coverage gate.
+A second Rails 8.0.5.1 / JSON 2 run at `ba2f3fe` passed **32 tests and 192
+assertions** for public native/refined/SQL highlights, portable responses, date
+histogram formats, and offsets. This also was targeted, not the full Rails 8.0
+suite. These are local results; remote CI was not run. Later feature commits
+still need their own targeted checks and a final coverage gate.
 
 On 2026-09-17 UTC, read-only connection checks confirmed `tinkick_test` on
 PostgreSQL 18.6 with TIN 1.0.2. Rails migrations created TIN indexes and fixture
