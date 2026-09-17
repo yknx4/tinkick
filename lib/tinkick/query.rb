@@ -10,7 +10,7 @@ require_relative "aggregations"
 
 module Tinkick
   class Query
-    attr_reader :model, :limit, :after
+    attr_reader :model, :limit, :after, :took
 
     def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
@@ -54,25 +54,27 @@ module Tinkick
     end
 
     def records
-      @records ||= trim_page(record_scope.to_a)
+      @records ||= measure_page { trim_page(record_scope.to_a) }
     end
 
     def rows
-      @rows ||= trim_page(read_rows(record_scope))
+      @rows ||= measure_page { trim_page(read_rows(record_scope)) }
     end
 
     def source_rows(columns)
-      primary_key = @model.primary_key
-      unless primary_key.is_a?(String)
-        raise InvalidQueryError, "source projection requires a single model primary key"
+      measure_page do
+        primary_key = @model.primary_key
+        unless primary_key.is_a?(String)
+          raise InvalidQueryError, "source projection requires a single model primary key"
+        end
+        fields = columns | [primary_key]
+        cursor_fields = keyset? ? keyset_order.columns : [] #: Array[String]
+        projection = (fields | cursor_fields).map { |field| Arel.sql(quoted_column(field)) }
+        relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
+        values = trim_page(read_rows(relation))
+        @source_cursor_row = values.last
+        values.map { |row| row.slice(*fields, "_tinkick_score") }
       end
-      fields = columns | [primary_key]
-      cursor_fields = keyset? ? keyset_order.columns : [] #: Array[String]
-      projection = (fields | cursor_fields).map { |field| Arel.sql(quoted_column(field)) }
-      relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
-      values = trim_page(read_rows(relation))
-      @source_cursor_row = values.last
-      values.map { |row| row.slice(*fields, "_tinkick_score") }
     end
 
     def pluck_rows(columns)
@@ -144,6 +146,13 @@ module Tinkick
     end
 
     private
+
+    def measure_page
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      value = yield
+      @took ||= ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1_000).round
+      value
+    end
 
     def normalize_misspellings(options, fields)
       return options unless options.is_a?(Hash)

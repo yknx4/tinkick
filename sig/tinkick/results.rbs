@@ -27,6 +27,7 @@ module Tinkick
     @results: Array[result_record]?
     @record_pairs: Array[[ result_record, Float ]]?
     @missing_records: Array[missing_record]
+    @source_rows: Array[Hash[String, result_value]]?
 
     attr_reader current_page: Integer
     attr_reader padding: Integer
@@ -55,6 +56,8 @@ module Tinkick
     def entry_name: (?Hash[Symbol, Object?] options) -> String
     def missing_records: () -> Array[missing_record]
     def misspellings?: () -> bool
+    def took: () -> Integer
+    def error: () -> nil
     def total_count: () -> Integer
     alias total_entries total_count
     def per_page: () -> Integer
@@ -77,12 +80,15 @@ module Tinkick
 
     private
 
+    def load_page: () -> void
+
     def results: () -> Array[result_record]
 
     def preload_records: (Array[ActiveRecord::Base] records) -> Array[ActiveRecord::Base]
     def scoped_record_pairs: (result_scope scope) -> Array[[ ActiveRecord::Base, Float ]]
 
     def source_rows: () -> Array[Hash[String, result_value]]
+    def read_source_rows: () -> Array[Hash[String, result_value]]
 
     def record_pairs: () -> Array[[ result_record, Float ]]
   end

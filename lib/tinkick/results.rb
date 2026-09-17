@@ -72,6 +72,16 @@ module Tinkick
       @query.misspellings?
     end
 
+    def took
+      load_page
+      @query.took || 0
+    end
+
+    def error
+      load_page
+      nil
+    end
+
     def total_count
       @query.misspellings?
       @total_entries || @query.total_count
@@ -159,6 +169,14 @@ module Tinkick
 
     private
 
+    def load_page
+      if @load
+        @scope_results ? @query.rows : @query.records
+      else
+        source_rows
+      end
+    end
+
     def results
       @results ||= record_pairs.map(&:first)
     end
@@ -201,6 +219,10 @@ module Tinkick
     end
 
     def source_rows
+      @source_rows ||= read_source_rows
+    end
+
+    def read_source_rows
       selection = @select
       return @query.rows if selection.nil? || selection == true || selection == false
       unless selection.is_a?(String) || selection.is_a?(Symbol) || selection.is_a?(Array) || selection.is_a?(Hash)
