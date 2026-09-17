@@ -45,7 +45,7 @@ module Tinkick
       fields ||= options[:default_fields] || options[:searchable] || tinkick_default_fields(schema)
       match ||= options[:match]
       selected = tinkick_expand_fields(fields, match: match)
-      selected_names = selected.map { |field| field.is_a?(Hash) ? field.keys.first.to_s : field.to_s }
+      selected_names = selected.map { |field| (field.is_a?(Hash) ? field.keys.first.to_s : field.to_s).split("^", 2).fetch(0) }
       declared = (options[:searchable] || []).reject { |field| selected_names.include?(field.to_s) }
       tinkick_validate_fields(schema, declared + selected, match)
 
@@ -58,7 +58,8 @@ module Tinkick
 
     def tinkick_expand_fields(fields, match:)
       # @type self: singleton(ActiveRecord::Base)
-      fields.flat_map do |entry|
+      boosts = {} #: Hash[[String, Symbol], Float]
+      normalized = fields.map do |entry|
         if entry.is_a?(Hash)
           raise ArgumentError, "Each field hash must contain one field and match mode" unless entry.length == 1
 
@@ -67,12 +68,28 @@ module Tinkick
           name = entry
           mode = match
         end
-        name = name.to_s
-        next [entry] if mode == :exact || !(name == "*" || name.start_with?("*."))
+        parts = name.to_s.split("^", 2)
+        field = parts.fetch(0)
+        suffix = parts[1]
+        boosts[[field, mode]] = suffix.to_f if suffix
+        [field, mode]
+      end #: Array[[String, Symbol]]
+      normalized.flat_map do |name, mode|
+        boost = boosts[[name, mode]]
+        if boost
+          raise ArgumentError, "Field boost must be finite and nonnegative" unless boost.finite? && boost >= 0
+          if boost > 10_000
+            raise ArgumentError, "Field boosts above 10000 require the weighted SQL scoring path"
+          end
+        end
+        selector = boost ? "#{name}^#{boost}" : name
+        next [{ selector => mode }] if mode == :exact || !(name == "*" || name.start_with?("*."))
 
         schema = tinkick_schema
         pattern = /\A#{Regexp.escape(name).gsub('\*', '.*')}\z/m
-        expanded = tinkick_wildcard_candidates(schema, mode).grep(pattern).map { |field| { field => mode } } #: model_fields
+        expanded = tinkick_wildcard_candidates(schema, mode).grep(pattern).map do |field|
+          { (boost ? "#{field}^#{boost}" : field) => mode }
+        end #: model_fields
         tinkick_validate_fields(schema, expanded, match)
         expanded
       end
@@ -218,7 +235,7 @@ module Tinkick
           field = entry
           mode = match
         end
-        field = field.to_s
+        field = field.to_s.split("^", 2).fetch(0)
         descriptor = SearchField.new(self, field, match: mode)
         sql_match = [:exact, :text_start, :text_middle, :text_end].include?(mode)
         next if sql_match

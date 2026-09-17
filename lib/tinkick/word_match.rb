@@ -17,7 +17,7 @@ module Tinkick
       @model = model
     end
 
-    def predicate(field_name, term, operator: "and", match: :word, misspellings:, excluded: nil)
+    def predicate(field_name, term, operator: "and", match: :word, misspellings:, excluded: nil, boost: nil)
       raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(operator)
       unless [:word, :word_start, :word_middle, :word_end].include?(match)
         raise ArgumentError, "Unsupported token match mode: #{match.inspect}"
@@ -43,6 +43,7 @@ module Tinkick
 
         function = distance_function(connection, match, distance, transpositions)
         candidates = words.map { |word| candidate(word, prefix, match, distance, transpositions) }.join(" #{operator.upcase} ")
+        candidates = "(#{candidates})^#{boost}" if boost
         candidates = "(#{candidates}) AND NOT (#{excluded})" if excluded
         binds = [candidates] #: Array[filter_scalar]
         refinements = words.map do |word|

@@ -5,7 +5,7 @@ module Tinkick
     @model: singleton(ActiveRecord::Base)
 
     def initialize: (singleton(ActiveRecord::Base) model) -> void
-    def predicate: (String field_name, String term, misspellings: QueryText::misspellings, ?operator: String, ?match: Symbol, ?excluded: String?) -> filter_predicate
+    def predicate: (String field_name, String term, misspellings: QueryText::misspellings, ?operator: String, ?match: Symbol, ?excluded: String?, ?boost: Float?) -> filter_predicate
     def highlight_query: (String field_name, String term, texts: Array[String?], match: Symbol, misspellings: QueryText::misspellings) -> String
     def index_analysis: (String field_name, SearchField field) -> Hash[String, String]
 

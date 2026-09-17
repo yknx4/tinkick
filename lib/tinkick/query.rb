@@ -22,9 +22,11 @@ module Tinkick
           raise ArgumentError, "Each field hash must contain one field and match mode" unless field.length == 1
 
           name, mode = field.to_a.fetch(0)
-          [name.to_s, mode]
+          parts = name.to_s.split("^", 2)
+          [parts.fetch(0), mode, parts[1]&.to_f]
         else
-          [field.to_s, match]
+          parts = field.to_s.split("^", 2)
+          [parts.fetch(0), match, parts[1]&.to_f]
         end
       end
       @where = where
@@ -214,15 +216,15 @@ module Tinkick
         raise ArgumentError, "misspellings fields must be an array of field names"
       end
       selected = names.map(&:to_s)
-      selectors = fields.map { |field| field.is_a?(Hash) ? field.keys.first.to_s : field.to_s }
+      selectors = fields.map { |field| (field.is_a?(Hash) ? field.keys.first.to_s : field.to_s).split("^", 2).fetch(0) }
       unless (selected - selectors).empty?
         raise ArgumentError, "All fields in per-field misspellings must also be specified in fields option"
       end
       selected_fields = fields.select do |field|
-        selected.include?(field.is_a?(Hash) ? field.keys.first.to_s : field.to_s)
+        selected.include?((field.is_a?(Hash) ? field.keys.first.to_s : field.to_s).split("^", 2).fetch(0))
       end
       @misspelling_fields = @model.tinkick_expand_fields(selected_fields, match: @match).map do |field|
-        field.is_a?(Hash) ? field.keys.first.to_s : field.to_s
+        (field.is_a?(Hash) ? field.keys.first.to_s : field.to_s).split("^", 2).fetch(0)
       end
       normalized
     end
@@ -302,7 +304,7 @@ module Tinkick
 
     def build_scope(conditions)
       @model.with_connection do |connection|
-        fields = @fields.map { |name, mode| [name, SearchField.new(@model, name, match: mode), mode] } #: Array[[String, SearchField, Symbol]]
+        fields = @fields.map { |name, mode, boost| [name, SearchField.new(@model, name, match: mode), mode, boost] } #: Array[[String, SearchField, Symbol, Float?]]
 
         relation = Filter.new(@model).apply(@model.all, conditions)
         compiler = QueryText.new(connection)
@@ -311,8 +313,11 @@ module Tinkick
 
         native = [] #: Array[filter_predicate]
         exact = [] #: Array[filter_predicate]
-        fields.each do |name, field, mode|
+        fields.each do |name, field, mode, boost|
           misspellings = misspellings_for(name)
+          if boost && [:exact, :text_start, :text_middle, :text_end].include?(mode)
+            raise ArgumentError, "SQL field weights require the weighted SQL scoring path"
+          end
           if mode == :exact
             exact << field_predicate(field, ["#{field.text_sql}::text COLLATE \"C\" = ?", [@term]])
           elsif [:text_start, :text_middle, :text_end].include?(mode)
@@ -320,9 +325,10 @@ module Tinkick
           else
             analysis = @model.tinkick_index_analysis(name, field)
             if two_edit_word?(mode, misspellings) || (mode == :word && compiler.refinement_required?(@term, misspellings: misspellings, analysis: analysis))
-              native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings, excluded: excluded))
+              native << field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings, excluded: excluded, boost: boost))
             else
               compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
+              compiled = "(#{compiled})^#{boost}" if boost && !compiled.empty?
               compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded && !compiled.empty?
               if [:word_start, :word_middle, :word_end].include?(mode) && misspellings != false && compiled.include?("MATCHES")
                 @fuzzy_partial = true
