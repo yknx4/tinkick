@@ -14,8 +14,18 @@ module Tinkick
     end
 
     def highlight_many(texts, query, tag: "<em>", encoder: "default")
+      fragments_many(texts, query, tag: tag, encoder: encoder).map(&:first)
+    end
+
+    def fragments_many(texts, query, tag: "<em>", encoder: "default", fragment_size: 0, number_of_fragments: 5)
       raise ArgumentError, "encoder must be default or html" unless ["default", "html"].include?(encoder)
-      return Array.new(texts.length) if texts.all?(&:nil?) || query.empty? || query == "*"
+      unless fragment_size.is_a?(Integer) && fragment_size >= 0
+        raise ArgumentError, "fragment_size must be a nonnegative integer"
+      end
+      unless number_of_fragments.is_a?(Integer) && number_of_fragments >= 0
+        raise ArgumentError, "number_of_fragments must be a nonnegative integer"
+      end
+      return Array.new(texts.length) { [] } if texts.all?(&:nil?) || query.empty? || query == "*"
 
       # Mark spans separately so source HTML and caller tags retain distinct
       # encoding, and TIN does not expand placeholders inside caller tags.
@@ -25,14 +35,83 @@ module Tinkick
       closing = "#{marker}end\u0002"
       end_tag = tag.gsub(/\A<(\w+).+/, "</\\1>")
       mark_many(texts, query, opening, closing).map do |marked|
-        next unless marked&.include?(opening)
+        next [] unless marked&.include?(opening)
 
-        encoded = encoder == "html" ? encode_html(marked) : marked
-        encoded.gsub(opening) { tag }.gsub(closing) { end_tag }
+        fragments = if fragment_size.zero? || number_of_fragments.zero?
+          [marked]
+        else
+          snippets(marked, opening, closing, fragment_size, number_of_fragments)
+        end
+        fragments.map do |fragment|
+          encoded = encoder == "html" ? encode_html(fragment) : fragment
+          encoded.gsub(opening) { tag }.gsub(closing) { end_tag }
+        end
       end
     end
 
     private
+
+    def snippets(marked, opening, closing, size, maximum)
+      graphemes, spans = fragment_parts(marked, opening, closing)
+      # @type var fragments: Array[String]
+      fragments = []
+      previous_end = 0
+      spans.each do |span_start, span_end|
+        next if span_end <= previous_end
+
+        first, last = fragment_bounds(graphemes, spans, span_start, span_end, size)
+        fragment = render_fragment(graphemes, spans, first, last, opening, closing)
+        fragments << fragment unless fragments.include?(fragment)
+        previous_end = last
+        break if fragments.length >= maximum
+      end
+      fragments
+    end
+
+    def fragment_parts(marked, opening, closing)
+      portions = marked.split(opening)
+      graphemes = portions.shift.to_s.grapheme_clusters
+      # @type var spans: Array[[Integer, Integer]]
+      spans = []
+      portions.each do |portion|
+        match, following = portion.split(closing, 2)
+        first = graphemes.length
+        graphemes.concat(match.to_s.grapheme_clusters)
+        spans << [first, graphemes.length]
+        graphemes.concat(following.to_s.grapheme_clusters)
+      end
+      [graphemes, spans]
+    end
+
+    def fragment_bounds(graphemes, spans, span_start, span_end, size)
+      context = [size - (span_end - span_start), 0].max
+      first = [span_start - (context + 1) / 2, 0].max
+      last = [[first + size, span_end].max, graphemes.length].min
+      # Approximate word context without cutting a Unicode grapheme or a native
+      # match span. A long word or phrase can exceed the requested fragment size.
+      first -= 1 while first.positive? && !graphemes.fetch(first - 1).match?(/[[:space:]]/)
+      last += 1 while last < graphemes.length && !graphemes.fetch(last).match?(/[[:space:]]/)
+      spans.each do |start, finish|
+        first = start if start < first && finish > first
+        last = finish if start < last && finish > last
+      end
+      first += 1 while first < span_start && graphemes.fetch(first).match?(/[[:space:]]/)
+      last -= 1 while last > span_end && graphemes.fetch(last - 1).match?(/[[:space:]]/)
+      [first, last]
+    end
+
+    def render_fragment(graphemes, spans, first, last, opening, closing)
+      result = +""
+      cursor = first
+      spans.each do |start, finish|
+        next if start < first || start >= last
+
+        result << graphemes.slice(cursor, start - cursor).to_a.join
+        result << opening << graphemes.slice(start, finish - start).to_a.join << closing
+        cursor = finish
+      end
+      result << graphemes.slice(cursor, last - cursor).to_a.join
+    end
 
     def mark_many(texts, query, opening, closing)
       binds = [JSON.generate(texts), opening, closing, query].map do |value|
