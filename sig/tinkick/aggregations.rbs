@@ -15,13 +15,16 @@ module Tinkick
 
   type aggregation_metric = { "value" => Numeric?, ?"doc_count" => Integer }
 
+  type aggregation_result = aggregation_terms | aggregation_metric
+
   class Aggregations
     @model: singleton(ActiveRecord::Base)
     @scope: ActiveRecord::Relation
+    @dictionary_scope: ActiveRecord::Relation
 
-    def initialize: (singleton(ActiveRecord::Base) model, ActiveRecord::Relation scope) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, ActiveRecord::Relation scope, ?dictionary_scope: ActiveRecord::Relation) -> void
 
-    def call: (aggregation_spec spec) -> Hash[String, aggregation_terms | aggregation_metric]
+    def call: (aggregation_spec spec) -> Hash[String, aggregation_result]
 
     private
 

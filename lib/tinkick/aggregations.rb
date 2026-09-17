@@ -4,9 +4,10 @@ require_relative "filter"
 
 module Tinkick
   class Aggregations
-    def initialize(model, scope)
+    def initialize(model, scope, dictionary_scope: model.all)
       @model = model
       @scope = scope.except(:select, :order, :limit, :offset)
+      @dictionary_scope = dictionary_scope.except(:select, :order, :limit, :offset)
     end
 
     def call(spec)
@@ -51,8 +52,8 @@ module Tinkick
     def terms(field, options)
       limit = options.fetch(:limit, 1_000)
       minimum = options.fetch(:min_doc_count, 1)
-      unless limit.is_a?(Integer) && limit.positive? && minimum.is_a?(Integer) && minimum.positive?
-        raise ArgumentError, "Aggregation limit and min_doc_count must be positive integers"
+      unless limit.is_a?(Integer) && limit.positive? && minimum.is_a?(Integer) && minimum >= 0
+        raise ArgumentError, "Aggregation limit must be a positive integer and min_doc_count a nonnegative integer"
       end
 
       scope = @scope
@@ -63,6 +64,16 @@ module Tinkick
         .where(Arel.sql("_tinkick_value IS NOT NULL"))
         .group(Arel.sql("_tinkick_value"))
         .select(Arel.sql("_tinkick_value AS _tinkick_key, COUNT(*) AS _tinkick_count"))
+      if minimum.zero?
+        @model.logger&.warn("Tinkick: min_doc_count: 0 reads the model's scoped term dictionary in addition to matching documents. This can cost more for many distinct values.")
+        dictionary = @model.unscoped.from(values_relation(@dictionary_scope, field), :tinkick_values)
+          .where(Arel.sql("_tinkick_value IS NOT NULL"))
+          .select(Arel.sql("_tinkick_value AS _tinkick_key")).distinct
+        counts = @model.unscoped.with(tinkick_dictionary: dictionary, tinkick_matching_counts: counts)
+          .from("tinkick_dictionary")
+          .joins("LEFT JOIN tinkick_matching_counts USING (_tinkick_key)")
+          .select(Arel.sql("_tinkick_key, COALESCE(_tinkick_count, 0) AS _tinkick_count"))
+      end
       query = @model.unscoped.from(counts, :tinkick_counts)
         .where(Arel.sql("_tinkick_count >= ?", minimum))
         .select(Arel.sql("_tinkick_key, _tinkick_count, SUM(_tinkick_count) OVER () AS _tinkick_total"))
