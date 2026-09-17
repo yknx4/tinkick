@@ -35,6 +35,16 @@ module Tinkick
       !@results.nil?
     end
 
+    def only(*keys)
+      options = @options.slice(*keys) #: relation_option_subset
+      @model.tinkick_search(@term, **options)
+    end
+
+    def except(*keys)
+      options = @options.except(*keys) #: relation_option_subset
+      @model.tinkick_search(@term, **options)
+    end
+
     def countless(value = true)
       clone.countless!(value)
     end
