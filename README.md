@@ -1042,7 +1042,24 @@ regardless of `format` (unlike date-range numeric bounds). Bounds round on the
 configured time grid before the aggregation offset is added. Wide bounds with
 small intervals can generate many buckets and retain the empty-bucket warning.
 
-Hard bounds, advanced formats, nested aggregations, and additional aggregate options remain adapter
+Use `hard_bounds: {min: "2026-01-01", max: "2026-07-01"}` to restrict which
+date buckets collect matches. The rounded minimum is inclusive and maximum is
+exclusive; this example admits January through June monthly buckets. Endpoints
+use the same parsing as extended bounds and round without the aggregation
+offset. The restriction then tests the final shifted UTC bucket key. Either
+endpoint may be omitted, and hard bounds alone do not create empty buckets.
+Date arrays count each record once per eligible bucket; null and empty arrays
+contribute no bucket counts.
+
+When combining bounds, extended endpoints must fit within the rounded hard
+endpoints. Elasticsearch's subsequent
+[empty-bucket expansion](https://github.com/elastic/elasticsearch/blob/v8.19.0/server/src/main/java/org/elasticsearch/search/aggregations/bucket/histogram/InternalDateHistogram.java#L396-L465)
+does not reapply hard bounds. For example, a one-hour interval with `offset: "+30m"` and both
+bounds set to `{min: 0, max: 7_200_000}` can emit an empty bucket at 02:30 UTC,
+beyond the hard maximum of 02:00 UTC. Explicit `where:` filters remain available
+when the input timestamps themselves must fall within a range.
+
+Advanced formats, nested aggregations, and additional aggregate options remain adapter
 implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
 for scripted calculations. Check representative plans against TIN's
