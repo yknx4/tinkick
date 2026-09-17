@@ -43,7 +43,11 @@ Throughout this guide:
 - [Models, scopes, and tenancy](#models-scopes-and-tenancy)
 - [Indexing and synchronization](#indexing-and-synchronization)
 - [Advanced SQL and debugging](#advanced-sql-and-debugging)
+- [Performance and consistency](#performance-and-consistency)
+- [Deployment and operations](#deployment-and-operations)
+- [Testing](#testing)
 - [Reference and unsupported options](#reference-and-unsupported-options)
+- [Development, upgrades, and contributing](#development-upgrades-and-contributing)
 - [License](#license)
 
 ## Requirements and installation
@@ -870,6 +874,135 @@ Use `sql.active_record` notifications and your Rails logger for timing and query
 counts. Searchkick-specific Lograge `searchkick_runtime`, `opaque_id`, and profiling
 response hooks are not supplied.
 
+## Performance and consistency
+
+Single-field ranked searches use `tin.score`, descending relevance, a bounded
+limit, and no unnecessary zero offset or primary-key tie sort. Integration tests
+inspect native top-k plans. TIN's dense-term elision can give common words zero
+score without removing matches. Scores and ties will differ from Elasticsearch;
+inspect relevance on representative documents rather than asserting exact numbers.
+
+**Multi-field compatibility cost:** on the tested TIN 1.0.2 endpoint, a particular
+multi-index plan returned no scored rows despite a positive match count. Tinkick
+uses full scoring for multi-field retrieval to preserve those matches, and logs
+its extra scoring/sort cost. This is an observed endpoint/plan issue, not a claim
+that TIN lacks multi-field search. A stored or generated combined column can
+provide a single-index path if its matching semantics fit the application.
+
+Explicit boosts, full scoring, custom SQL ranking, multiple fields, and offset
+pagination can cost more than the native single-field top-k shape. Log warnings
+identify implemented compatibility paths with known costs. Native fuzzy matching
+and adjacent-swap alternatives also add work; uncapped defaults avoid a separate
+candidate-enumeration pipeline but are not free. Disable misspellings when the
+product requires exact lexical matching.
+
+See [measured query plans](docs/query-plans.md) for `EXPLAIN ANALYZE` evidence from
+the real varied document corpus, including the generated SQL and machine-readable
+plans. Small test-corpus timings are evidence about those plans, not throughput
+or latency promises for production data.
+
+Counts execute in SQL; they do not preload result collections. Countless and
+keyset modes avoid automatic totals but still allow an explicit count. Request
+only the visible page, and keep speculative UI panels or tabs from fetching their
+own hidden result sets.
+
+PostgreSQL snapshot visibility governs matches. TIN corpus statistics can retain
+old entries until maintenance, so scores can change even when the visible rows
+look similar. Scores belong to their query context; `ctid` is not a durable record
+identifier. See [TIN scoring](https://planetscale.com/docs/postgres/search/scoring).
+
+## Deployment and operations
+
+Configure the Rails PostgreSQL connection and connection pool normally. Tinkick
+uses that connection; `ELASTICSEARCH_URL`, `OPENSEARCH_URL`, Elastic Cloud
+credentials, AWS SigV4 middleware, Bonsai/SearchBox add-ons, and multi-host HTTP
+client options have no effect on it. A Heroku or other Rails deployment still
+needs access to a PostgreSQL server where TIN is available.
+
+Deploy schema changes before code requiring the new search fields. The install
+generator enables an available extension; it does not provision a cluster.
+Applications should refresh ActiveRecord schema caches/restart as appropriate
+after changing columns or indexes. Tinkick's model validation cache follows the
+connection pool and ActiveRecord column metadata.
+
+Elasticsearch shard counts, refresh intervals, index aliases, replica counts,
+index prefixes, and dynamic index names are not translated into PostgreSQL
+settings. Use Rails migrations for schema, and database/provider tooling for
+replication, failover, backups, and access controls. Do not expect a search-client
+retry or failover layer separate from the database adapter.
+
+TIN's [operational guidance](https://planetscale.com/docs/postgres/search/operations)
+covers vacuum, write churn, replica requirements, build parallelism, and storage.
+Its [limitations](https://planetscale.com/docs/postgres/search/reference/limitations)
+cover partition statistics and possible replica serialization failures. Apply
+appropriate transaction-level retry policies in the application; Tinkick does
+not silently reroute failed queries or change cluster settings.
+
+Use normal database TLS and role permissions, and keep credentials in your
+application's secret configuration. Query logs may contain user search text;
+configure filtering according to the application's requirements. Searchkick
+`timeout`/`search_timeout` globals are not implemented: use connection settings
+and PostgreSQL `statement_timeout` in the appropriate database/session scope.
+Persistent HTTP adapters such as Typhoeus are unnecessary for this backend.
+
+## Testing
+
+Use a real PostgreSQL database with TIN. Do not mock PostgreSQL, TIN, or
+ActiveRecord to claim search compatibility. For an application with migrated
+search columns and fixtures:
+
+```ruby
+class ProductSearchTest < ActiveSupport::TestCase
+  test "search sees the current database row" do
+    product = Product.create!(name: "Red Apple", description: "Fresh fruit")
+    assert_includes Product.search("red apple", misspellings: false).map(&:id), product.id
+  end
+end
+```
+
+No search callback switch, `refresh`, or reindex trait is needed. Rails fixture
+transactions provide test isolation. For Minitest outside Rails or RSpec, set up
+the real connection/schema and transaction cleanup explicitly. Factory Bot creates
+ordinary rows; do not add Searchkick-style reindex callbacks to its factories.
+Parallel workers need separate databases or another verified isolation strategy,
+not Searchkick index suffixes on one shared table.
+
+### The repository's real Rails application
+
+The [dummy application](test/dummy) serves HTML and JSON through a controller and
+registered Tinkick models. Its fixture set includes 64 deterministic synthetic
+Tolkien characters generated with `Faker::Fantasy::Tolkien` and a separate
+268-document search corpus: 256 varied multi-sentence records plus 12 controls
+for phrase order, term frequency, document length, field boundaries, and typos.
+These are synthetic test records, not assertions about Tolkien's canon.
+
+```sh
+direnv exec . bundle exec ruby -Itest test/rails_app_test.rb --fail-fast
+```
+
+The HTTP tests exercise real stored values, rendered and JSON output, filters,
+bounded pages, injection-like search text, transpositions, and visibility after
+writes, plus countless navigation and cursor traversal. The latest Rails 8.1
+checkpoint passed 11 HTTP tests with 48 assertions and seven corpus tests with
+30 assertions. The Rails 8.0 matrix rerun is tracked separately; these figures
+do not imply remote CI completion. See the tests and
+[development guide](docs/development.md) for verification details. A fixture
+corpus is not evidence of complete Searchkick parity or a production-scale benchmark.
+
+### CI and database isolation
+
+Repository tests use `tinkick_test`; development uses `tinkick_development`.
+Standard PostgreSQL environment variables come from direnv locally. The harness
+checks `current_database()` before Rails migrations, uses test-owned table names,
+and never substitutes a different search engine. Separate fixture processes must
+not run concurrently against this shared test database.
+
+CI serializes the Rails matrix and requires the configured test database secrets
+(`PGHOST`, `PGUSER`, `PGPASSWORD`, with optional `PGPORT`/`PGSSLMODE`). It does not
+install a pretend local TIN extension or run Elasticsearch setup actions. See
+[the workflow](.github/workflows/ci.yml); a configured matrix is not a claim that a
+remote CI run has completed.
+
 ## Reference and unsupported options
 
 The current model declaration accepts `searchable`, `default_fields`, and `match`.
@@ -914,6 +1047,43 @@ See [the compatibility inventory](docs/compatibility.md) for the wider API targe
 [TIN evidence](docs/tin-api.md) for verified native behavior, and
 [the implementation plan](docs/plan.md) for remaining work. “Not implemented” is
 not a promise of a release date and should not be relabeled a TIN limitation.
+
+## Development, upgrades, and contributing
+
+Keep the existing `.envrc` and `dev.ejson` local. They supply development/test
+connection settings, are excluded from Git and the gem, and must not be replaced
+or printed during setup. Requiring the gem and unit/boot checks do not require a
+live database; integration tests do.
+
+```sh
+direnv exec . bundle install
+direnv exec . bundle exec rbs collection install
+direnv exec . bundle exec rubocop -A Gemfile tinkick.gemspec Rakefile Steepfile lib test
+direnv exec . bundle exec rake rbs:format rbs:quality
+direnv exec . bundle exec rake
+direnv exec . bundle exec rake build
+```
+
+`rake` runs the combined fail-fast Minitest suite, RuboCop, RBS validation, and
+Steep. `rake build` produces `pkg/tinkick-0.1.0.alpha.1.gem`. `Gemfile.lock` is local
+and ignored so supported dependency ranges can be exercised. CI uses Bundler
+directly rather than a local `.envrc`.
+
+Contributions should pair behavior changes with meaningful tests against real
+TIN, keep RBS and RuboCop synchronized, and use reviewable Conventional Commits.
+Report the Ruby/Rails/PostgreSQL/TIN versions, reproducible query, schema, and
+actual plan when reporting a search bug; omit credentials and private records.
+
+Upgrading from Searchkick 5 or 6 is a backend migration, not merely a gem version
+change. Audit model options, derived fields, query methods, result consumers,
+background jobs, and relevance expectations. The supported keyword/fluent APIs
+cover part of Searchkick 6's builder interface; conversion-v2 migration and
+Searchkick's own upgrade tasks are not Tinkick procedures. Follow
+[CHANGELOG.md](CHANGELOG.md) for Tinkick changes and rerun application search
+contracts before upgrading an alpha release.
+
+Thanks to the Searchkick project for the API this gem aims to preserve, and to
+the PlanetScale TIN team for the PostgreSQL search engine and reference material.
 
 ## License
 
