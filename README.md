@@ -507,6 +507,13 @@ Searchkick contract; use explicit `_and`/`_or` grouping for complex expressions.
 error. LIKE `%` and `_` are wildcards; use escaped patterns for literal characters.
 Prefix filtering operates on the whole column, not individual search tokens.
 
+For Rails enums, equality, `in`, `all`, and negation use the serialized label.
+For example, `status: :published` matches an enum declared as `published: 0`;
+`status: 0` looks for a label named `"0"`, not the backing ordinal. Unknown labels
+match nothing and do not become NULL comparisons. Known labels use bound backing
+values, allowing ordinary column indexes. Enum label ranges/patterns and unusual
+duplicate or nil backing mappings are still being completed.
+
 The `all` operator is accepted on scalar columns as a conjunction of equalities;
 a scalar cannot equal two distinct values. PostgreSQL array equality means
 element membership; `in` accepts any supplied element and `all` requires every
