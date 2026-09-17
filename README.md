@@ -1160,7 +1160,7 @@ Product.search("coffee").aggs(:category).aggs(
 
 | Feature | Available behavior |
 | --- | --- |
-| Terms | `field`, `limit` (default 1,000), `min_doc_count` (default 1), and `_key`/`_count` ordering |
+| Terms | `field`, `include`/`exclude`, `limit` (default 1,000), `min_doc_count` (default 1), and `_key`/`_count` ordering |
 | Numeric/date ranges | Inclusive `from`, exclusive `to`, overlapping and empty buckets, optional `key`, and `keyed: true` |
 | Numeric histograms | `interval`, `offset`, `min_doc_count` (default 0), `_key`/`_count` ordering, and keyed output |
 | Metrics | `avg`, `min`, `max`, `sum`, and exact `cardinality` |
@@ -1197,6 +1197,28 @@ produce zero-count buckets. It logs a warning because broad dictionaries cost
 more. Array aggregation and exact `COUNT(DISTINCT)` cardinality also warn about
 workload-dependent cost. Aggregations group and sort in PostgreSQL; terms also
 apply their bucket limit there. They do not group Ruby model records.
+
+Use `include` and `exclude` to filter bucket values without changing matching
+records. Exact arrays use bound SQL comparisons; exclusion takes precedence.
+For array columns, selecting one value keeps that bucket without counting other
+values from the same row. Filters also apply to zero-count dictionary buckets,
+before ordering and the bucket limit; `sum_other_doc_count` counts only eligible
+buckets omitted by that limit.
+
+```ruby
+Product.search("coffee", aggs: {
+  category: {include: ["drinks", "equipment"], exclude: ["equipment"]},
+  brands: {field: :brand, include: "(?i)^acme", exclude: "discontinued$"}
+})
+```
+
+String patterns use PostgreSQL `~`/`!~` unchanged, including its substring
+matching and embedded flags. Use `^`/`$` for anchored matches. Regex filtering
+warns about scanning term values; prefer exact arrays when possible. Ruby
+`Regexp` objects and Elasticsearch partition hashes raise
+`Tinkick::NotImplementedError` with native alternatives. Empty include arrays
+select no buckets; empty exclude arrays remove none. These controls apply only
+to terms aggregations.
 
 Numeric histograms use an additive portable API. Searchkick exposes this shape
 through its raw `body_options` DSL; Tinkick accepts it inside `aggs:`:
@@ -1338,8 +1360,8 @@ not translate that Elasticsearch request body. Use ActiveRecord `group` and
 aggregate queries, explicit SQL subqueries/window functions, or a reviewed
 persisted/generated column for those calculations. This is an API boundary,
 not a claim that PostgreSQL cannot perform grouped or nested calculations.
-Portable options still awaiting implementation are `missing` defaults, terms
-`include`/`exclude`, and flat JSONB aggregation paths.
+Portable options still awaiting implementation are `missing` defaults and flat
+JSONB aggregation paths.
 Check representative plans against TIN's
 [SQL shape guidance](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
 
