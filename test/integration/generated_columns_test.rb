@@ -12,7 +12,12 @@ class GeneratedColumnsTest < TinkickIntegrationTest
 
     column = SearchProduct.columns_hash.fetch("display_name")
     assert_equal :text, column.type
-    assert column.virtual_stored?
+    assert column.virtual?
+    generated = SearchProduct.connection.select_value(<<~SQL)
+      SELECT attgenerated FROM pg_attribute
+      WHERE attrelid = 'tinkick_test_products'::regclass AND attname = 'display_name'
+    SQL
+    assert_equal "s", generated
 
     separate_fields = Tinkick::Query.new(SearchProduct, "apple orchard", fields: [:name, :description])
     assert_empty separate_fields.records
