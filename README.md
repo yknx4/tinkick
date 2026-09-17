@@ -782,8 +782,24 @@ Explicit `^1` pins terms that TIN might otherwise omit from scoring as too commo
 so it can change scores even with a factor of one. Native single-field queries
 retain the top-k path; existing multi-field/refinement cost warnings still apply.
 Scores use TIN's ranking without synthetic exact-versus-fuzzy boosts or forced
-primary-key tie order. SQL-mode weights and factors above 10,000 still require
-the weighted SQL scoring adapter.
+primary-key tie order.
+
+Exact and whole-field text modes also accept weights. Factors above 10,000 use
+SQL multiplication of native scores. These paths run a matching branch per field,
+sum each record's contributions, then sort; they log a performance warning because
+native top-k cannot supply the final weighted ordering. SQL exact/text matches
+contribute the specified weight (one when omitted); a zero weight keeps the match.
+Filters, exclusions, highlights, and column cursors retain their normal behavior.
+
+```ruby
+Product.search("coffee", fields: [{"name^20" => :exact}, "description^1"])
+Product.search("coffee", fields: ["name^20000", :description])
+```
+
+Measure this path with `EXPLAIN (ANALYZE, BUFFERS)` on representative data: a
+large-weight query over the 268-document test corpus used a TIN scan followed by
+aggregation, a join, and a final sort, without native top-k. That small fixture
+plan is evidence of the query shape, not a production latency estimate.
 
 `boost_by`, `boost_where`, `boost_by_recency`, `boost_by_distance`, `indices_boost`,
 and `conversions`/`conversions_v2` remain adapter work.
