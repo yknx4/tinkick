@@ -12,7 +12,7 @@ module Tinkick
     def_delegators :results, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary
     attr_reader :current_page, :padding
 
-    def initialize(query, page: 1, padding: 0, total_entries: nil, load: true)
+    def initialize(query, page: 1, padding: 0, total_entries: nil, load: true, includes: nil)
       if query.keyset? && (page != 1 || !padding.zero?)
         raise InvalidQueryError, "keyset pagination does not accept page or padding; use after: with next_cursor"
       end
@@ -21,6 +21,7 @@ module Tinkick
       @padding = padding
       @total_entries = total_entries
       @load = load
+      @includes = includes
       unless load
         @query.model.logger&.warn("Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
       end
@@ -131,9 +132,17 @@ module Tinkick
       @results ||= record_pairs.map(&:first)
     end
 
+    def model_records
+      records = @query.records
+      if @includes
+        ActiveRecord::Associations::Preloader.new(records: records, associations: @includes).call
+      end
+      records
+    end
+
     def record_pairs
       @record_pairs ||= if @load
-        @query.records.map { |record| [record, record[:_tinkick_score].to_f] }
+        model_records.map { |record| [record, record[:_tinkick_score].to_f] }
       else
         @query.rows.map do |row|
           # Query projects a numeric score alongside the arbitrary model fields.

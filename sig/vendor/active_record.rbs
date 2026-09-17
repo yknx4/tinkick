@@ -5,6 +5,13 @@ module ActiveRecord
           | ...
   end
 
+  module Associations
+    class Preloader
+      def initialize: (records: Array[Base], associations: Tinkick::association_spec?, ?scope: Relation?, ?available_records: Array[Base]?, ?associate_by_default: bool) -> void
+      def call: () -> Array[Preloader::Association]
+    end
+  end
+
   module ModelSchema
     module ClassMethods
       # Ruby 4 / Rails 8 permits a type lookup without a fallback block.

@@ -1,0 +1,11 @@
+crisp:
+  product: red_apple
+  body: Crisp
+
+juicy:
+  product: red_apple
+  body: Juicy
+
+ripe:
+  product: green_pear
+  body: Ripe
