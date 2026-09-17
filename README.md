@@ -81,12 +81,24 @@ handling; newer Rails releases should be checked before removing this constraint
 
 ## Getting started
 
-Enable the extension through a Rails migration:
+Enable TIN through a Rails migration:
 
 ```sh
 bin/rails generate tinkick:install
 bin/rails db:migrate
 ```
+
+Optional search helpers are opt-in. Install only those used by your application:
+
+```sh
+bin/rails generate tinkick:install --unaccent --fuzzystrmatch --pg-trgm
+```
+
+The default generator enables only TIN. Optional extensions are checked when a
+feature uses them; they do not block loading the gem or ordinary TIN searches.
+A missing dependency raises `Tinkick::Error` with the required `enable_extension`
+Rails migration. If an installation migration already exists, add a new
+application migration rather than replacing that migration.
 
 For existing `text` columns, generate the indexes:
 

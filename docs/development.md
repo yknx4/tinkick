@@ -13,7 +13,8 @@ direnv exec . bundle exec rbs collection install
 
 The Rails 8.0 matrix uses `JSON_VERSION='< 3'`. Rails 8.0.5.1's encoder passes
 `quirks_mode`, which JSON 3 removed; the integration checkpoint reproduced that
-failure. Rails 8.1 is tested with JSON 3. The Gemfile exposes `JSON_VERSION` for
+failure. Rails 8.1.3.1 JSONB decoding also fails with JSON 3's positional-argument
+change, so both matrix entries use JSON 2. The Gemfile exposes `JSON_VERSION` for
 these dependency combinations, and CI resolves each combination separately.
 Applications on Rails 8.0 should likewise constrain `json` below 3 until they
 upgrade to a Rails release with compatible encoding. Tinkick does not patch
