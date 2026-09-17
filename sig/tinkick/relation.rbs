@@ -54,7 +54,7 @@ module Tinkick
     def aggs!: (*String | Symbol | aggregation_spec values, **aggregation_options options) -> Relation
     def smart_aggs: (bool value) -> Relation
     def smart_aggs!: (bool value) -> Relation
-    def aggregations: () -> Hash[String, aggregation_result | Hash[String, Integer | aggregation_result]]?
+    def aggregations: () -> response_aggregations?
 
     def fields: (*relation_field values) -> Relation
     def fields!: (*relation_field values) -> Relation
@@ -114,6 +114,7 @@ module Tinkick
     def took: () -> Integer
     def error: () -> nil
     def hits: () -> Array[search_hit]
+    def response: () -> search_response
     def with_hit: () -> Enumerator[[ result_record, search_hit ], Array[[ result_record, search_hit ]]]
                 | () { (result_record, search_hit) -> void } -> Array[[ result_record, search_hit ]]
     def total_count: () -> Integer

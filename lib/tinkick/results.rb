@@ -114,6 +114,19 @@ module Tinkick
       @hit_pairs.each { |record, hit| yield record, hit }
     end
 
+    def response
+      @response ||= begin
+        page = { "hits" => hits } #: response_hits
+        unless @query.countless? && @total_entries.nil?
+          page["total"] = { "value" => total_count, "relation" => "eq" }
+        end
+        value = { "took" => took, "hits" => page } #: search_response
+        values = aggregations
+        value["aggregations"] = values if values
+        value
+      end
+    end
+
     def total_count
       @query.misspellings?
       @total_entries || @query.total_count

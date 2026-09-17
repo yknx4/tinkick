@@ -15,6 +15,12 @@ module Tinkick
 
   type search_hit = { "_id" => String, "_index" => String, "_score" => Float, ?"_source" => Hash[String, result_value] }
 
+  type response_hits = { "hits" => Array[search_hit], ?"total" => { "value" => Integer, "relation" => "eq" } }
+
+  type response_aggregations = Hash[String, aggregation_result | Hash[String, Integer | aggregation_result]]
+
+  type search_response = { "took" => Integer, "hits" => response_hits, ?"aggregations" => response_aggregations }
+
   class Results
     include Enumerable[result_record]
     extend Forwardable
@@ -33,6 +39,7 @@ module Tinkick
     @source_filter: SourceFilter?
     @hits: Array[search_hit]?
     @hit_pairs: Array[[ result_record, search_hit ]]
+    @response: search_response?
 
     attr_reader current_page: Integer
     attr_reader padding: Integer
@@ -55,7 +62,7 @@ module Tinkick
     alias slice []
     def to_ary: () -> Array[result_record]
     def aggs: () -> Hash[String, aggregation_result]?
-    def aggregations: () -> Hash[String, aggregation_result | Hash[String, Integer | aggregation_result]]?
+    def aggregations: () -> response_aggregations?
 
     def model_name: () -> ActiveModel::Name
     def entry_name: (?Hash[Symbol, Object?] options) -> String
@@ -66,6 +73,7 @@ module Tinkick
     def hits: () -> Array[search_hit]
     def with_hit: () -> Enumerator[[ result_record, search_hit ], Array[[ result_record, search_hit ]]]
                 | () { (result_record, search_hit) -> void } -> Array[[ result_record, search_hit ]]
+    def response: () -> search_response
     def total_count: () -> Integer
     alias total_entries total_count
     def per_page: () -> Integer
