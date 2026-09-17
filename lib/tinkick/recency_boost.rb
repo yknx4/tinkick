@@ -43,6 +43,10 @@ module Tinkick
     def compile(name, options)
       column = @model.columns_hash[name]
       unless column
+        root, separator, = name.partition(".")
+        if separator == "." && @model.columns_hash[root]&.type == :jsonb
+          raise InvalidQueryError, "#{@model.name} JSONB path #{name.inspect} requires a typed date or numeric column for boost_by_recency; add a stored or generated column with a Rails migration and use that column instead. Tinkick does not infer date or numeric types from JSONB values."
+        end
         raise MissingFieldError, "#{@model.name} has no column #{name.inspect}; add a date or numeric column with a Rails migration before using boost_by_recency"
       end
       date = [:date, :datetime].include?(column.type)
