@@ -37,7 +37,7 @@ module Tinkick
 
     def equality: (String column, filter_value value, ?array_type: String?, ?enum_values: Hash[String, filter_scalar]?) -> filter_predicate
 
-    def existence: (String column, filter_value value, ?array_type: String?) -> filter_predicate
+    def existence: (String column, filter_value value, ?array_type: String?, ?enum_values: Hash[String, filter_scalar]?) -> filter_predicate
 
     def element_predicate: (String column, filter_predicate predicate, String? array_type) -> filter_predicate
 

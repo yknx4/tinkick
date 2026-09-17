@@ -83,6 +83,7 @@ module Tinkick
       end
       # @type var enum_values: Hash[String, filter_scalar]?
       enum_values = @model.defined_enums[name] if path.empty?
+      enum_values = enum_values.select { |label, stored| enum_values&.key(stored) == label } if enum_values
       [reference, array_type, json_path, enum_values]
     end
 
@@ -213,7 +214,7 @@ module Tinkick
 
             operand.map { |entry| equality(column, entry, array_type: array_type, enum_values: enum_values) }
           when :exists
-            [existence(column, operand, array_type: array_type)]
+            [existence(column, operand, array_type: array_type, enum_values: enum_values)]
           when :like, :ilike, :prefix
             [element_predicate(column, text_predicate(element, operator, operand), array_type)]
           when :not, :_not
@@ -242,7 +243,10 @@ module Tinkick
 
         combine(value.map { |entry| equality(column, entry, array_type: array_type, enum_values: enum_values) }, "OR")
       elsif value.nil?
-        if array_type
+        if enum_values
+          recognized = enum_values.values.map { |stored| equality(column, stored) }
+          recognized.empty? ? ["TRUE", []] : negate(combine(recognized, "OR"))
+        elsif array_type
           negate(element_predicate(column, ["tinkick_filter_element.value IS NOT NULL", []], array_type))
         else
           ["#{column} IS NULL", []]
@@ -259,12 +263,12 @@ module Tinkick
       end
     end
 
-    def existence(column, value, array_type: nil)
+    def existence(column, value, array_type: nil, enum_values: nil)
       case value
       when TrueClass
-        negate(equality(column, nil, array_type: array_type))
+        negate(equality(column, nil, array_type: array_type, enum_values: enum_values))
       when FalseClass
-        equality(column, nil, array_type: array_type)
+        equality(column, nil, array_type: array_type, enum_values: enum_values)
       else
         raise ArgumentError, "Passing a value other than true or false to exists is not supported"
       end
