@@ -43,8 +43,8 @@ module Tinkick
         if (options.key?(:include) || options.key?(:exclude)) && (range_kinds.any? || metrics.any? || histogram_kinds.any?)
           raise ArgumentError, "include and exclude apply only to terms aggregations"
         end
-        if options.key?(:missing) && (options.key?(:date_ranges) || metrics.any? || histogram_kinds.any?)
-          raise ArgumentError, "Top-level missing applies only to terms and numeric ranges; put metric or histogram defaults inside their options hash"
+        if options.key?(:missing) && (metrics.any? || histogram_kinds.any?)
+          raise ArgumentError, "Top-level missing applies only to terms and ranges; put metric or histogram defaults inside their options hash"
         end
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
         raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
@@ -91,7 +91,7 @@ module Tinkick
     private
 
     def date_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format, :offset, :extended_bounds, :hard_bounds]
+      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format, :offset, :extended_bounds, :hard_bounds, :missing]
       raise ArgumentError, "Unknown date histogram options: #{unknown.join(", ")}" unless unknown.empty?
       unless [:calendar_interval, :fixed_interval].count { |kind| options.key?(kind) } == 1
         raise ArgumentError, "Date histogram requires exactly one calendar_interval or fixed_interval"
@@ -138,7 +138,7 @@ module Tinkick
       binds[:unit] = unit if unit
       lower_date, upper_date, hard_lower, hard_upper = zoned_histogram_bounds(options, formatter, binds, unit: unit)
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
-      values = values_relation(scope, field)
+      values = values_relation(scope, field, missing: date_missing(field, options[:missing], formatter))
       column = @model.columns_hash.fetch(field)
       unless [:date, :datetime, :timestamp].include?(column.type)
         raise InvalidQueryError, "date_histogram requires a date or datetime aggregation column"
@@ -459,7 +459,8 @@ module Tinkick
       end.sort_by { |entry| [entry.fetch("from", -Float::INFINITY), entry.fetch("to", Float::INFINITY)] }
       conditions = options[:where]
       scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
-      values = values_relation(scope, field, missing: options[:missing])
+      missing = date_values ? date_missing(field, options[:missing], date_values) : options[:missing]
+      values = values_relation(scope, field, missing: missing)
       types = dates ? [:date, :datetime, :timestamp] : [:integer, :decimal, :float]
       unless types.include?(@model.columns_hash.fetch(field).type)
         raise InvalidQueryError, "#{dates ? "date_ranges" : "ranges"} requires a #{dates ? "date or datetime" : "numeric"} aggregation column"
@@ -504,6 +505,26 @@ module Tinkick
       result = { "buckets" => response_buckets }
       result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
       result
+    end
+
+    def date_missing(field, value, formatter)
+      return if value.nil?
+      unless value.is_a?(Numeric) || value.is_a?(String) || value.is_a?(Date) || value.is_a?(Time)
+        raise ArgumentError, "Missing date values must be Date, Time, ISO8601 strings, or epoch milliseconds"
+      end
+
+      milliseconds = formatter.parse(value)
+      return unless milliseconds
+
+      instant = Time.at(Rational(milliseconds.to_s) / 1_000).utc
+      return instant unless @model.columns_hash[field]&.type == :date
+
+      case value
+      when Date, Time then value.to_date
+      when String
+        Integer(value, 10, exception: false) ? instant.to_date : Date.iso8601(value)
+      else instant.to_date
+      end
     end
 
     def numeric_bound(value)

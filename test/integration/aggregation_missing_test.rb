@@ -129,8 +129,7 @@ class AggregationMissingTest < TinkickIntegrationTest
     [
       { ratings: { missing: 0, sum: {} } },
       { ratings: { missing: 0, histogram: { interval: 2 } } },
-      { description: { missing: "2026-01-01", date_ranges: [{ from: "2026-01-01" }] } },
-      { description: { date_histogram: { calendar_interval: "day", missing: "2026-01-01" } } },
+      { description: { missing: "2026-01-01", date_histogram: { calendar_interval: "day" } } },
     ].each do |options|
       assert_raises(ArgumentError, Tinkick::NotImplementedError) { search(**options).aggs }
     end
