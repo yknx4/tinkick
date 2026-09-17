@@ -145,6 +145,35 @@ module Tinkick
       @aggs = output
     end
 
+    def highlight_fields
+      @fields.map(&:first).uniq
+    end
+
+    def highlight_query(name, texts:)
+      resolve_misspellings
+      return "" if @term == "*"
+
+      @model.with_connection do |connection|
+        compiler = QueryText.new(connection)
+        @fields.filter_map do |field_name, mode|
+          next unless field_name == name
+          unless [:word, :phrase, :word_start, :word_middle, :word_end].include?(mode)
+            raise ArgumentError, "Highlighting SQL match modes still requires Tinkick adapter support"
+          end
+          field = SearchField.new(@model, name, match: mode)
+          analysis = @model.tinkick_index_analysis(name, field)
+          unless analysis == WordMatch::ANALYSIS_DEFAULTS
+            raise ArgumentError, "Highlighting custom TIN analysis still requires Tinkick source-span support; native explicit highlighting uses default analysis"
+          end
+          misspellings = misspellings_for(name)
+          if two_edit_word?(mode, misspellings) || (mode == :word && compiler.refinement_required?(@term, misspellings: misspellings, analysis: analysis))
+            raise ArgumentError, "Highlighting refined fuzzy matches still requires Tinkick eligible-token support"
+          end
+          compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
+        end.reject(&:empty?).map { |query| "(#{query})" }.join(" OR ")
+      end
+    end
+
     private
 
     def measure_page

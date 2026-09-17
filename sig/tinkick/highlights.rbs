@@ -1,0 +1,24 @@
+module Tinkick
+  type highlight_settings = { ?tag: String, ?encoder: String, ?fragment_size: Integer, ?number_of_fragments: Integer }
+
+  type highlight_configuration = { ?fields: Array[String | Symbol] | Hash[String | Symbol, highlight_settings?], ?tag: String, ?encoder: String, ?fragment_size: Integer, ?number_of_fragments: Integer }
+
+  type highlight_options = bool | nil | highlight_configuration
+
+  type result_highlights = Hash[Symbol, String | Array[String]]
+
+  class Highlights
+    @query: Query
+    @settings: highlight_settings
+
+    attr_reader fields: Hash[String, highlight_settings]
+
+    def initialize: (Query query, highlight_options options) -> void
+    def columns: () -> Array[String]
+    def call: (Array[Hash[String, result_value]] rows) -> Array[Hash[String, Array[String]]]
+
+    private
+
+    def field_value: (Hash[String, result_value] row, String name) -> String?
+  end
+end

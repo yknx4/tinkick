@@ -5,6 +5,7 @@ require "active_support/core_ext/object/deep_dup"
 require_relative "hash_wrapper"
 require_relative "query"
 require_relative "source_filter"
+require_relative "highlights"
 
 module Tinkick
   class Results
@@ -14,7 +15,7 @@ module Tinkick
     def_delegators :results, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary
     attr_reader :current_page, :padding
 
-    def initialize(query, page: 1, padding: 0, total_entries: nil, load: true, includes: nil, model_includes: nil, scope_results: nil, select: nil)
+    def initialize(query, page: 1, padding: 0, total_entries: nil, load: true, includes: nil, model_includes: nil, scope_results: nil, select: nil, highlight: nil)
       if query.keyset? && (page != 1 || !padding.zero?)
         raise InvalidQueryError, "keyset pagination does not accept page or padding; use after: with next_cursor"
       end
@@ -27,6 +28,7 @@ module Tinkick
       @model_includes = model_includes
       @scope_results = scope_results
       @select = select
+      @highlighter = Highlights.new(query, highlight) if highlight
       @missing_records = []
       @hit_pairs = []
       unless load
@@ -93,7 +95,8 @@ module Tinkick
         end #: Array[Hash[String, result_value]]
         include_source = @select != [] && (!@load || @select)
         filter = source_filter if include_source && @select && @select != true
-        rows.map do |row|
+        highlighted = @highlighter&.call(@highlight_rows || rows)
+        rows.each_with_index.map do |row, index|
           score = row.fetch("_tinkick_score") #: Float | BigDecimal
           hit = { "_id" => row.fetch(@query.model.primary_key.to_s).to_s,
                   "_index" => @query.model.table_name, "_score" => score.to_f } #: search_hit
@@ -102,6 +105,8 @@ module Tinkick
             selected = filter ? filter.call(source) : source
             hit["_source"] = selected.deep_dup
           end
+          values = highlighted&.fetch(index)
+          hit["highlight"] = values if values && !values.empty?
           hit
         end
       end
@@ -125,6 +130,16 @@ module Tinkick
         value["aggregations"] = values if values
         value
       end
+    end
+
+    def highlights(multiple: false)
+      hits.map { |hit| hit_highlights(hit, multiple: multiple) }
+    end
+
+    def with_highlights(multiple: false)
+      return enum_for(:with_highlights, multiple: multiple) unless block_given?
+
+      with_hit.each { |record, hit| yield record, hit_highlights(hit, multiple: multiple) }
     end
 
     def total_count
@@ -214,6 +229,11 @@ module Tinkick
 
     private
 
+    def hit_highlights(hit, multiple: false)
+      values = hit["highlight"] || {}
+      values.to_h { |name, fragments| [name.to_sym, multiple ? fragments : fragments.fetch(0)] }
+    end
+
     def load_page
       if @load
         @scope_results ? @query.rows : @query.records
@@ -275,7 +295,9 @@ module Tinkick
       if filter.nested?(definitions)
         @query.model.logger&.warn("Tinkick: nested source selection reads each selected JSON column for the bounded result page, then prunes properties in Ruby. Large JSON values can increase transfer and memory costs; use dedicated stored or generated columns for frequent narrow projections.")
       end
-      @query.source_rows(filter.columns(definitions)).map do |row|
+      rows = @query.source_rows(filter.columns(definitions) | (@highlighter&.columns || []))
+      @highlight_rows = rows if @highlighter
+      rows.map do |row|
         filter.call(row).merge(row.slice(@query.model.primary_key.to_s, "_tinkick_score"))
       end
     end
@@ -311,7 +333,19 @@ module Tinkick
         end
       end
       @hit_pairs = pairs.map do |record, _score|
-        [record, indexed.fetch(record[@query.model.primary_key.to_s].to_s)]
+        hit = indexed.fetch(record[@query.model.primary_key.to_s].to_s)
+        highlighter = @highlighter
+        if highlighter
+          values = hit_highlights(hit)
+          if record.is_a?(HashWrapper)
+            highlighter.fields.each_key do |name|
+              record.to_h["highlighted_#{name}"] = values[name.to_sym] || record[name]
+            end
+          elsif !record.respond_to?(:search_highlights)
+            record.define_singleton_method(:search_highlights) { values }
+          end
+        end
+        [record, hit]
       end
       @record_pairs = pairs
     end

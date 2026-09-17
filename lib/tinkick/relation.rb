@@ -16,9 +16,9 @@ module Tinkick
     def_delegators :execute, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary,
       :total_count, :current_page, :limit_value, :total_pages, :num_pages, :offset_value,
       :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score,
-      :has_next_page?, :next_cursor, :aggregations, :model_name, :entry_name, :missing_records, :misspellings?, :took, :error, :hits, :with_hit, :response
+      :has_next_page?, :next_cursor, :aggregations, :model_name, :entry_name, :missing_records, :misspellings?, :took, :error, :hits, :with_hit, :response, :highlights, :with_highlights
 
-    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, select: nil, exclude: nil)
+    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, select: nil, exclude: nil, highlight: nil)
       @model = model
       @term = term
       @options = {
@@ -26,7 +26,7 @@ module Tinkick
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding,
         match: match, operator: operator, load: load, total_entries: total_entries,
         countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results,
-        select: select, exclude: exclude,
+        select: select, exclude: exclude, highlight: highlight,
       }
       query
     end
@@ -79,6 +79,16 @@ module Tinkick
     def load!(value)
       check_loaded
       @options[:load] = value
+      self
+    end
+
+    def highlight(value = true)
+      clone.highlight!(value)
+    end
+
+    def highlight!(value = true)
+      check_loaded
+      @options[:highlight] = value
       self
     end
 
@@ -432,7 +442,7 @@ module Tinkick
     def execute
       load_value = @options[:load]
       @results ||= Results.new(query, page: page_number, padding: page_padding,
-        total_entries: @options[:total_entries], load: load_value.nil? ? true : load_value, includes: @options[:includes], model_includes: @options[:model_includes], scope_results: @options[:scope_results], select: @options[:select])
+        total_entries: @options[:total_entries], load: load_value.nil? ? true : load_value, includes: @options[:includes], model_includes: @options[:model_includes], scope_results: @options[:scope_results], select: @options[:select], highlight: @options[:highlight])
     end
   end
 

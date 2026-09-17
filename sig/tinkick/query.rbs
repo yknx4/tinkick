@@ -57,6 +57,9 @@ module Tinkick
 
     def aggs: () -> Hash[String, aggregation_result]?
 
+    def highlight_fields: () -> Array[String]
+    def highlight_query: (String name, texts: Array[String?]) -> String
+
     def total_count: () -> Integer
     def misspellings?: () -> bool
     def countless?: () -> bool
