@@ -13,4 +13,5 @@ gem "rake", "~> 13.0"
 gem "rbs", "~> 4.2"
 gem "rubocop-shopify", "~> 3.1"
 gem "searchkick", "6.1.2", require: false
+gem "simplecov", "~> 1.2", require: false
 gem "steep", "~> 2.1"

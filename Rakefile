@@ -7,6 +7,12 @@ Rake::TestTask.new do |test|
   test.libs << "test"
   test.pattern = "test/**/*_test.rb"
   test.options = "--fail-fast"
+  test.ruby_opts << "-r./test/test_helper"
+end
+
+desc "Run the full suite with at least 90% line coverage of lib/"
+task :coverage do
+  sh({ "COVERAGE" => "1" }, "bundle", "exec", "rake", "test")
 end
 
 namespace :rbs do
@@ -46,4 +52,4 @@ task :build do
   sh "gem", "build", "tinkick.gemspec", "--output", "pkg/tinkick-#{Tinkick::VERSION}.gem"
 end
 
-task default: [:test, :rubocop, "rbs:quality", :steep]
+task default: [:coverage, :rubocop, "rbs:quality", :steep]
