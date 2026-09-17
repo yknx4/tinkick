@@ -19,6 +19,8 @@ module Tinkick
     def parse: (aggregation_range_bound value) -> Float?
     def histogram_bound: (aggregation_range_bound value) -> Integer?
     def histogram_boundary: (Integer milliseconds, unit: String?, interval: Integer) -> Time
+    def histogram_key: (Time boundary) -> Integer
+    def histogram_cutoff: (Time boundary, offset: Integer, unit: String?, interval: Integer) -> Time
     def format: (Float value) -> String
 
     private

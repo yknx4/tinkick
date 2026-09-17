@@ -146,6 +146,26 @@ module Tinkick
       end
     end
 
+    def histogram_key(boundary)
+      midnight_key((boundary.to_r * 1_000).to_i)
+    end
+
+    def histogram_cutoff(boundary, offset:, unit:, interval:)
+      threshold = histogram_key(boundary) - offset
+      local = histogram_boundary(threshold, unit: unit, interval: interval)
+      return local if histogram_key(local) == threshold
+
+      # A hard bound applies to the shifted UTC key. Its equivalent SQL cutoff
+      # is the next local grid boundary, including across a repeated midnight.
+      if unit
+        field = { "year" => :years, "quarter" => :months, "month" => :months, "week" => :weeks, "day" => :days,
+                  "hour" => :hours, "minute" => :minutes, "second" => :seconds }.fetch(unit)
+        local.advance(field => (unit == "quarter" ? 3 : 1))
+      else
+        local + Rational(interval, 1_000)
+      end
+    end
+
     def format(value)
       instant = local_time(Time.at(Rational(value.to_s) / 1_000))
       pattern = @formats.fetch(0)

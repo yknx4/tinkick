@@ -84,7 +84,7 @@ module Tinkick
     private
 
     def date_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format, :offset, :extended_bounds]
+      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format, :offset, :extended_bounds, :hard_bounds]
       raise ArgumentError, "Unknown date histogram options: #{unknown.join(", ")}" unless unknown.empty?
       unless [:calendar_interval, :fixed_interval].count { |kind| options.key?(kind) } == 1
         raise ArgumentError, "Date histogram requires exactly one calendar_interval or fixed_interval"
@@ -117,17 +117,13 @@ module Tinkick
       if offset.nil? && !["day", "week", "month", "quarter", "year"].include?(unit)
         raise ArgumentError, "IANA time_zone currently requires a day, week, month, quarter, or year calendar_interval"
       end
-      extended = options.fetch(:extended_bounds, {})
-      unless extended.is_a?(Hash) && (extended.keys - [:min, :max]).empty?
-        raise ArgumentError, "Date histogram extended bounds must be a hash containing only min and max"
-      end
-      lower = formatter.histogram_bound(extended[:min])
-      upper = formatter.histogram_bound(extended[:max])
-      raise ArgumentError, "Date histogram extended bounds min cannot exceed max" if lower && upper && lower > upper
-
       # Bounds round without the aggregation offset, which is added to final keys.
-      lower_date = formatter.histogram_boundary(lower, unit: unit, interval: interval_milliseconds) if lower
-      upper_date = formatter.histogram_boundary(upper, unit: unit, interval: interval_milliseconds) if upper
+      lower_date, upper_date = date_histogram_bounds(options.fetch(:extended_bounds, {}), formatter, unit: unit, interval: interval_milliseconds)
+      hard_lower, hard_upper = date_histogram_bounds(options.fetch(:hard_bounds, {}), formatter, unit: unit, interval: interval_milliseconds)
+      if (lower_date && hard_lower && formatter.histogram_key(lower_date) < formatter.histogram_key(hard_lower)) ||
+          (upper_date && hard_upper && formatter.histogram_key(upper_date) > formatter.histogram_key(hard_upper))
+        raise ArgumentError, "Extended bounds must be within hard bounds"
+      end
 
       shift = "#{offset || 0} seconds"
 
@@ -151,6 +147,14 @@ module Tinkick
       counts = @model.unscoped.from(dates, :tinkick_dates)
         .group(Arel.sql("_tinkick_date"))
         .select(Arel.sql("_tinkick_date, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count"))
+      if hard_lower
+        cutoff = formatter.histogram_cutoff(hard_lower, offset: bucket_offset, unit: unit, interval: interval_milliseconds)
+        counts = counts.where(Arel.sql("_tinkick_date >= ?::timestamp", cutoff))
+      end
+      if hard_upper
+        cutoff = formatter.histogram_cutoff(hard_upper, offset: bucket_offset, unit: unit, interval: interval_milliseconds)
+        counts = counts.where(Arel.sql("_tinkick_date < ?::timestamp", cutoff))
+      end
       query = if minimum.zero?
         @model.logger&.warn("Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
         bounds = @model.unscoped.from("tinkick_date_counts")
@@ -185,6 +189,18 @@ module Tinkick
       result = { "buckets" => options[:keyed] ? buckets.to_h { |bucket| [bucket.fetch("key_as_string"), bucket] } : buckets }
       result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
       result
+    end
+
+    def date_histogram_bounds(bounds, formatter, unit:, interval:)
+      unless bounds.is_a?(Hash) && (bounds.keys - [:min, :max]).empty?
+        raise ArgumentError, "Date histogram bounds must be a hash containing only min and max"
+      end
+      lower = formatter.histogram_bound(bounds[:min])
+      upper = formatter.histogram_bound(bounds[:max])
+      raise ArgumentError, "Date histogram bounds min cannot exceed max" if lower && upper && lower > upper
+
+      [lower && formatter.histogram_boundary(lower, unit: unit, interval: interval),
+       upper && formatter.histogram_boundary(upper, unit: unit, interval: interval)]
     end
 
     def date_histogram_offset(value)
