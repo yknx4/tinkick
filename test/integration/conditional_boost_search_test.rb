@@ -17,12 +17,13 @@ class ConditionalBoostSearchTest < TinkickIntegrationTest
   end
 
   def test_default_conditional_boost_changes_scores_without_admitting_unrelated_documents
+    # Native float scores gain visible digits when SQL casts them for multiplication.
     baseline = scores(search)
     page = search(boost_where: { "metadata.rare" => true })
 
     assert_equal [@forge.id, @archive.id], page.map(&:id)
-    assert_in_delta baseline.fetch(@forge.id) * 1000, scores(page).fetch(@forge.id), 0.00001
-    assert_equal baseline.fetch(@archive.id), scores(page).fetch(@archive.id)
+    assert_in_epsilon baseline.fetch(@forge.id) * 1000, scores(page).fetch(@forge.id), 0.000001
+    assert_in_epsilon baseline.fetch(@archive.id), scores(page).fetch(@archive.id), 0.000001
     refute_includes page.map(&:id), @unrelated.id
     assert_equal 2, page.total_count
   end
@@ -33,8 +34,8 @@ class ConditionalBoostSearchTest < TinkickIntegrationTest
       boost_where: { id: { value: @forge.id, factor: 0.5 } }, boost_by: { ratings: { modifier: "none" } })
 
     assert_equal [@archive.id, @forge.id], page.map(&:id)
-    assert_in_delta baseline.fetch(@forge.id) * 2.5, scores(page).fetch(@forge.id), 0.00001
-    assert_in_delta baseline.fetch(@archive.id) * 3, scores(page).fetch(@archive.id), 0.00001
+    assert_in_epsilon baseline.fetch(@forge.id) * 2.5, scores(page).fetch(@forge.id), 0.000001
+    assert_in_epsilon baseline.fetch(@archive.id) * 3, scores(page).fetch(@archive.id), 0.000001
   end
 
   def test_fluent_boosts_merge_by_field_and_leave_the_original_unchanged
@@ -43,8 +44,8 @@ class ConditionalBoostSearchTest < TinkickIntegrationTest
     changed = original.boost_where("metadata.place" => "Rivendell").boost_where(id: { value: @forge.id, factor: 2 })
 
     assert_equal [@archive.id, @forge.id], changed.map(&:id)
-    assert_in_delta baseline.fetch(@forge.id) * 2, scores(changed).fetch(@forge.id), 0.00001
-    assert_in_delta baseline.fetch(@archive.id) * 1000, scores(changed).fetch(@archive.id), 0.00001
+    assert_in_epsilon baseline.fetch(@forge.id) * 2, scores(changed).fetch(@forge.id), 0.000001
+    assert_in_epsilon baseline.fetch(@archive.id) * 1000, scores(changed).fetch(@archive.id), 0.000001
     assert_equal [@forge.id, @archive.id], original.map(&:id)
     assert_raises(Tinkick::Error) { original.boost_where!(id: @forge.id) }
     refute original.boost_where(id: @forge.id).loaded?
@@ -74,7 +75,7 @@ class ConditionalBoostSearchTest < TinkickIntegrationTest
     statements = capture_queries do
       assert_equal @forge.id.to_s, page.hits.first.fetch("_id")
       assert_equal ["name"], page.hits.first.fetch("_source").keys
-      assert_in_delta baseline.fetch(@forge.id) * 1000, page.hits.first.fetch("_score"), 0.00001
+      assert_in_epsilon baseline.fetch(@forge.id) * 1000, page.hits.first.fetch("_score"), 0.000001
       assert_includes page.highlights.first.fetch(:name), "<em>Mithril</em>"
       assert page.has_next_page?
     end
@@ -99,7 +100,7 @@ class ConditionalBoostSearchTest < TinkickIntegrationTest
     [first, second].each do |page|
       record, score = page.with_score.first
       factor = record.id == @forge.id ? 1000 : 1
-      assert_in_delta baseline.fetch(record.id) * factor, score, 0.00001
+      assert_in_epsilon baseline.fetch(record.id) * factor, score, 0.000001
     end
   end
 
