@@ -61,14 +61,17 @@ types nor type errors should be suppressed as a workaround.
 
 ## Verified environment
 
-Checkpoint at commit `5409f2f` (2026-09-17): Ruby 4.0.1 / Rails 8.1.3.1
-passed `bundle exec rake coverage`: **373 tests, 2,251 assertions, no failures or
-skips**, with **97.71% line coverage** (1,494 / 1,529 executable lines).
-`rake rbs:format rbs:quality steep rubocop` passed: 46 type-checked files and
-88 Ruby files with no offenses. The gem built successfully with all three
-migration templates and without local secrets or test files.
+Checkpoint at commit `a9a54a8` (2026-09-17): Ruby 4.0.1 / Rails 8.1.3.1
+passed `bundle exec rake coverage`: **459 tests, 2,837 assertions, no failures,
+errors, or skips**, with **98.00% line coverage** (1,916 / 1,955 executable lines).
+This includes the fixed 10,000-record stress test and takes about eight minutes
+against the remote test database. `rake rbs:format rbs:quality steep rubocop build`
+passed: 48 type-checked files and 97 Ruby files with no offenses. The generated
+`pkg/tinkick-0.1.0.alpha.1.gem` contains 64 files, including all three migration
+templates, without local secrets, test files, or coverage artifacts.
 
-A separate Rails 8.0.5.1 / JSON 2 run passed **82 tests and 565 assertions** for
+A separate Rails 8.0.5.1 / JSON 2 run at the earlier `5409f2f` checkpoint passed
+**82 tests and 565 assertions** for
 date parsing, aggregations, public facets, association loading, JSONB search,
 two-edit words, phrase options, whole-field matching, and the 10,000-record stress
 test. This was a targeted compatibility run, not the full Rails 8.0 suite.
