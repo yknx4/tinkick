@@ -1402,9 +1402,11 @@ context; discarded terms at the query's edges do not extend the highlight.
 Phrase reconstruction logs its additional tokenization cost, and complex source
 mapping can use the expensive prefix-analysis path described above. Preserved
 Unicode gaps require extra queries to map and reanalyze original source slices.
-An isolated lexical grapheme whose folded form exceeds TIN's maximum token width
-still needs additional boundary reconstruction and currently raises an argument
-error; native phrase matching itself is available.
+Oversized lexical graphemes use a shortened reference copy to discover word
+boundaries, then map those boundaries back to the original text. Token eligibility
+and position accounting still analyze the original slices. Hangul, Indic,
+neighboring scripts, punctuation, and oversized emoji have native-position and
+highlight regressions; this path does not replace the document's actual tokens.
 
 Model declarations such as `tinkick searchable: [:name], highlight: [:name]` are
 accepted. Declared highlight fields are checked when the model is searched, with
