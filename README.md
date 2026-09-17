@@ -764,8 +764,29 @@ Date math uses `now` or an ISO date followed by `||` as its anchor. Add/subtract
 `y`, `M`, `w`, `d`, `h`/`H`, `m`, or `s`; round down with `/unit`. Weeks start on
 Monday. Calendar-day arithmetic follows DST; adding 24 hours advances exactly
 24 elapsed hours. One captured `now` is shared across an aggregation evaluator.
-Date histograms,
-custom date formats, nested aggregations, and additional aggregate options remain
+
+Date ranges also accept `format:`. The default is
+`strict_date_optional_time||epoch_millis`; alternatives separated by `||` are
+tried in order, and the first format renders bucket keys and bound strings.
+Custom formats support `yyyy`/`uuuu`, `MM`, `dd`, `HH`, `mm`, `ss`, `S`/`SS`/`SSS`,
+`XXX` offsets, punctuation, and quoted literals:
+
+```ruby
+Product.search("coffee", aggs: {
+  created_at: {
+    format: "yyyy/MM/dd||epoch_millis",
+    date_ranges: [{from: "2026/01/01", to: "2026/02/01"}]
+  }
+})
+```
+
+Numeric bounds are truncated and passed through the configured formatter. With
+the default formatter, `2026` is a year; explicitly use `format: "epoch_millis"`
+when small numbers must mean milliseconds. Missing custom date components use
+1970-01-01 and midnight. Locale names, week/era tokens, optional pattern sections,
+and fractions beyond three custom digits remain adapter work.
+
+Date histograms, nested aggregations, and additional aggregate options remain
 adapter implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
 for scripted calculations. Check representative plans against TIN's
