@@ -152,13 +152,9 @@ class CustomPhraseSpansTest < Minitest::Test
     assert_equal [[[0, source.length]]], locate([source], "atai l bb", max_token_bytes: "4")
   end
 
-  def test_unicode_preserved_discard_gaps_remain_explicit_until_reconstructed
-    error = assert_raises(ArgumentError) do
-      locate(["aa toolong bb"], "aa bb", max_token_bytes: "4", long_tokens: "discard")
-    end
-
-    assert_match(/phrase.*position|position.*phrase/i, error.message)
-    refute_match(/not supported by TIN/i, error.message)
+  def test_unicode_preserved_discard_gaps_do_not_match_an_adjacent_phrase
+    assert_equal [[], [[0, 5]]], locate(["aa toolong bb", "aa bb"], "aa bb",
+      max_token_bytes: "4", long_tokens: "discard")
   end
 
   private

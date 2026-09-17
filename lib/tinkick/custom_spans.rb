@@ -48,10 +48,6 @@ module Tinkick
       return spans if term.empty? || term == "*" || texts.all?(&:nil?)
 
       analysis = configuration(analysis)
-      if analysis.fetch("tokenizer") == "unicode" && analysis.fetch("position_gaps") == "preserve" &&
-          analysis.fetch("long_tokens") != "split"
-        raise ArgumentError, "Custom Unicode phrase positions for preserved long-token removal gaps are not implemented yet"
-      end
       @connection.logger&.warn("Tinkick: custom-analysis phrase highlighting reconstructs token positions from additional page-text analysis queries. Work grows with page text and matching phrase witnesses.")
       groups, streams = phrase_occurrences([term, *texts], analysis)
       query = streams.fetch(0)
@@ -81,24 +77,70 @@ module Tinkick
     def phrase_occurrences(texts, analysis)
       candidates = source_runs(texts)
       analyzed = analyze_many([*texts, *candidates.map { |candidate| candidate.fetch(3) }], analysis)
+      groups = candidates.each_with_index.map do |candidate, index|
+        [candidate, analyzed.fetch(texts.length + index)] #: [candidate, Array[String]]
+      end
+      preserved = analysis.fetch("position_gaps") == "preserve"
+      unicode_gaps = preserved && analysis.fetch("tokenizer") == "unicode" && analysis.fetch("long_tokens") != "split"
+      parts = unicode_gaps ? unicode_phrase_parts(groups, analysis) : groups.map { |_candidate, words| [words] }
       streams = Array.new(texts.length) { [] } #: Array[Array[[String, Integer, Integer, Integer]]]
       positions = Array.new(texts.length, 0)
-      groups = candidates.each_with_index.map do |candidate, index|
-        words = analyzed.fetch(texts.length + index)
+      groups.each_with_index do |(candidate, _words), index|
         position = candidate.first
-        words.each_with_index do |word, ordinal|
-          streams.fetch(position) << [word, positions.fetch(position), index, ordinal]
-          positions[position] += 1
+        ordinal = 0
+        parts.fetch(index).each do |words|
+          words.each do |word|
+            streams.fetch(position) << [word, positions.fetch(position), index, ordinal]
+            positions[position] += 1
+            ordinal += 1
+          end
+          if words.empty? && preserved && (unicode_gaps || analysis.fetch("tokenizer") == "whitespace")
+            positions[position] += 1
+          end
         end
-        if words.empty? && analysis.fetch("tokenizer") == "whitespace" && analysis.fetch("position_gaps") == "preserve"
-          positions[position] += 1
-        end
-        [candidate, words] #: [candidate, Array[String]]
       end
       unless streams.map { |stream| stream.map(&:first) } == analyzed.take(texts.length)
         raise ArgumentError, "Phrase source groups do not reconstruct the full native TIN token stream"
       end
       [groups, streams]
+    end
+
+    def unicode_phrase_parts(groups, analysis)
+      reference = analysis.merge("case_folding" => "fold", "accent_folding" => "fold",
+        "long_tokens" => "truncate", "max_token_bytes" => "2692")
+      verify_reference_graphemes(groups, reference)
+      words = analyze_many(groups.map { |candidate, _tokens| candidate.fetch(3) }, reference)
+      indexes = groups.each_index.select { |index| words.fetch(index).any? }
+      selected = indexes.map { |index| [groups.fetch(index).first, words.fetch(index)] } #: Array[[candidate, Array[String]]]
+      mapped = phrase_group_spans(selected, reference)
+      inputs = [] #: Array[[Integer, String]]
+      indexes.each_with_index do |index, ordinal|
+        text = groups.fetch(index).first.fetch(3)
+        spans = mapped.fetch(ordinal)
+        spans.each_with_index do |(first, _last), offset|
+          finish = spans[offset + 1]&.first || text.length
+          inputs << [index, text[first...finish].to_s]
+        end
+      end
+      @connection.logger&.warn("Tinkick: preserved Unicode phrase gaps map and reanalyze original source tokens with additional page-text queries. Long source runs can require quadratic prefix analysis; inspect EXPLAIN ANALYZE for large fields.")
+      analyzed = analyze_many(inputs.map(&:last), analysis)
+      parts = Array.new(groups.length) { [] } #: Array[Array[Array[String]]]
+      inputs.each_with_index { |(index, _text), ordinal| parts.fetch(index) << analyzed.fetch(ordinal) }
+      unless parts.each_with_index.all? { |values, index| values.flatten == groups.fetch(index).last }
+        raise ArgumentError, "Original Unicode phrase slices do not reconstruct the native TIN token stream"
+      end
+      parts
+    end
+
+    def verify_reference_graphemes(groups, analysis)
+      large = groups.flat_map { |candidate, _words| candidate.fetch(3).grapheme_clusters }
+        .select { |grapheme| grapheme.bytesize > 2692 }.uniq
+      return if large.empty?
+
+      words = analyze_many(large, analysis.merge("long_tokens" => "split", "graphemes" => "discard"))
+      if words.any? { |tokens| tokens.join.bytesize > 2692 }
+        raise ArgumentError, "Phrase position reconstruction for oversized lexical graphemes hidden by the native reference tokenizer is not implemented yet"
+      end
     end
 
     def phrase_witnesses(stream, query)
