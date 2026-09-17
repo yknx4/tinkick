@@ -201,7 +201,7 @@ module Tinkick
       element = array_type ? "tinkick_filter_element.value" : column
       case value
       when Range
-        [element_predicate(column, range_predicate(element, value), array_type)]
+        [element_predicate(column, range_predicate(element, value, enum_values: enum_values), array_type)]
       when Hash
         # @type var comparisons: Array[filter_predicate]
         comparisons = []
@@ -216,11 +216,11 @@ module Tinkick
           when :exists
             [existence(column, operand, array_type: array_type, enum_values: enum_values)]
           when :like, :ilike, :prefix
-            [element_predicate(column, text_predicate(element, operator, operand), array_type)]
+            [element_predicate(column, text_predicate(element, operator, operand, enum_values: enum_values), array_type)]
           when :not, :_not
             [negate(equality(column, operand, array_type: array_type, enum_values: enum_values))]
           when :gt, :gte, :lt, :lte
-            comparisons << comparison(element, operator, operand)
+            comparisons << comparison(element, operator, operand, enum_values: enum_values)
             []
           else
             raise ArgumentError, "Unknown where operator: #{operator.inspect}"
@@ -236,7 +236,7 @@ module Tinkick
     def equality(column, value, array_type: nil, enum_values: nil)
       if value.is_a?(Regexp)
         element = array_type ? "tinkick_filter_element.value" : column
-        return element_predicate(column, text_predicate(element, :regexp, value), array_type)
+        return element_predicate(column, text_predicate(element, :regexp, value, enum_values: enum_values), array_type)
       end
       if value.is_a?(Array)
         return ["FALSE", []] if value.empty?
@@ -282,7 +282,8 @@ module Tinkick
       ["EXISTS (SELECT 1 FROM unnest(#{column}) AS tinkick_filter_element(value) WHERE #{sql})", binds]
     end
 
-    def text_predicate(column, operator, value)
+    def text_predicate(column, operator, value, enum_values: nil)
+      column = enum_label_expression(column, enum_values)
       if operator == :regexp && value.is_a?(Regexp)
         @model.logger&.warn("Tinkick: regular expression filters can scan column values outside TIN. Use selective search/where conditions and inspect EXPLAIN; an optional pg_trgm expression index may help suitable patterns.")
         return ["(#{column})::text COLLATE \"C\" ~ ?", [RegexPattern.new(value).compile]]
@@ -299,19 +300,34 @@ module Tinkick
       end
     end
 
-    def comparison(column, operator, value)
+    def comparison(column, operator, value, enum_values: nil)
       sql_operator = { gt: ">", gte: ">=", lt: "<", lte: "<=" }.fetch(operator)
-      ["#{column} #{sql_operator} ?", [scalar(value)]]
+      column = enum_label_expression(column, enum_values)
+      operand = scalar(value)
+      operand = operand.as_json.to_s if enum_values
+      ["#{column} #{sql_operator} ?", [operand]]
     end
 
-    def range_predicate(column, range)
+    def range_predicate(column, range, enum_values: nil)
       # @type var comparisons: Array[filter_predicate]
       comparisons = []
       lower = range.begin
       upper = range.end
-      comparisons << comparison(column, :gte, lower) if lower && lower != -Float::INFINITY
-      comparisons << comparison(column, range.exclude_end? ? :lt : :lte, upper) if upper && upper != Float::INFINITY
+      comparisons << comparison(column, :gte, lower, enum_values: enum_values) if lower && lower != -Float::INFINITY
+      comparisons << comparison(column, range.exclude_end? ? :lt : :lte, upper, enum_values: enum_values) if upper && upper != Float::INFINITY
       combine(comparisons, "AND")
+    end
+
+    def enum_label_expression(column, enum_values)
+      return column unless enum_values
+
+      @model.logger&.warn("Tinkick: filtering enum labels with ranges or patterns evaluates a CASE expression per row; an ordinary backing-column index cannot accelerate this expression. Use selective search/where conditions and inspect EXPLAIN, or add an appropriate expression index.")
+      @model.with_connection do |connection|
+        branches = enum_values.map do |label, stored|
+          "WHEN #{column} IS NOT DISTINCT FROM #{connection.quote(stored)} THEN #{connection.quote(label)}::text"
+        end
+        "(CASE #{branches.join(" ")} ELSE NULL::text END) COLLATE \"C\""
+      end
     end
 
     def scalar(value)

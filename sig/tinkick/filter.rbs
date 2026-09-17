@@ -41,11 +41,13 @@ module Tinkick
 
     def element_predicate: (String column, filter_predicate predicate, String? array_type) -> filter_predicate
 
-    def text_predicate: (String column, :like | :ilike | :prefix | :regexp operator, filter_value value) -> filter_predicate
+    def text_predicate: (String column, :like | :ilike | :prefix | :regexp operator, filter_value value, ?enum_values: Hash[String, filter_scalar]?) -> filter_predicate
 
-    def comparison: (String column, :gt | :gte | :lt | :lte operator, filter_value value) -> filter_predicate
+    def comparison: (String column, :gt | :gte | :lt | :lte operator, filter_value value, ?enum_values: Hash[String, filter_scalar]?) -> filter_predicate
 
-    def range_predicate: (String column, Range[filter_scalar] range) -> filter_predicate
+    def range_predicate: (String column, Range[filter_scalar] range, ?enum_values: Hash[String, filter_scalar]?) -> filter_predicate
+
+    def enum_label_expression: (String column, Hash[String, filter_scalar]? enum_values) -> String
 
     def scalar: (filter_value value) -> filter_scalar
 
