@@ -4,6 +4,7 @@ require_relative "filter"
 require_relative "query_text"
 require_relative "text_match"
 require_relative "keyset"
+require_relative "search_field"
 
 module Tinkick
   class Query
@@ -99,16 +100,7 @@ module Tinkick
 
     def scope
       @scope ||= @model.with_connection do |connection|
-        @fields.each do |field, mode|
-          column = @model.columns_hash[field]
-          validate_column(field)
-          sql_match = [:exact, :text_start, :text_middle, :text_end].include?(mode)
-          text_types = sql_match ? [:text, :citext, :string] : [:text, :citext]
-          array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
-          unless column && !array && text_types.include?(column.type)
-            raise InvalidQueryError, "#{@model.name}.#{field} must be a text or citext column with a TIN index"
-          end
-        end
+        fields = @fields.map { |field, mode| [SearchField.new(@model, field, match: mode), mode] } #: Array[[SearchField, Symbol]]
 
         relation = Filter.new(@model).apply(@model.all, @where)
         next relation if @term == "*"
@@ -116,17 +108,17 @@ module Tinkick
         native = [] #: Array[filter_predicate]
         exact = [] #: Array[filter_predicate]
         compiler = QueryText.new(connection)
-        @fields.each do |field, mode|
+        fields.each do |field, mode|
           if mode == :exact
-            exact << ["#{quoted_column(field)}::text COLLATE \"C\" = ?", [@term]]
+            exact << field_predicate(field, ["#{field.text_sql}::text COLLATE \"C\" = ?", [@term]])
           elsif [:text_start, :text_middle, :text_end].include?(mode)
-            exact << TextMatch.new(@model).predicate(quoted_column(field), @term, match: mode, misspellings: @misspellings)
+            exact << field_predicate(field, TextMatch.new(@model).predicate(field.text_sql, @term, match: mode, misspellings: @misspellings))
           else
             compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: @misspellings)
             if [:word_start, :word_middle, :word_end].include?(mode) && @misspellings != false && compiled.include?("MATCHES")
               @fuzzy_partial = true
             end
-            native << ["#{quoted_column(field)} ==> ?", [compiled]] unless compiled.empty?
+            native << field_predicate(field, ["#{field.text_sql} ==> ?", [compiled]]) unless compiled.empty?
           end
         end
         if native.empty?
@@ -138,6 +130,12 @@ module Tinkick
           mixed_scope(relation, native, exact)
         end
       end
+    end
+
+    def field_predicate(field, predicate)
+      scalar = field.scalar_predicate
+      sql, binds = predicate
+      [scalar ? "(#{scalar}) AND (#{sql})" : sql, binds]
     end
 
     def matching_scope(relation, predicates)

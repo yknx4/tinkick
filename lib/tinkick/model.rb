@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "relation"
+require_relative "search_field"
 
 module Tinkick
   module Model
@@ -81,20 +82,27 @@ module Tinkick
           raise MissingFieldError, "#{name} has no columns #{missing.join(", ")}; add persisted or generated columns with a Rails migration. Ruby search_data values are not persisted by Tinkick"
         end
 
-        index_fields = connection.select_values(Arel.sql(<<~SQL, table_name))
-          SELECT attribute.attname
+        indexes = connection.select_all(Arel.sql(<<~SQL, table_name)).to_a
+          SELECT attribute.attname AS column_name, pg_catalog.pg_get_expr(index.indexprs, index.indrelid) AS expression
           FROM pg_catalog.pg_index AS index
           JOIN pg_catalog.pg_class AS index_class ON index_class.oid = index.indexrelid
           JOIN pg_catalog.pg_am AS access_method ON access_method.oid = index_class.relam
-          JOIN pg_catalog.pg_attribute AS attribute
+          LEFT JOIN pg_catalog.pg_attribute AS attribute
             ON attribute.attrelid = index.indrelid AND attribute.attnum = index.indkey[0]
           WHERE index.indrelid = pg_catalog.to_regclass(?)
             AND access_method.amname = 'tin'
             AND index.indisvalid AND index.indisready
-            AND index.indpred IS NULL AND index.indexprs IS NULL AND index.indnkeyatts = 1
+            AND index.indpred IS NULL AND index.indnkeyatts = 1
         SQL
-
-        @tinkick_schema = { columns: columns, pool: pool, data_fields: data_fields, index_fields: index_fields }
+        index_fields = indexes.filter_map do |index|
+          value = index["column_name"]
+          value if value.is_a?(String)
+        end
+        index_expressions = indexes.filter_map do |index|
+          value = index["expression"]
+          value if value.is_a?(String)
+        end
+        @tinkick_schema = { columns: columns, pool: pool, data_fields: data_fields, index_fields: index_fields, index_expressions: index_expressions }
       end
     end
 
@@ -124,17 +132,17 @@ module Tinkick
           mode = match
         end
         field = field.to_s
-        column = schema[:columns][field]
-        unless column
-          raise MissingFieldError, "#{name} has no column #{field.inspect}; add a persisted or generated column with a Rails migration"
-        end
+        descriptor = SearchField.new(self, field, match: mode)
         sql_match = [:exact, :text_start, :text_middle, :text_end].include?(mode)
-        text_types = sql_match ? [:text, :citext, :string] : [:text, :citext]
-        array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
-        unless !array && text_types.include?(column.type)
-          raise InvalidQueryError, "#{name}.#{field} must be a text or citext column with a TIN index"
+        next if sql_match
+
+        if descriptor.json? && !schema[:index_fields].include?(field) && schema[:index_expressions].include?(descriptor.canonical_expression)
+          schema[:index_fields] << field
         end
-        unless sql_match || schema[:index_fields].include?(field)
+        unless schema[:index_fields].include?(field)
+          if descriptor.json?
+            raise Error, "#{name}.#{field} requires a valid, nonpartial TIN expression index; generate a Rails migration with bin/rails generate tinkick:index #{table_name.inspect} #{field.inspect}, then run bin/rails db:migrate"
+          end
           raise Error, "#{name}.#{field} requires a valid, nonpartial TIN index on the column; add a Rails migration with add_index #{table_name.inspect}, #{field.inspect}, using: :tin"
         end
       end

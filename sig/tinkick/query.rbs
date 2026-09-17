@@ -52,6 +52,7 @@ module Tinkick
     def keyset_order: () -> Keyset
 
     def scope: () -> ActiveRecord::Relation
+    def field_predicate: (SearchField field, filter_predicate predicate) -> filter_predicate
     def matching_scope: (ActiveRecord::Relation relation, Array[filter_predicate] predicates) -> ActiveRecord::Relation
     def mixed_scope: (ActiveRecord::Relation relation, Array[filter_predicate] native, Array[filter_predicate] exact) -> ActiveRecord::Relation
 

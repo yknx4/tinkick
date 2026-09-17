@@ -3,7 +3,7 @@ module Tinkick
 
   type model_options = { searchable: model_fields?, default_fields: model_fields?, match: Symbol, word_start: Array[String | Symbol]?, word_middle: Array[String | Symbol]?, word_end: Array[String | Symbol]?, text_start: Array[String | Symbol]?, text_middle: Array[String | Symbol]?, text_end: Array[String | Symbol]? }
 
-  type model_schema = { columns: Hash[String, ActiveRecord::ConnectionAdapters::Column], pool: ActiveRecord::ConnectionAdapters::ConnectionPool, data_fields: Array[String], index_fields: Array[String] }
+  type model_schema = { columns: Hash[String, ActiveRecord::ConnectionAdapters::Column], pool: ActiveRecord::ConnectionAdapters::ConnectionPool, data_fields: Array[String], index_fields: Array[String], index_expressions: Array[String] }
 
   module Model
     @tinkick_options: model_options?

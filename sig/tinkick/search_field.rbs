@@ -1,0 +1,17 @@
+module Tinkick
+  class SearchField
+    @model: singleton(ActiveRecord::Base)
+    @root: String
+    @path: Array[String]
+
+    def initialize: (singleton(ActiveRecord::Base) model, String name, ?match: Symbol) -> void
+    def json?: () -> bool
+    def text_sql: () -> String
+    def scalar_predicate: () -> String?
+    def canonical_expression: () -> String
+
+    private
+
+    def expression: (text: bool) -> String
+  end
+end
