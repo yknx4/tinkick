@@ -10,7 +10,7 @@ module Tinkick
 
     @tinkick_schema: model_schema?
 
-    def tinkick: (?searchable: model_fields?, ?default_fields: model_fields?, ?match: Symbol) -> void
+    def tinkick: (?searchable: model_fields?, ?default_fields: model_fields?, ?match: Symbol, ?stem: bool, **Object? options) -> void
 
     def tinkick_options: () -> model_options?
 

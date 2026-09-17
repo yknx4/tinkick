@@ -4,8 +4,16 @@ require_relative "relation"
 
 module Tinkick
   module Model
-    def tinkick(searchable: nil, default_fields: nil, match: :word)
+    def tinkick(searchable: nil, default_fields: nil, match: :word, stem: false, **options)
       # @type self: singleton(ActiveRecord::Base)
+      raise ArgumentError, "stem must be true or false" unless stem == true || stem == false
+
+      stemming = options.keys & [:language, :stemmer, :stem_exclusion, :stemmer_override]
+      stemming.unshift(:stem) if stem
+      unless stemming.empty?
+        raise NotImplementedError, "Stemming (#{stemming.join(', ')}) is not yet supported by TIN. Use stem: false for native token matching, or add normalized stored columns with a Rails migration and normalize query text with the same rules"
+      end
+      raise ArgumentError, "unknown keywords: #{options.keys.join(', ')}" unless options.empty?
       raise ArgumentError, "Only call tinkick once per model" if tinkick_options
 
       @tinkick_options = { searchable: searchable, default_fields: default_fields, match: match }

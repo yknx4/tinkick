@@ -151,6 +151,13 @@ class ModelTest < TinkickIntegrationTest
     assert_empty(model.search("never written", misspellings: false))
   end
 
+  def test_explicitly_disabling_stemming_searches_native_stored_tokens
+    model = search_model(searchable: [:description], stem: false)
+
+    assert_equal(["Red Apple"], model.search("orchard", misspellings: false).map(&:name))
+    assert_empty(model.search("orchards", misspellings: false))
+  end
+
   def test_search_data_works_for_an_empty_table
     SearchProduct.delete_all
     model = search_model do
