@@ -54,6 +54,7 @@ module Tinkick
       if method_name && !respond_to?(method_name, true)
         singleton_class.alias_method(method_name, :tinkick_search)
       end
+      Tinkick.models << self
     end
 
     def tinkick_options
