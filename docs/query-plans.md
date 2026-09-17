@@ -164,6 +164,45 @@ records with cursors, assert that no count/offset SQL is issued for that
 traversal, verify poem-only matches, filters, escaping, malformed cursor errors,
 and immediate visibility of database writes.
 
+## Partial, exact, and mixed matching
+
+The separate [match-mode capture](benchmarks/2026-09-17-match-mode-plans.json)
+records eight actual queries against the same 268-document corpus, using Ruby
+4.0.1, Rails 8.1.3.1, PostgreSQL 18.6, and TIN 1.0.2. Each query requested five
+rows. Execution times below are individual warm-cache observations, not a
+throughput benchmark or evidence that one strategy is faster at production size.
+
+| Mode | Rows returned | Execution ms | Observed plan |
+| --- | ---: | ---: | --- |
+| Token prefix | 4 | 7.733 | TIN Text Search Scan, Top K 5, no Sort |
+| Token infix | 4 | 7.606 | TIN Text Search Scan, Top K 5, no Sort |
+| Token suffix | 4 | 6.997 | TIN Text Search Scan, Top K 5, no Sort |
+| Fuzzy token prefix | 5 | 6.221 | TIN dictionary pattern, Top K 5, no Sort |
+| Whole-field prefix | 2 | 2.632 | Sequential scan with normalized SQL predicate |
+| Whole-field substring | 4 | 2.827 | Sequential scan with normalized SQL predicate |
+| Whole-field exact | 1 | 0.119 | SQL equality; no TIN scoring |
+| Mixed whole-field prefix and token search | 4 | 0.830 | TIN/SQL Append, aggregate by ID, join, Sort |
+
+These plans support the warnings in the gem: whole-field normalization scans SQL
+rows, and combining SQL matching with native scores groups matching IDs before
+sorting. On this small corpus those paths happened to finish faster than the
+native wildcard paths; their scaling costs still differ. Exact equality can use
+an application B-tree index whose expression and collation match the predicate.
+The fixture title column has no such index, so this capture shows a scan.
+
+The native partial paths retain TIN's top-k execution shape. That does not bound
+dictionary expansion cost: broader wildcard or fuzzy patterns can still require
+more work. Use representative query text and data before choosing typo settings.
+
+Reproduce this capture after loading the normal relevance fixtures:
+
+```sh
+direnv exec . bundle exec ruby script/explain_match_modes.rb
+```
+
+The [collector](../script/explain_match_modes.rb) checks the database name and
+corpus size, captures real bound queries, and performs no writes or migrations.
+
 ## Reproduce
 
 Load the designated test fixtures through their normal tests, then run the
