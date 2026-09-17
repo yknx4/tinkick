@@ -142,7 +142,7 @@ module Tinkick
     def exclude!(*values)
       check_loaded
       previous = @options[:exclude]
-      existing = previous ? Array(previous) : [] #: Array[String]
+      existing = previous ? Array(previous) : [] #: Array[exclusion_scalar]
       @options[:exclude] = existing + values.flatten.compact
       self
     end

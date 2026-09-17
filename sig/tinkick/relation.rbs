@@ -43,8 +43,8 @@ module Tinkick
     def select!: (*source_fields values) -> Relation
     def reselect: (*source_fields values) -> Relation
     def reselect!: (*source_fields values) -> Relation
-    def exclude: (*String | Array[String] | nil values) -> Relation
-    def exclude!: (*String | Array[String] | nil values) -> Relation
+    def exclude: (*exclusion_scalar | Array[exclusion_scalar] | nil values) -> Relation
+    def exclude!: (*exclusion_scalar | Array[exclusion_scalar] | nil values) -> Relation
     def aggs: () -> Hash[String, aggregation_result]?
             | (*String | Symbol | aggregation_spec values, **aggregation_options options) -> Relation
     def aggs!: (*String | Symbol | aggregation_spec values, **aggregation_options options) -> Relation

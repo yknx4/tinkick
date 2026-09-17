@@ -41,6 +41,36 @@ class ExclusionTest < TinkickIntegrationTest
     assert_equal(2, search("*", exclude: []).total_count)
   end
 
+  def test_numeric_exclusions_are_analyzed_as_text
+    tinkick_test_products(:red_apple).update!(name: "123")
+    tinkick_test_products(:green_pear).update!(name: "456")
+
+    assert_equal(["456"], search("*", exclude: 123).map(&:name))
+    assert_equal(["123"], search("*", exclude: [456, "missing"]).map(&:name))
+    assert_equal(["456"], search("*").exclude(123).map(&:name))
+    assert_empty(search("*", exclude: 123).exclude(456))
+
+    tinkick_test_products(:red_apple).update!(name: "1.5")
+    assert_equal(["456"], search("*", match: :exact, exclude: 1.5).map(&:name))
+  end
+
+  def test_boolean_exclusions_are_text_except_the_false_option_sentinel
+    tinkick_test_products(:red_apple).update!(name: "true")
+    tinkick_test_products(:green_pear).update!(name: "false")
+
+    assert_equal(["false"], search("*", exclude: true).map(&:name))
+    assert_equal(["true"], search("*", exclude: [false]).map(&:name))
+    assert_equal(2, search("*", exclude: false).total_count)
+  end
+
+  def test_invalid_exclusions_raise_instead_of_being_silently_ignored
+    [Object.new, {}, [["apple"]], [nil], Float::INFINITY, Float::NAN].each do |value|
+      error = assert_raises(ArgumentError) { search("*", exclude: value) }
+      assert_includes(error.message, "exclude")
+      assert_includes(error.message, "scalar")
+    end
+  end
+
   def test_exclusion_uses_every_selected_field_and_preserves_nulls
     apple = tinkick_test_products(:red_apple)
     pear = tinkick_test_products(:green_pear)

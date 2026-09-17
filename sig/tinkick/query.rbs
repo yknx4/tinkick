@@ -3,7 +3,9 @@ module Tinkick
 
   type search_fields = Array[search_field]
 
-  type exclusion_phrases = String | Array[String] | false | nil
+  type exclusion_scalar = String | Integer | Float | bool
+
+  type exclusion_phrases = exclusion_scalar | Array[exclusion_scalar] | nil
 
   type query_order = String | Symbol | Hash[String | Symbol, String | Symbol] | Array[query_order]
 
@@ -58,6 +60,8 @@ module Tinkick
     def next_cursor: () -> String?
 
     private
+
+    def normalize_exclusions: (exclusion_phrases value) -> Array[String]
 
     def read_rows: (ActiveRecord::Relation relation) -> Array[Hash[String, result_value]]
 

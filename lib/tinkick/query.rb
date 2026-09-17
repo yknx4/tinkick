@@ -36,11 +36,7 @@ module Tinkick
       @operator = operator.to_s
       @match = match
       @misspellings = misspellings
-      @exclude = case exclude
-      when Array then exclude
-      when String then [exclude]
-      else []
-      end
+      @exclude = normalize_exclusions(exclude)
       @countless = countless || keyset
       @keyset = keyset
       @after = after
@@ -140,6 +136,21 @@ module Tinkick
     end
 
     private
+
+    def normalize_exclusions(value)
+      return [] if value.nil? || value == false
+
+      values = value.is_a?(Array) ? value : [value]
+      values.map do |phrase|
+        valid = phrase.is_a?(String) || phrase.is_a?(Integer) || phrase == true || phrase == false ||
+          (phrase.is_a?(Float) && phrase.finite?)
+        unless valid
+          raise ArgumentError, "exclude must contain scalar strings, finite numbers, or booleans"
+        end
+
+        phrase.to_s
+      end
+    end
 
     def read_rows(relation)
       values = @model.with_connection { |connection| connection.select_all(relation).to_a }
