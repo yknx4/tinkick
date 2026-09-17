@@ -151,6 +151,18 @@ Searchkick can install its own alias when declared later, so use the explicit
 methods during a transition. Tinkick does not define a `Searchkick` constant,
 replace `searchkick`, or share the other gem's configuration.
 
+To choose a different alias, configure it before models declare `tinkick`:
+
+```ruby
+# config/initializers/tinkick.rb
+Tinkick.search_method_name = :tin_search
+# Product.tin_search("coffee") calls Tinkick.
+```
+
+Set it to `nil` to create no alias. Existing methods with the chosen name are
+preserved, and `tinkick_search` remains available. Changing this setting affects
+subsequent declarations; it does not rename aliases already installed on models.
+
 Audit the features below before changing callers. Existing Searchkick callbacks,
 queues, Redis dependencies, and reindex jobs still belong to Searchkick; retire
 them when the old backend is no longer needed. See the
@@ -1625,7 +1637,7 @@ The following reference maps less common upstream options to their current statu
 | `filterable` | Not accepted. Filter real scalar columns and add ordinary PostgreSQL indexes as needed. |
 | `unscope`, `inheritance`, query `type` | Not implemented as Searchkick options; define explicit model scopes and test the intended STI/tenant behavior. |
 | Global `model_options` | Not implemented; declare each model explicitly. |
-| `search_method_name` | Not implemented; `tinkick_search` is the explicit backend entry point. |
+| `search_method_name` | `Tinkick.search_method_name` selects the alias for subsequent declarations; `nil` disables alias creation. Existing methods are preserved and `tinkick_search` remains available. |
 | `index_name`, dynamic names, prefix/suffix | Excluded index identity API; use explicit database/schema/table tenancy. |
 | Custom `search_document_id` | Excluded document identity API; results use the model's single primary key. |
 | `mappings`, `merge_mappings`, `settings` | Excluded server configuration DSL; use migrations and native index options. |
