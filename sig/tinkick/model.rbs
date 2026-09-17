@@ -1,5 +1,5 @@
 module Tinkick
-  type model_fields = Array[String | Symbol]
+  type model_fields = search_fields
 
   type model_options = { searchable: model_fields?, default_fields: model_fields?, match: Symbol }
 

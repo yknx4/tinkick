@@ -13,7 +13,16 @@ module Tinkick
 
       @model = model
       @term = term.to_s
-      @fields = fields.map(&:to_s)
+      @fields = fields.map do |field|
+        if field.is_a?(Hash)
+          raise ArgumentError, "Each field hash must contain one field and match mode" unless field.length == 1
+
+          name, mode = field.to_a.fetch(0)
+          [name.to_s, mode]
+        else
+          [field.to_s, match]
+        end
+      end
       @where = where
       @order = order
       @limit = limit.to_i
@@ -24,6 +33,9 @@ module Tinkick
       @countless = countless || keyset
       @keyset = keyset
       @after = after
+      @scoring = "1.0"
+      @mixed_matching = false
+      raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(@operator)
       raise ArgumentError, "limit and offset must be nonnegative" if @limit.negative? || @offset.negative?
       raise InvalidQueryError, "countless pagination requires a positive limit" if @countless && @limit.zero?
       raise InvalidQueryError, "keyset pagination does not accept offset; use after: with next_cursor" if keyset && !offset.nil?
@@ -85,35 +97,67 @@ module Tinkick
 
     def scope
       @scope ||= @model.with_connection do |connection|
-        @fields.each do |field|
+        @fields.each do |field, mode|
           column = @model.columns_hash[field]
           validate_column(field)
-          text_types = @match == :exact ? [:text, :citext, :string] : [:text, :citext]
+          text_types = mode == :exact ? [:text, :citext, :string] : [:text, :citext]
           array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
           unless column && !array && text_types.include?(column.type)
             raise InvalidQueryError, "#{@model.name}.#{field} must be a text or citext column with a TIN index"
           end
         end
 
-        compiled_query = if @match == :exact
-          @term
-        else
-          QueryText.new(connection).compile(@term, operator: @operator, match: @match, misspellings: @misspellings)
-        end
-        @compiled_query = compiled_query
         relation = Filter.new(@model).apply(@model.all, @where)
-        if compiled_query == "*"
-          relation
-        elsif @match == :exact
-          predicates = @fields.map { |field| "#{quoted_column(field)}::text COLLATE \"C\" = ?" }.join(" OR ")
-          relation.where(Arel.sql("(#{predicates})", *Array.new(@fields.length, @term)))
-        elsif compiled_query.empty?
-          relation.none
+        next relation if @term == "*"
+
+        native = [] #: Array[filter_predicate]
+        exact = [] #: Array[filter_predicate]
+        compiler = QueryText.new(connection)
+        @fields.each do |field, mode|
+          if mode == :exact
+            exact << ["#{quoted_column(field)}::text COLLATE \"C\" = ?", [@term]]
+          else
+            compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: @misspellings)
+            native << ["#{quoted_column(field)} ==> ?", [compiled]] unless compiled.empty?
+          end
+        end
+        if native.empty?
+          matching_scope(relation, exact)
+        elsif exact.empty?
+          @scoring = native.length > 1 ? "tin.full_score(#{quoted_table}.ctid)" : "tin.score(#{quoted_table}.ctid)"
+          matching_scope(relation, native)
         else
-          predicates = @fields.map { |field| "#{quoted_column(field)} ==> ?" }.join(" OR ")
-          relation.where(Arel.sql("(#{predicates})", *Array.new(@fields.length, compiled_query)))
+          mixed_scope(relation, native, exact)
         end
       end
+    end
+
+    def matching_scope(relation, predicates)
+      return relation.none if predicates.empty?
+
+      sql = predicates.map { |predicate, _binds| "(#{predicate})" }.join(" OR ")
+      binds = predicates.flat_map { |_predicate, values| values }
+      relation.where(Arel.sql("(#{sql})", *binds))
+    end
+
+    def mixed_scope(relation, native, exact)
+      primary_key = @model.primary_key
+      raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
+
+      identifier = quoted_column(primary_key)
+      projection = Arel.sql("#{identifier} AS _tinkick_id")
+      branches = [
+        matching_scope(relation, native).reselect(projection, Arel.sql("tin.full_score(#{quoted_table}.ctid) AS _tinkick_branch_score")),
+        matching_scope(relation, exact).reselect(projection, Arel.sql("1.0 AS _tinkick_branch_score")),
+      ].map { |branch| branch.except(:order, :limit, :offset) }
+      @scoring = "_tinkick_ranked.score"
+      @mixed_matching = true
+      @model.all.with(_tinkick_matches: branches).joins(<<~SQL)
+        INNER JOIN (
+          SELECT _tinkick_id, SUM(_tinkick_branch_score) AS score
+          FROM _tinkick_matches GROUP BY _tinkick_id
+        ) AS _tinkick_ranked ON _tinkick_ranked._tinkick_id = #{identifier}
+      SQL
     end
 
     def record_scope
@@ -122,10 +166,13 @@ module Tinkick
       raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
 
       score = score_sql
+      if @mixed_matching
+        @model.logger&.warn("Tinkick: mixed TIN and SQL match modes combine and group matching rows before sorting. This can be slower than native TIN top-k ranking; use a single native match mode where its semantics fit and check EXPLAIN ANALYZE for your workload.")
+      end
       if @offset.positive? && score != "1.0"
         @model.logger&.warn("Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Consider keyset pagination on stable indexed columns to avoid large offsets. Countless pagination avoids automatic counts but does not remove offset costs.")
       end
-      if @fields.length > 1 && score != "1.0"
+      if @fields.length > 1 && score != "1.0" && !@mixed_matching
         @model.logger&.warn("Tinkick: ranking across multiple fields uses full scoring to preserve matching rows and can sort matches instead of using TIN's native top-k path. Consider a stored or generated combined text column with one TIN index when ranking performance matters.")
       end
       if (keyset? || !@order.nil?) && score != "1.0"
@@ -162,15 +209,7 @@ module Tinkick
     end
 
     def score_sql
-      # Native scoring permits dense-term elision and the index's top-k path.
-      if @match == :exact || @compiled_query == "*" || @compiled_query == ""
-        "1.0"
-      elsif @fields.length > 1
-        # Native dense-term elision can lose matches in TIN's multi-index plan.
-        "tin.full_score(#{quoted_table}.ctid)"
-      else
-        "tin.score(#{quoted_table}.ctid)"
-      end
+      @scoring
     end
 
     def validate_column(field)

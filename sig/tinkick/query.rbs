@@ -1,10 +1,14 @@
 module Tinkick
+  type search_field = String | Symbol | Hash[String | Symbol, Symbol]
+
+  type search_fields = Array[search_field]
+
   type query_order = String | Symbol | Hash[String | Symbol, String | Symbol] | Array[query_order]
 
   class Query
     @model: singleton(ActiveRecord::Base)
     @term: String
-    @fields: Array[String]
+    @fields: Array[[ String, Symbol ]]
     @where: filter_conditions
     @order: query_order?
     @limit: Integer
@@ -16,7 +20,8 @@ module Tinkick
     @rows: Array[Hash[String, result_value]]?
     @total_count: Integer?
     @scope: ActiveRecord::Relation?
-    @compiled_query: String?
+    @scoring: String
+    @mixed_matching: bool
     @countless: bool
     @keyset: bool
     @has_next_page: bool?
@@ -26,7 +31,7 @@ module Tinkick
     attr_reader limit: Integer
     attr_reader after: String?
 
-    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: Array[String | Symbol], ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String | nil, ?operator: String | Symbol, ?match: Symbol, ?misspellings: QueryText::misspellings, ?countless: bool, ?keyset: bool, ?after: String?) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: search_fields, ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String | nil, ?operator: String | Symbol, ?match: Symbol, ?misspellings: QueryText::misspellings, ?countless: bool, ?keyset: bool, ?after: String?) -> void
 
     def records: () -> Array[ActiveRecord::Base]
 
@@ -46,6 +51,8 @@ module Tinkick
     def keyset_order: () -> Keyset
 
     def scope: () -> ActiveRecord::Relation
+    def matching_scope: (ActiveRecord::Relation relation, Array[filter_predicate] predicates) -> ActiveRecord::Relation
+    def mixed_scope: (ActiveRecord::Relation relation, Array[filter_predicate] native, Array[filter_predicate] exact) -> ActiveRecord::Relation
 
     def record_scope: () -> ActiveRecord::Relation
 

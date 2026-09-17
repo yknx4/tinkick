@@ -38,7 +38,9 @@ module Tinkick
         !array && [:text, :citext].include?(column.type)
       end
       match ||= options[:match]
-      tinkick_validate_fields(schema, (options[:searchable] || []) + fields, match)
+      selected_names = fields.map { |field| field.is_a?(Hash) ? field.keys.first.to_s : field.to_s }
+      declared = (options[:searchable] || []).reject { |field| selected_names.include?(field.to_s) }
+      tinkick_validate_fields(schema, declared + fields, match)
 
       Relation.new(self, term, fields: fields, misspellings: misspellings,
         where: where, order: order, limit: limit, offset: offset, page: page,
@@ -104,18 +106,26 @@ module Tinkick
 
     def tinkick_validate_fields(schema, fields, match)
       # @type self: singleton(ActiveRecord::Base)
-      fields.each do |field|
+      fields.each do |entry|
+        if entry.is_a?(Hash)
+          raise ArgumentError, "Each field hash must contain one field and match mode" unless entry.length == 1
+
+          field, mode = entry.to_a.fetch(0)
+        else
+          field = entry
+          mode = match
+        end
         field = field.to_s
         column = schema[:columns][field]
         unless column
           raise MissingFieldError, "#{name} has no column #{field.inspect}; add a persisted or generated column with a Rails migration"
         end
-        text_types = match == :exact ? [:text, :citext, :string] : [:text, :citext]
+        text_types = mode == :exact ? [:text, :citext, :string] : [:text, :citext]
         array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
         unless !array && text_types.include?(column.type)
           raise InvalidQueryError, "#{name}.#{field} must be a text or citext column with a TIN index"
         end
-        unless match == :exact || schema[:index_fields].include?(field)
+        unless mode == :exact || schema[:index_fields].include?(field)
           raise Error, "#{name}.#{field} requires a valid, nonpartial TIN index on the column; add a Rails migration with add_index #{table_name.inspect}, #{field.inspect}, using: :tin"
         end
       end
