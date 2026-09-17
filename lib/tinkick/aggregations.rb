@@ -41,7 +41,9 @@ module Tinkick
         end
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
         raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
-        raise ArgumentError, "format applies only to date aggregations" if options.key?(:format) && !options.key?(:date_ranges)
+        if options.key?(:format) && !options.key?(:date_ranges) && !options.key?(:date_histogram)
+          raise ArgumentError, "format applies only to date aggregations"
+        end
 
         result = if options.key?(:date_histogram)
           outer = options.keys - [:date_histogram, :where]
@@ -82,7 +84,7 @@ module Tinkick
     private
 
     def date_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone]
+      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format]
       raise ArgumentError, "Unknown date histogram options: #{unknown.join(", ")}" unless unknown.empty?
       unless [:calendar_interval, :fixed_interval].count { |kind| options.key?(kind) } == 1
         raise ArgumentError, "Date histogram requires exactly one calendar_interval or fixed_interval"
@@ -103,7 +105,10 @@ module Tinkick
       minimum = options.fetch(:min_doc_count, 0)
       raise ArgumentError, "Date histogram min_doc_count must be a nonnegative integer" unless minimum.is_a?(Integer) && minimum >= 0
       raise ArgumentError, "Date histogram keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
-      formatter = AggregationDate.new(time_zone: options[:time_zone])
+      if options.key?(:format) && !options[:format].is_a?(String)
+        raise ArgumentError, "date_histogram format must be a string"
+      end
+      formatter = AggregationDate.new(time_zone: options[:time_zone], format: options[:format])
       offset = formatter.fixed_offset
       if offset.nil? && !["day", "week", "month", "quarter", "year"].include?(unit)
         raise ArgumentError, "IANA time_zone currently requires a day, week, month, quarter, or year calendar_interval"
