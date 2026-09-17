@@ -158,17 +158,17 @@ class QueryTextTest < TinkickIntegrationTest
     assert_equal(["Green Pear", "Red Apple"], names("*", misspellings: { transpositions: false }))
   end
 
-  def test_exact_matches_rank_above_native_fuzzy_matches
+  def test_fuzzy_matching_preserves_native_scores_and_eligibility
     tinkick_test_products(:red_apple).update!(name: "Apple")
     tinkick_test_products(:green_pear).update!(name: "Apples")
     query = compile("apple", misspellings: { transpositions: false })
     matches = SearchProduct.where("name ==> ?", query)
-      .select("name, tin.full_score(ctid) AS score")
-      .order(Arel.sql("tin.full_score(ctid) DESC, name ASC")).to_a
+      .order(:name).pluck(:name, Arel.sql("tin.score(ctid)"))
+    native_matches = SearchProduct.where("name ==> ?", "apple~0:1")
+      .order(:name).pluck(:name, Arel.sql("tin.score(ctid)"))
 
-    assert_equal(["Apple", "Apples"], matches.map(&:name))
-    assert_operator(matches.first[:score], :>, matches.last[:score])
-    assert_operator(matches.last[:score], :>, 0)
+    assert_equal(["Apple", "Apples"], matches.map(&:first))
+    assert_equal(native_matches, matches)
   end
 
   def test_invalid_native_fuzzy_options_fail

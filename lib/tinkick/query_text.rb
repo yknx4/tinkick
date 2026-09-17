@@ -30,8 +30,7 @@ module Tinkick
         raise ArgumentError, "Fuzzy keycap matching is not supported yet; use misspellings: false"
       end
 
-      fuzzy = words.map { |word| "#{word}~#{prefix}:#{distance}" }.join(separator)
-      "((#{exact})^10 OR (#{fuzzy})^1)"
+      words.map { |word| "#{word}~#{prefix}:#{distance}" }.join(separator)
     end
 
     private
