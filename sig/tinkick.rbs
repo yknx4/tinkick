@@ -1,0 +1,3 @@
+module Tinkick
+  VERSION: String
+end

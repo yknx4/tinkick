@@ -1,0 +1,12 @@
+/.bundle/
+/.env
+/.env.*
+/.envrc
+/dev.ejson
+/Gemfile.lock
+/.rbs_collection/
+/coverage/
+/log/
+/pkg/
+/tmp/
+*.gem
