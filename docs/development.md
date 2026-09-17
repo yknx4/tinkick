@@ -65,6 +65,28 @@ types nor type errors should be suppressed as a workaround.
 
 ## Verified environment
 
+Recent-query checkpoint at `1b4967d` (2026-09-17): Ruby 4.0.1 / Rails
+8.0.5.1 with JSON 2 passed **99 tests / 445 assertions**, no failures, errors,
+or skips, in 119 seconds. This covers recency scoring, custom primary keys,
+recursive JSON arrays and object existence, enum equality, custom phrase
+boundaries/highlights, and operation notifications. Reproduce with:
+
+```sh
+direnv exec . env BUNDLE_GEMFILE=/private/tmp/tinkick-rails-8.0.Gemfile JSON_VERSION='< 3' bundle exec ruby -Itest -e 'ARGV.replace(["--fail-fast", "--seed", "2078"]); %w[recency_boost_test recency_boost_search_test custom_primary_key_filter_test recursive_json_filter_test json_container_filter_test enum_filter_test custom_phrase_spans_test custom_phrase_gap_spans_test custom_phrase_oversized_spans_test custom_phrase_highlight_test instrumentation_test].each { |name| require_relative "test/integration/#{name}" }'
+```
+
+The matrix Gemfile is a local verification artifact, with the repository as its
+gem source and Rails constrained to 8.0. This is a targeted matrix run, not a
+replacement for full coverage. The same functionality has targeted Rails 8.1
+checks recorded in its commits. RuboCop passed on changed Ruby; the shared
+RBS formatting/validation and Steep checkpoint passed 60 library files.
+
+The package was rebuilt from an immutable `git archive` of `9b9d830`, excluding
+concurrent uncommitted work. It contains 85 files and all five `.tt` templates
+(four migrations and their shared SQL template), with no environment/secrets,
+test, coverage, or Git files. Output: `pkg/tinkick-0.1.0.alpha.1.gem`;
+SHA-256 `e701015123bcfc000b039c66d2863b4cf65e325acd9d6db7636a05c1f362ebca`.
+
 Checkpoint at code commit `9abb818` (2026-09-17): Ruby 4.0.1 / Rails 8.1.3.1
 passed `direnv exec . bundle exec rake coverage TESTOPTS='--seed=2078'`:
 **832 tests, 4,971 assertions, no failures, errors, or skips**, with **97.71%
