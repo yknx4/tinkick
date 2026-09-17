@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tinkick — Search Middle-earth</title>
+  </head>
+  <body>
+    <main>
+      <h1>Search Middle-earth</h1>
+      <p>A working Rails search example with synthetic Faker Tolkien records.</p>
+      <%= form_with url: characters_path, method: :get do |form| %>
+        <%= form.label :q, "Character or poem" %>
+        <%= form.search_field :q, value: @query == "*" ? "" : @query %>
+        <%= form.label :pagination, "Order" %>
+        <%= form.select :pagination, [["Relevance", "countless"], ["Record order", "keyset"]], selected: @keyset ? "keyset" : "countless" %>
+        <%= form.submit "Search" %>
+      <% end %>
+      <% if @characters.empty? %>
+        <p>No matching characters.</p>
+      <% else %>
+        <ul>
+          <% @characters.each do |character| %>
+            <li data-character-id="<%= character.id %>">
+              <strong><%= character.name %></strong>
+              <span><%= character.race %> · <%= character.location %></span>
+              <p><%= character.poem %></p>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+      <% if @characters.has_next_page? %>
+        <% if @keyset %>
+          <%= link_to "Next results", characters_path(q: @query, pagination: "keyset", after: @characters.next_cursor, race: params[:race]) %>
+        <% else %>
+          <%= link_to "Next results", characters_path(q: @query, page: @characters.next_page, race: params[:race]) %>
+        <% end %>
+      <% end %>
+    </main>
+  </body>
+</html>
