@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../integration_helper"
+require "tinkick/recency_boost"
 require_relative "../../lib/tinkick/recency_boost"
 
 class RecencyBoostTest < TinkickIntegrationTest
