@@ -488,7 +488,7 @@ fuzzy matching without interpreting their analyzed punctuation as match-all. See
 | `:word` | Available | Disable misspellings for exact token matching. |
 | `:phrase` | Available | Ordered adjacent tokens. |
 | `:word_start`, `:word_middle`, `:word_end` | Available | Native token wildcards; escaped dictionary patterns for distance-one typos. |
-| `:text_start`, `:text_middle`, `:text_end` | Available | Whole-field SQL matching with optional `unaccent`; distance-zero/one matching. |
+| `:text_start`, `:text_middle`, `:text_end` | Available | Whole-field SQL matching with optional `unaccent`; zero, one, or two edits. |
 | `:exact` | Available globally and per field | Case-sensitive, accent-sensitive whole-field SQL equality; ignores misspellings. |
 | Mixed per-field match modes | Available | Each field keeps its own mode; SQL/TIN branches are combined and deduplicated in PostgreSQL. |
 
@@ -516,6 +516,19 @@ Mixed SQL/TIN matching adds native TIN scores and SQL-match scores, then groups
 record IDs before pagination. It logs a warning because grouping/sorting can cost
 more than native top-k search. Fuzzy token partial matching also warns about
 dictionary expansion. Use `misspellings: false` when typo matching is unnecessary.
+
+Two-edit whole-field queries enumerate candidate substrings in PostgreSQL and log
+an additional warning. With transpositions they need the optional SQL helper:
+
+```sh
+bin/rails generate tinkick:functions
+bin/rails db:migrate
+```
+
+With `transpositions: false`, install `fuzzystrmatch` instead. These dependencies
+are checked only for the paths that use them; basic search, exact matching, and
+one-edit native token matching do not require them. The helper migration installs
+`tinkick.osa_distance` and leaves other extensions untouched.
 
 ### Case, accents, whitespace, and emoji
 
