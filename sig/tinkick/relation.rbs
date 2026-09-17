@@ -3,7 +3,7 @@ module Tinkick
 
   type relation_field = search_field | search_fields
 
-  type relation_options = { fields: search_fields, misspellings: QueryText::misspellings, where: filter_conditions, order: query_order?, limit: relation_number, offset: relation_number, page: relation_number, per_page: relation_number, padding: relation_number, match: Symbol, operator: String | Symbol, load: bool?, total_entries: Integer?, countless: bool, keyset: bool, after: String?, aggs: aggregation_spec?, smart_aggs: bool, includes: association_spec?, model_includes: model_associations?, scope_results: result_scope?, exclude: exclusion_phrases }
+  type relation_options = { fields: search_fields, misspellings: QueryText::misspellings, where: filter_conditions, order: query_order?, limit: relation_number, offset: relation_number, page: relation_number, per_page: relation_number, padding: relation_number, match: Symbol, operator: String | Symbol, load: bool?, total_entries: Integer?, countless: bool, keyset: bool, after: String?, aggs: aggregation_spec?, smart_aggs: bool, includes: association_spec?, model_includes: model_associations?, scope_results: result_scope?, select: source_selection?, exclude: exclusion_phrases }
 
   class Relation
     include Enumerable[result_record]
@@ -22,7 +22,7 @@ module Tinkick
     attr_reader model: singleton(ActiveRecord::Base)
     alias klass model
 
-    def initialize: (singleton(ActiveRecord::Base) model, ?Object? term, fields: search_fields, misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?exclude: exclusion_phrases) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, ?Object? term, fields: search_fields, misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?select: source_selection?, ?exclude: exclusion_phrases) -> void
 
     def loaded?: () -> bool
     def countless: (?bool value) -> Relation
@@ -38,6 +38,11 @@ module Tinkick
     def model_includes!: (model_associations values) -> Relation
     def scope_results: (result_scope? value) -> Relation
     def scope_results!: (result_scope? value) -> Relation
+    def select: (*source_fields values) -> Relation
+              | (*source_fields values) { (result_record) -> boolish } -> Array[result_record]
+    def select!: (*source_fields values) -> Relation
+    def reselect: (*source_fields values) -> Relation
+    def reselect!: (*source_fields values) -> Relation
     def exclude: (*String | Array[String] | nil values) -> Relation
     def exclude!: (*String | Array[String] | nil values) -> Relation
     def aggs: () -> Hash[String, aggregation_result]?

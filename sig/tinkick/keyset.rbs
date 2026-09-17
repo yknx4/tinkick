@@ -7,6 +7,7 @@ module Tinkick
 
     def initialize: (singleton(ActiveRecord::Base) model, query_order? order) -> void
     def order_sql: () -> String
+    def columns: () -> Array[String]
     def apply: (ActiveRecord::Relation relation, String cursor) -> ActiveRecord::Relation
     def encode: (Hash[String, result_value] attributes) -> String
 

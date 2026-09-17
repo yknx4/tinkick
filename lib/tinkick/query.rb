@@ -63,6 +63,20 @@ module Tinkick
       @rows ||= trim_page(read_rows(record_scope))
     end
 
+    def source_rows(columns)
+      primary_key = @model.primary_key
+      unless primary_key.is_a?(String)
+        raise InvalidQueryError, "source projection requires a single model primary key"
+      end
+      fields = columns | [primary_key]
+      cursor_fields = keyset? ? keyset_order.columns : [] #: Array[String]
+      projection = (fields | cursor_fields).map { |field| Arel.sql(quoted_column(field)) }
+      relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
+      values = trim_page(read_rows(relation))
+      @source_cursor_row = values.last
+      values.map { |row| row.slice(*fields, "_tinkick_score") }
+    end
+
     def pluck_rows(columns)
       fields = columns.map { |field| field.to_s }
       projection = fields.map { |field| Arel.sql(quoted_column(field)) }
@@ -88,7 +102,7 @@ module Tinkick
     def next_cursor
       return unless keyset? && has_next_page?
 
-      row = @rows&.last || @records&.last&.attributes
+      row = @source_cursor_row || @rows&.last || @records&.last&.attributes
       row ? keyset_order.encode(row) : nil
     end
 

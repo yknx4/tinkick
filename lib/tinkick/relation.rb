@@ -18,7 +18,7 @@ module Tinkick
       :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score,
       :has_next_page?, :next_cursor, :aggregations, :model_name, :entry_name
 
-    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, exclude: nil)
+    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, select: nil, exclude: nil)
       @model = model
       @term = term
       @options = {
@@ -26,7 +26,7 @@ module Tinkick
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding,
         match: match, operator: operator, load: load, total_entries: total_entries,
         countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results,
-        exclude: exclude,
+        select: select, exclude: exclude,
       }
       query
     end
@@ -100,6 +100,38 @@ module Tinkick
     def scope_results!(value)
       check_loaded
       @options[:scope_results] = value
+      self
+    end
+
+    # @type method select: (*source_fields values) ?{ (result_record) -> boolish } -> (Relation | Array[result_record])
+    def select(*values, &block)
+      if block
+        raise ArgumentError, "wrong number of arguments (given #{values.length}, expected 0)" unless values.empty?
+
+        execute.select(&block)
+      else
+        clone.select!(*values)
+      end
+    end
+
+    def select!(*values)
+      check_loaded
+      previous = @options[:select]
+      if previous == true || previous.is_a?(Hash)
+        raise InvalidQueryError, "select cannot append fields to true or an includes/excludes map; use reselect to replace it"
+      end
+      existing = previous ? Array(previous) : [] #: Array[String | Symbol]
+      @options[:select] = existing + values.flatten
+      self
+    end
+
+    def reselect(*values)
+      clone.reselect!(*values)
+    end
+
+    def reselect!(*values)
+      check_loaded
+      @options[:select] = values.flatten
       self
     end
 
@@ -390,7 +422,7 @@ module Tinkick
     def execute
       load_value = @options[:load]
       @results ||= Results.new(query, page: page_number, padding: page_padding,
-        total_entries: @options[:total_entries], load: load_value.nil? ? true : load_value, includes: @options[:includes], model_includes: @options[:model_includes], scope_results: @options[:scope_results])
+        total_entries: @options[:total_entries], load: load_value.nil? ? true : load_value, includes: @options[:includes], model_includes: @options[:model_includes], scope_results: @options[:scope_results], select: @options[:select])
     end
   end
 

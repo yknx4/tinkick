@@ -12,7 +12,7 @@ module Tinkick
     def_delegators :results, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary
     attr_reader :current_page, :padding
 
-    def initialize(query, page: 1, padding: 0, total_entries: nil, load: true, includes: nil, model_includes: nil, scope_results: nil)
+    def initialize(query, page: 1, padding: 0, total_entries: nil, load: true, includes: nil, model_includes: nil, scope_results: nil, select: nil)
       if query.keyset? && (page != 1 || !padding.zero?)
         raise InvalidQueryError, "keyset pagination does not accept page or padding; use after: with next_cursor"
       end
@@ -24,6 +24,7 @@ module Tinkick
       @includes = includes
       @model_includes = model_includes
       @scope_results = scope_results
+      @select = select
       unless load
         @query.model.logger&.warn("Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
       end
@@ -182,6 +183,39 @@ module Tinkick
       pairs
     end
 
+    def source_rows
+      selection = @select
+      columns = @query.model.column_names
+      case selection
+      when Hash
+        unless selection.keys.all? { |key| ["includes", "excludes"].include?(key.to_s) }
+          raise InvalidQueryError, "select accepts only includes and excludes source filters"
+        end
+        included = source_patterns(selection[:includes] || selection["includes"])
+        excluded = source_patterns(selection[:excludes] || selection["excludes"])
+        columns = columns.select { |column| included.empty? || included.any? { |pattern| pattern.match?(column) } }
+        columns = columns.reject { |column| excluded.any? { |pattern| pattern.match?(column) } }
+      when String, Symbol, Array
+        patterns = source_patterns(selection)
+        columns = columns.select { |column| patterns.any? { |pattern| pattern.match?(column) } }
+      else
+        return @query.rows if selection.nil? || selection == true || selection == false
+
+        raise InvalidQueryError, "select accepts source field names or an includes/excludes map"
+      end
+      @query.source_rows(columns)
+    end
+
+    def source_patterns(value)
+      values = value.is_a?(Array) ? value : (value.nil? ? [] : [value]) #: Array[String | Symbol]
+      values.map do |field|
+        unless field.is_a?(String) || field.is_a?(Symbol)
+          raise InvalidQueryError, "select source fields must be strings or symbols"
+        end
+        Regexp.new("\\A#{Regexp.escape(field.to_s).gsub('\\*', '.*')}\\z")
+      end
+    end
+
     def record_pairs
       @record_pairs ||= if @load
         scope = @scope_results
@@ -191,7 +225,7 @@ module Tinkick
           preload_records(@query.records).map { |record| [record, record[:_tinkick_score].to_f] }
         end
       else
-        @query.rows.map do |row|
+        source_rows.map do |row|
           # Query projects a numeric score alongside the arbitrary model fields.
           score = row.fetch("_tinkick_score") #: Float | BigDecimal
           [HashWrapper.new(row.except("_tinkick_score")), score.to_f]

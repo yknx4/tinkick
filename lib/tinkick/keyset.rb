@@ -27,6 +27,10 @@ module Tinkick
       @order.map { |field, direction| "#{quoted_column(field)} #{direction.upcase}" }.join(", ")
     end
 
+    def columns
+      @order.map(&:first)
+    end
+
     def apply(relation, cursor)
       values = decode(cursor)
       binds = [] #: Array[keyset_value]

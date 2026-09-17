@@ -24,6 +24,7 @@ module Tinkick
     @exclude: Array[String]
     @records: Array[ActiveRecord::Base]?
     @rows: Array[Hash[String, result_value]]?
+    @source_cursor_row: Hash[String, result_value]?
     @total_count: Integer?
     @scope: ActiveRecord::Relation?
     @scoring: String
@@ -43,6 +44,8 @@ module Tinkick
     def records: () -> Array[ActiveRecord::Base]
 
     def rows: () -> Array[Hash[String, result_value]]
+
+    def source_rows: (Array[String] columns) -> Array[Hash[String, result_value]]
 
     def pluck_rows: (Array[String | Symbol] columns) -> Array[Hash[String, result_value]]
 
