@@ -53,6 +53,8 @@ module Tinkick
 
     private
 
+    def read_rows: (ActiveRecord::Relation relation) -> Array[Hash[String, result_value]]
+
     def trim_page: [T] (Array[T] values) -> Array[T]
     def keyset_order: () -> Keyset
 

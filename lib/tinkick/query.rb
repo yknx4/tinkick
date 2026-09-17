@@ -55,14 +55,14 @@ module Tinkick
     end
 
     def rows
-      @rows ||= trim_page(@model.with_connection { |connection| connection.select_all(record_scope).to_a })
+      @rows ||= trim_page(read_rows(record_scope))
     end
 
     def pluck_rows(columns)
       fields = columns.map { |field| field.to_s }
       projection = fields.map { |field| Arel.sql(quoted_column(field)) }
       relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
-      values = @model.with_connection { |connection| connection.select_all(relation).to_a }
+      values = read_rows(relation)
       values = values.first(@limit) if countless?
       values.map { |row| row.slice(*fields) }
     end
@@ -121,6 +121,17 @@ module Tinkick
     end
 
     private
+
+    def read_rows(relation)
+      values = @model.with_connection { |connection| connection.select_all(relation).to_a }
+      values.map do |row|
+        row.to_h do |field, value|
+          # Raw query results still need the model's PostgreSQL array/JSON types.
+          cast = field == "_tinkick_score" ? value : @model.type_for_attribute(field).deserialize(value) #: result_value
+          [field, cast]
+        end
+      end
+    end
 
     def trim_page(values)
       @has_next_page = countless? && values.length > @limit
