@@ -815,8 +815,40 @@ plan is evidence of the query shape, not a production latency estimate. The
 [native and SQL weight plans](docs/query-plans.md#native-and-sql-field-weights)
 include captured SQL/binds and a reproducible collector.
 
-`boost_by`, `boost_where`, `boost_by_recency`, `boost_by_distance`, `indices_boost`,
-and `conversions`/`conversions_v2` remain adapter work.
+Numeric table columns and numeric PostgreSQL arrays support `boost_by`:
+
+```ruby
+Product.search("coffee", boost_by: [:orders_count])
+Product.search("coffee", boost_by: {
+  orders_count: {factor: 2},
+  rating: {modifier: "sqrt", boost_mode: "multiply", missing: 1}
+})
+Product.search("coffee").boost_by(:orders_count).boost_by(rating: {factor: 0.5})
+```
+
+The default contribution is `ln(2 + factor * value)`. Default contributions are
+summed, then multiply the base relevance score. Fields with
+`boost_mode: "multiply"` default to modifier `"none"`; their contributions are
+multiplied together and also multiply the base score. Supported modifiers are
+`none`, `log`, `log1p`, `log2p`, `ln`, `ln1p`, `ln2p`, `square`, `sqrt`, and
+`reciprocal`. The `log` family uses base 10.
+
+Missing values skip their contribution unless `missing:` supplies a replacement;
+`missing: 0` is a real replacement. A group with no applicable contributions
+leaves the score unchanged. Arrays use their minimum non-NULL value before
+applying the factor and modifier; empty/all-NULL arrays are missing. Each combined
+group is capped at the single-precision maximum, including reciprocal zero.
+Invalid arithmetic and negative/NaN function scores raise a database error.
+
+These calculations require only PostgreSQL arithmetic. They log a warning because
+numeric ranking can sort all matches instead of using TIN top-k, and arrays inspect
+values per matching row. Counts and aggregation membership retain the original
+matching scope. Source projection, highlights, countless pagination, and stable
+column cursors remain available. Add real numeric columns with Rails migrations
+for counters or application-owned scores; Ruby `search_data` values are not stored.
+
+JSONB numeric paths, `boost_where`, `boost_by_recency`, `boost_by_distance`,
+`indices_boost`, and `conversions`/`conversions_v2` remain adapter work.
 
 Recipe: rank a bounded SQL search with application-owned numeric weights:
 
