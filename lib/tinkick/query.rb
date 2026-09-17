@@ -183,15 +183,21 @@ module Tinkick
       field = SearchField.new(@model, name, match: modes.first || :word)
       analysis = @model.tinkick_index_analysis(name, field)
       return if analysis == WordMatch::ANALYSIS_DEFAULTS
-      if modes.include?(:phrase)
-        raise ArgumentError, "Highlighting custom TIN phrases still requires source-span witness support"
-      end
 
       matcher = WordMatch.new(@model)
-      tokens = modes.flat_map do |mode|
+      tokens = (modes - [:phrase]).flat_map do |mode|
         matcher.highlight_tokens(name, @term, texts: texts, match: mode, misspellings: misspellings_for(name))
       end.uniq
-      @model.with_connection { |connection| CustomSpans.new(connection).locate(texts, tokens: tokens, analysis: analysis) }
+      @model.with_connection do |connection|
+        locator = CustomSpans.new(connection)
+        spans = locator.locate(texts, tokens: tokens, analysis: analysis)
+        if modes.include?(:phrase)
+          phrases = locator.locate_phrase(texts, term: @term, analysis: analysis)
+          phrases.each_with_index { |values, index| spans.fetch(index).concat(values) }
+          spans.map! { |values| merge_highlight_spans(values) }
+        end
+        spans
+      end
     end
 
     def highlight_query(name, texts:)
@@ -219,6 +225,19 @@ module Tinkick
     end
 
     private
+
+    def merge_highlight_spans(spans)
+      merged = [] #: Array[CustomSpans::span]
+      spans.sort.each do |first, last|
+        previous = merged.last
+        if previous && first <= previous.last
+          previous[1] = [previous.last, last].max
+        else
+          merged << [first, last]
+        end
+      end
+      merged
+    end
 
     def measure_page
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)

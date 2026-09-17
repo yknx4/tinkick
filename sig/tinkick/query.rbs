@@ -73,6 +73,7 @@ module Tinkick
 
     private
 
+    def merge_highlight_spans: (Array[CustomSpans::span] spans) -> Array[CustomSpans::span]
     def measure_page: [T] () { () -> T } -> T
 
     def normalize_misspellings: (QueryText::misspellings options, search_fields fields) -> QueryText::misspellings
