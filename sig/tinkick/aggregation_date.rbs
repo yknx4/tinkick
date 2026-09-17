@@ -1,0 +1,21 @@
+module Tinkick
+  type aggregation_zoned_time = Time | ActiveSupport::TimeWithZone
+
+  class AggregationDate
+    @now: Time
+    @offset: Integer
+    @zone: ActiveSupport::TimeZone?
+
+    def initialize: (?time_zone: String?, ?now: Time) -> void
+    def parse: (aggregation_range_bound value) -> Float?
+    def format: (Float value) -> String
+
+    private
+
+    def local_time: (Time instant) -> aggregation_zoned_time
+    def local_date: (Integer year, Integer month, Integer day, ?Integer hour, ?Integer minute, ?Integer | Rational second) -> aggregation_zoned_time
+    def parse_iso8601: (String value) -> aggregation_zoned_time
+    def calculate: (aggregation_zoned_time instant, String math) -> aggregation_zoned_time
+    def round: (aggregation_zoned_time instant, String unit) -> aggregation_zoned_time
+  end
+end

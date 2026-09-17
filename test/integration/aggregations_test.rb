@@ -283,6 +283,30 @@ class AggregationsTest < TinkickIntegrationTest
       .call(recorded_at: { date_ranges: [{}] }).fetch("recorded_at").fetch("buckets").fetch(0).fetch("doc_count")
   end
 
+  def test_date_range_time_zone_and_math_control_boundaries_and_output
+    create_date_values
+    evaluator = Tinkick::Aggregations.new(AggregationDateValue, AggregationDateValue.where("name ==> ?", "chronicle"))
+    result = evaluator.call(recorded_at: { time_zone: "+01:00", date_ranges: [{ from: "2026-01-02||/d", to: "2026-01-02||+1d/d" }] })
+      .fetch("recorded_at").fetch("buckets").fetch(0)
+
+    assert_equal 3, result.fetch("doc_count")
+    assert_equal Time.utc(2026, 1, 1, 23).to_i * 1_000, result.fetch("from")
+    assert_equal "2026-01-02T00:00:00.000+01:00", result.fetch("from_as_string")
+    assert_equal "2026-01-03T00:00:00.000+01:00", result.fetch("to_as_string")
+  end
+
+  def test_date_range_iana_zone_preserves_instants_in_explicit_offset_bounds
+    create_date_values
+    evaluator = Tinkick::Aggregations.new(AggregationDateValue, AggregationDateValue.where("name ==> ?", "chronicle"))
+    result = evaluator.call(recorded_at: { time_zone: "America/New_York", date_ranges: [{ from: "2026-01-02T01:00:00+01:00", to: "2026-01-03T00:00:00Z" }] })
+      .fetch("recorded_at").fetch("buckets").fetch(0)
+
+    assert_equal 2, result.fetch("doc_count")
+    assert_equal "2026-01-01T19:00:00.000-05:00", result.fetch("from_as_string")
+    assert_raises(ArgumentError) { evaluator.call(recorded_at: { time_zone: "Not/A_Zone", date_ranges: [{}] }) }
+    assert_raises(ArgumentError) { aggregate(id: { time_zone: "UTC", ranges: [{}] }) }
+  end
+
   private
 
   def create_date_values

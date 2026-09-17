@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "filter"
+require_relative "aggregation_date"
 
 module Tinkick
   class Aggregations
@@ -8,6 +9,7 @@ module Tinkick
       @model = model
       @scope = scope.except(:select, :order, :limit, :offset)
       @dictionary_scope = dictionary_scope.except(:select, :order, :limit, :offset)
+      @now = Time.now
     end
 
     def call(spec)
@@ -27,7 +29,7 @@ module Tinkick
 
         # @type var metric_names: Array[aggregation_metric_name]
         metric_names = [:avg, :cardinality, :max, :min, :sum]
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :keyed, *metric_names]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :keyed, :time_zone, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
         metrics = metric_names.select { |metric| options.key?(metric) }
@@ -35,6 +37,7 @@ module Tinkick
         range_kinds = [:ranges, :date_ranges].select { |kind| options.key?(kind) }
         raise ArgumentError, "Each aggregation must select only one range kind or metric" if range_kinds.length + metrics.length > 1
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
+        raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
 
         result = if options.key?(:date_ranges)
           range_aggregation((options[:field] || name).to_s, options.fetch(:date_ranges), options, dates: true)
@@ -124,14 +127,15 @@ module Tinkick
       raise ArgumentError, "ranges must be a nonempty array" unless ranges.is_a?(Array) && !ranges.empty?
       raise ArgumentError, "keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
 
+      date_values = dates ? AggregationDate.new(time_zone: options[:time_zone], now: @now) : nil
       buckets = ranges.map do |range|
         unless range.is_a?(Hash) && (range.keys - [:from, :to, :key]).empty?
           raise ArgumentError, "Each range must contain only from, to, or key"
         end
-        lower = dates ? date_bound(range[:from]) : numeric_bound(range[:from])
-        upper = dates ? date_bound(range[:to]) : numeric_bound(range[:to])
-        lower_text = dates && lower ? date_string(lower) : lower&.to_s
-        upper_text = dates && upper ? date_string(upper) : upper&.to_s
+        lower = date_values ? date_values.parse(range[:from]) : numeric_bound(range[:from])
+        upper = date_values ? date_values.parse(range[:to]) : numeric_bound(range[:to])
+        lower_text = date_values && lower ? date_values.format(lower) : lower&.to_s
+        upper_text = date_values && upper ? date_values.format(upper) : upper&.to_s
         key = range[:key]
         raise ArgumentError, "Range key must be a string" unless key.nil? || key.is_a?(String)
 
@@ -201,32 +205,6 @@ module Tinkick
       number
     rescue TypeError
       raise ArgumentError, "Range bounds must be finite numbers"
-    end
-
-    def date_bound(value)
-      return if value.nil?
-      return numeric_bound(value) if value.is_a?(Numeric)
-
-      instant = case value
-      when Time then value
-      when DateTime then value.to_time
-      when Date then Time.utc(value.year, value.month, value.day)
-      when String
-        parsed_date = Date.iso8601(value)
-        if /\A\d{4}-\d{2}-\d{2}\z/.match?(value)
-          Time.utc(parsed_date.year, parsed_date.month, parsed_date.day)
-        else
-          suffix = /(?:Z|[+-]\d{2}(?::?\d{2})?)\z/i.match?(value) ? "" : "Z"
-          Time.iso8601(value + suffix)
-        end
-      else
-        raise ArgumentError, "Date range bounds must be Date, Time, ISO8601 strings, or epoch milliseconds"
-      end
-      (instant.to_r * 1_000).to_f
-    end
-
-    def date_string(value)
-      Time.at(Rational(value.to_s) / 1_000).utc.iso8601(3)
     end
 
     def values_relation(scope, field, unique: true)

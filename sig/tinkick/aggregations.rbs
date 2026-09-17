@@ -9,7 +9,7 @@ module Tinkick
 
   type aggregation_range_options = { ?from: aggregation_range_bound, ?to: aggregation_range_bound, ?key: String }
 
-  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?keyed: bool, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
+  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?keyed: bool, ?time_zone: String, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
 
   type aggregation_spec = Array[String | Symbol] | Hash[String | Symbol, aggregation_options]
 
@@ -31,6 +31,7 @@ module Tinkick
     @model: singleton(ActiveRecord::Base)
     @scope: ActiveRecord::Relation
     @dictionary_scope: ActiveRecord::Relation
+    @now: Time
 
     def initialize: (singleton(ActiveRecord::Base) model, ActiveRecord::Relation scope, ?dictionary_scope: ActiveRecord::Relation) -> void
 
@@ -45,10 +46,6 @@ module Tinkick
     def range_aggregation: (String field, Array[aggregation_range_options] ranges, aggregation_options options, ?dates: bool) -> aggregation_ranges
 
     def numeric_bound: (aggregation_range_bound value) -> Float?
-
-    def date_bound: (aggregation_range_bound value) -> Float?
-
-    def date_string: (Float value) -> String
 
     def values_relation: (ActiveRecord::Relation scope, String field, ?unique: bool) -> ActiveRecord::Relation
 
