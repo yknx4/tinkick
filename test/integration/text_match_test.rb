@@ -129,7 +129,7 @@ class TextMatchTest < TinkickIntegrationTest
     assert_empty ids("rde app", :text_start, misspellings: { transpositions: false })
     assert_empty ids("rde app", :text_start, misspellings: { prefix_length: 2 })
     assert_equal expected, ids("red applx", :text_start, misspellings: { distance: 1 })
-    assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: 2 }) }
+    assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: 3 }) }
   end
 
   def test_fuzzy_text_normalizes_accents_and_preserves_literal_regex_characters
@@ -163,6 +163,79 @@ class TextMatchTest < TinkickIntegrationTest
       assert_empty ids("😀" * 52, mode, misspellings: true)
       assert_empty ids("", mode, misspellings: true)
     end
+  end
+
+  def test_two_edit_text_matches_candidate_grams_in_all_positions
+    expected = [tinkick_test_products(:red_apple).id]
+
+    [:text_start, :text_middle, :text_end].each do |mode|
+      assert_equal expected, ids("rxx apple", mode, misspellings: { edit_distance: 2 })
+      assert_empty ids("rxx apple", mode, misspellings: true)
+      assert_empty ids("rxx apxle", mode, misspellings: { edit_distance: 2 })
+    end
+  end
+
+  def test_two_edit_text_honors_transpositions_and_fixed_prefix
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "abcdef")
+
+    assert_equal [product.id], ids("badcef", :text_start, misspellings: { edit_distance: 2 })
+    assert_empty ids("badcef", :text_start, misspellings: { edit_distance: 2, transpositions: false })
+    assert_empty ids("badcef", :text_start, misspellings: { edit_distance: 2, prefix_length: 1 })
+    assert_equal [product.id], ids("abcdfe", :text_start, misspellings: { edit_distance: 2, prefix_length: 4 })
+    assert_equal [product.id], ids("abcdef", :text_start, misspellings: { edit_distance: 2, prefix_length: 20 })
+  end
+
+  def test_two_edit_text_enumerates_infix_positions_and_normalizes_unicode
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "first\nJalapeño\nlast")
+
+    assert_equal [product.id], ids("XALAPENA", :text_middle, misspellings: { edit_distance: 2 })
+    assert_empty ids("XALAPENA", :text_start, misspellings: { edit_distance: 2 })
+    assert_empty ids("XALAPENA", :text_end, misspellings: { edit_distance: 2 })
+    assert_empty ids("' OR true --", :text_middle, misspellings: { edit_distance: 2 })
+    product.update!(description: nil)
+    assert_empty ids("apple", :text_middle, column: :description, misspellings: { edit_distance: 2 })
+  end
+
+  def test_two_edit_text_preserves_the_fifty_codepoint_gram_limit
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "😀" * 60)
+
+    [:text_start, :text_middle, :text_end].each do |mode|
+      assert_equal [product.id], ids("😀" * 52, mode, misspellings: { edit_distance: 2 })
+      assert_empty ids("😀" * 53, mode, misspellings: { edit_distance: 2 })
+    end
+    assert_equal [product.id], ids("😀" * 52, :text_start, misspellings: { edit_distance: 2, transpositions: false })
+  end
+
+  def test_fuzzy_text_requires_positive_scaled_similarity_for_short_grams
+    product = tinkick_test_products(:red_apple)
+    product.update!(name: "ab")
+    tinkick_test_products(:green_pear).update!(name: "zz")
+
+    [1, 2].each do |distance|
+      assert_equal [product.id], ids("a", :text_start, misspellings: { edit_distance: distance })
+      assert_empty ids("b", :text_start, misspellings: { edit_distance: distance })
+      assert_equal [product.id], ids("b", :text_end, misspellings: { edit_distance: distance })
+    end
+    assert_empty ids("abcd", :text_start, misspellings: { edit_distance: 2 })
+
+    product.update!(name: "a")
+    [1, 2].each { |distance| assert_empty ids("ab", :text_start, misspellings: { edit_distance: distance }) }
+  end
+
+  def test_two_edit_text_warns_about_gram_enumeration_and_distance_cost
+    original_logger = SearchProduct.logger
+    output = StringIO.new
+    SearchProduct.logger = Logger.new(output)
+
+    ids("rxx apple", :text_middle, misspellings: { edit_distance: 2 })
+
+    assert_includes output.string, "enumerates candidate grams"
+    assert_includes output.string, "edit-distance comparisons"
+  ensure
+    SearchProduct.logger = original_logger
   end
 
   private

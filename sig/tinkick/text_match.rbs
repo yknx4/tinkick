@@ -10,6 +10,8 @@ module Tinkick
 
     private
 
+    def distance_predicate: (String column_sql, String term, Symbol match, Integer prefix, bool transpositions) -> predicate
+
     def fuzzy_pattern: (String term, Symbol match, Integer prefix, bool transpositions) -> String?
 
     def fuzzy_settings: (QueryText::misspellings options) -> [ Integer, Integer, bool ]
