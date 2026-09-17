@@ -9,7 +9,9 @@ module Tinkick
 
   type aggregation_range_options = { ?from: aggregation_range_bound, ?to: aggregation_range_bound, ?key: String }
 
-  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?keyed: bool, ?time_zone: String, ?format: String, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
+  type aggregation_histogram_options = { ?field: String | Symbol, interval: Numeric, ?offset: Numeric, ?min_doc_count: Integer, ?order: aggregation_order, ?keyed: bool }
+
+  type aggregation_options = { ?field: String | Symbol, ?limit: Integer, ?order: aggregation_order, ?min_doc_count: Integer, ?where: filter_conditions, ?ranges: Array[aggregation_range_options], ?date_ranges: Array[aggregation_range_options], ?histogram: aggregation_histogram_options, ?keyed: bool, ?time_zone: String, ?format: String, ?avg: aggregation_metric_options, ?cardinality: aggregation_metric_options, ?max: aggregation_metric_options, ?min: aggregation_metric_options, ?sum: aggregation_metric_options }
 
   type aggregation_spec = Array[String | Symbol] | Hash[String | Symbol, aggregation_options]
 
@@ -25,7 +27,11 @@ module Tinkick
 
   type aggregation_ranges = { "buckets" => Array[aggregation_range_bucket] | Hash[String, aggregation_keyed_range_bucket], ?"doc_count" => Integer }
 
-  type aggregation_result = aggregation_terms | aggregation_metric | aggregation_ranges
+  type aggregation_histogram_bucket = { "key" => Float, "doc_count" => Integer }
+
+  type aggregation_histogram = { "buckets" => Array[aggregation_histogram_bucket] | Hash[String, aggregation_histogram_bucket], ?"doc_count" => Integer }
+
+  type aggregation_result = aggregation_terms | aggregation_metric | aggregation_ranges | aggregation_histogram
 
   class Aggregations
     @model: singleton(ActiveRecord::Base)
@@ -38,6 +44,8 @@ module Tinkick
     def call: (aggregation_spec spec) -> Hash[String, aggregation_result]
 
     private
+
+    def numeric_histogram: (String field, aggregation_histogram_options options, filter_conditions? conditions) -> aggregation_histogram
 
     def terms: (String field, aggregation_options options) -> aggregation_terms
 

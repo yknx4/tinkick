@@ -29,18 +29,29 @@ module Tinkick
 
         # @type var metric_names: Array[aggregation_metric_name]
         metric_names = [:avg, :cardinality, :max, :min, :sum]
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :keyed, :time_zone, :format, *metric_names]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :histogram, :keyed, :time_zone, :format, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
         metrics = metric_names.select { |metric| options.key?(metric) }
         raise ArgumentError, "Each aggregation must select only one metric" if metrics.length > 1
         range_kinds = [:ranges, :date_ranges].select { |kind| options.key?(kind) }
-        raise ArgumentError, "Each aggregation must select only one range kind or metric" if range_kinds.length + metrics.length > 1
+        if range_kinds.length + metrics.length + (options.key?(:histogram) ? 1 : 0) > 1
+          raise ArgumentError, "Each aggregation must select only one range kind, histogram, or metric"
+        end
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
         raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
         raise ArgumentError, "format applies only to date aggregations" if options.key?(:format) && !options.key?(:date_ranges)
 
-        result = if options.key?(:date_ranges)
+        result = if options.key?(:histogram)
+          outer = options.keys - [:histogram, :where]
+          unless outer.empty?
+            raise ArgumentError, "Histogram settings must be inside histogram:; only where: may accompany it (unsupported outer options: #{outer.join(", ")})"
+          end
+          settings = options.fetch(:histogram)
+          raise ArgumentError, "histogram must be an options hash" unless settings.is_a?(Hash)
+
+          numeric_histogram((settings[:field] || name).to_s, settings, options[:where])
+        elsif options.key?(:date_ranges)
           range_aggregation((options[:field] || name).to_s, options.fetch(:date_ranges), options, dates: true)
         elsif options.key?(:ranges)
           range_aggregation((options[:field] || name).to_s, options.fetch(:ranges), options)
@@ -59,6 +70,51 @@ module Tinkick
     end
 
     private
+
+    def numeric_histogram(field, options, conditions)
+      unknown = options.keys - [:field, :interval, :offset, :min_doc_count, :order, :keyed]
+      raise ArgumentError, "Unknown histogram options: #{unknown.join(", ")}" unless unknown.empty?
+
+      interval = numeric_bound(options[:interval])
+      offset = numeric_bound(options.fetch(:offset, 0))
+      raise ArgumentError, "Histogram interval must be positive and offset must be numeric" unless interval && interval.positive? && offset
+
+      minimum = options.fetch(:min_doc_count, 0)
+      raise ArgumentError, "Histogram min_doc_count must be a nonnegative integer" unless minimum.is_a?(Integer) && minimum >= 0
+      raise ArgumentError, "Histogram keyed must be true or false" unless [true, false].include?(options.fetch(:keyed, false))
+
+      scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
+      values = values_relation(scope, field)
+      unless [:integer, :decimal, :float].include?(@model.columns_hash.fetch(field).type)
+        raise InvalidQueryError, "histogram requires a numeric aggregation column"
+      end
+      ordinals = @model.unscoped.from(values, :tinkick_values)
+        .where(Arel.sql("_tinkick_value IS NOT NULL"))
+        .select(Arel.sql("FLOOR((_tinkick_value::double precision - ?) / ?) AS _tinkick_ordinal, _tinkick_document_id", offset, interval))
+      counts = @model.unscoped.from(ordinals, :tinkick_ordinals)
+        .group(Arel.sql("_tinkick_ordinal"))
+        .select(Arel.sql("_tinkick_ordinal, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count"))
+      query = if minimum.zero?
+        @model.logger&.warn("Tinkick: histogram min_doc_count: 0 generates empty buckets across the matching numeric range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
+        @model.unscoped.with(tinkick_histogram_counts: counts)
+          .from("(SELECT MIN(_tinkick_ordinal)::numeric AS lower, MAX(_tinkick_ordinal)::numeric AS upper FROM tinkick_histogram_counts) AS tinkick_bounds")
+          .joins("CROSS JOIN LATERAL generate_series(lower, upper, 1) AS tinkick_series(_tinkick_ordinal)")
+          .joins("LEFT JOIN tinkick_histogram_counts USING (_tinkick_ordinal)")
+          .select(Arel.sql("_tinkick_ordinal::double precision * ? + ? AS _tinkick_key, COALESCE(_tinkick_count, 0) AS _tinkick_count", interval, offset))
+      else
+        @model.unscoped.from(counts, :tinkick_histogram_counts)
+          .where(Arel.sql("_tinkick_count >= ?", minimum))
+          .select(Arel.sql("_tinkick_ordinal * ? + ? AS _tinkick_key, _tinkick_count", interval, offset))
+      end
+      query = query.order(Arel.sql(order_sql(options.fetch(:order, { _key: :asc }))))
+      # @type var rows: Array[{ "_tinkick_key" => Float, "_tinkick_count" => Integer }]
+      rows = @model.with_connection { |connection| connection.select_all(query).to_a }
+      buckets = rows.map { |row| { "key" => row.fetch("_tinkick_key"), "doc_count" => row.fetch("_tinkick_count") } }
+      # @type var result: aggregation_histogram
+      result = { "buckets" => options[:keyed] ? buckets.to_h { |bucket| [bucket.fetch("key").to_s, bucket] } : buckets }
+      result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
+      result
+    end
 
     def terms(field, options)
       limit = options.fetch(:limit, 1_000)
