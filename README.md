@@ -792,8 +792,8 @@ use their whole-field matching rules. Tinkick escapes literal input and follows
 the indexed field's tokenizer options. A single native field combines the
 negative phrase in the TIN query and retains top-k ranking. Multi-field,
 match-all, and refined fuzzy paths use matching-ID subqueries to preserve
-NULL/missing fields and log their additional cost. Demotion through `boost_where`
-remains adapter work.
+NULL/missing fields and log their additional cost. Use `boost_where` with a
+fractional factor to demote matching records without excluding them.
 
 ## Boosting, conversions, and personalization
 
@@ -888,7 +888,34 @@ rows are not scored, and counts do not evaluate the boost. Recursive traversal
 adds work per row; persist frequently used ranking values in typed columns when
 that improves the measured plan. Updates are visible immediately without reindexing.
 
-`boost_where`, `boost_by_recency`, `boost_by_distance`, `indices_boost`, and
+Conditional weights support the same SQL field predicates as filtering:
+
+```ruby
+Product.search("coffee", boost_where: {in_stock: true})
+Product.search("coffee", boost_where: {
+  category: [{value: "featured", factor: 5}, {value: "clearance", factor: 0.25}]
+})
+Product.search("coffee").boost_where(in_stock: true).boost_where(category: {value: "featured", factor: 5})
+```
+
+The shorthand weight is 1,000. Explicit factors accept nonnegative numbers or
+numeric strings; factors between zero and one demote matching records. All
+matching conditional weights are summed with the default `boost_by` contributions,
+then multiply the native score. Records with no applicable contribution keep
+their original score. A zero conditional weight adds no contribution, so zero
+alone does not remove a record or zero its score. Repeated fluent calls merge
+fields, with the later condition replacing the earlier one for the same field.
+
+Conditions may use NULLs, arrays, ranges, JSONB paths and supported filter
+operators. A `{value:, factor:}` descriptor uses `value` as its filter condition.
+These predicates change scoring only: matching records, counts and aggregation
+membership stay unchanged. They require no additional extension beyond those
+needed by the selected filter operators. Conditional scoring logs a warning
+because evaluating predicates and sorting matches can replace native TIN top-k;
+inspect `EXPLAIN (ANALYZE, BUFFERS)` on representative data. Native single-precision
+scores and SQL arithmetic may expose different numbers of decimal digits.
+
+`boost_by_recency`, `boost_by_distance`, `indices_boost`, and
 `conversions`/`conversions_v2` remain adapter work.
 
 Recipe: rank a bounded SQL search with application-owned numeric weights:
