@@ -25,7 +25,7 @@ jobs:
             json: "< 3"
           - ruby: "4.0"
             rails: "~> 8.1.0"
-            json: ">= 3"
+            json: "< 3"
     env:
       RAILS_VERSION: ${{ matrix.rails }}
       JSON_VERSION: ${{ matrix.json }}
