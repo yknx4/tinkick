@@ -1,0 +1,11 @@
+# frozen_string_literal: true
+
+class EnableTinForTinkick < ActiveRecord::Migration[8.0]
+  def up
+    enable_extension "tin"
+  end
+
+  def down
+    raise ActiveRecord::IrreversibleMigration, "TIN may be used by other indexes; remove it manually if no longer needed."
+  end
+end

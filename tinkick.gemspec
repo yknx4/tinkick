@@ -15,7 +15,7 @@ Gem::Specification.new do |spec|
   spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
   spec.metadata["rubygems_mfa_required"] = "true"
 
-  spec.files = Dir["lib/**/*.rb", "sig/**/*.rbs", "docs/**/*.md", "README.md", "CHANGELOG.md", "LICENSE.txt"]
+  spec.files = Dir["lib/**/*.rb", "lib/**/*.tt", "sig/**/*.rbs", "docs/**/*.md", "README.md", "CHANGELOG.md", "LICENSE.txt"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency("activerecord", ">= 8.0")
