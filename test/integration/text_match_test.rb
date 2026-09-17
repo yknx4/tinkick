@@ -235,6 +235,21 @@ class TextMatchTest < TinkickIntegrationTest
     end
   end
 
+  def test_two_edit_text_normalizes_each_source_row_once
+    sql, values = Tinkick::TextMatch.new(SearchProduct).predicate('"name"', "zxqxz", match: :text_middle, misspellings: { edit_distance: 2 })
+    relation = SearchProduct.where(Arel.sql(sql, *values)).select(:id)
+    plan_json = SearchProduct.connection.select_value("EXPLAIN (ANALYZE, VERBOSE, FORMAT JSON) #{relation.to_sql}")
+    plan = JSON.parse(plan_json).first.fetch("Plan")
+    normalizations = plan_nodes(plan).select do |node|
+      node.fetch("Node Type") == "Result" && node.fetch("Output", []).any? { |output| output.include?("unaccent(lower(") }
+    end
+
+    assert_equal 0, plan.fetch("Actual Rows")
+    assert_equal 1, normalizations.length
+    assert_equal 1, normalizations.first.fetch("Actual Rows")
+    assert_equal SearchProduct.count, normalizations.first.fetch("Actual Loops")
+  end
+
   def test_two_edit_text_warns_about_gram_enumeration_and_distance_cost
     original_logger = SearchProduct.logger
     output = StringIO.new
@@ -249,6 +264,10 @@ class TextMatchTest < TinkickIntegrationTest
   end
 
   private
+
+  def plan_nodes(node)
+    [node] + node.fetch("Plans", []).flat_map { |child| plan_nodes(child) }
+  end
 
   def ids(term, match, column: :name, misspellings: false)
     column_sql = SearchProduct.connection.quote_column_name(column)

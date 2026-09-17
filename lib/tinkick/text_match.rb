@@ -58,10 +58,11 @@ module Tinkick
       when :text_end then "char_length(tinkick_text.value) - tinkick_lengths.length + 1"
       else "tinkick_offsets.position"
       end
+      # Keep field normalization outside the candidate loops when PostgreSQL plans this subquery.
       sql = <<~SQL
         EXISTS (
           SELECT 1
-          FROM (SELECT #{column_sql} AS value) AS tinkick_text
+          FROM (SELECT #{column_sql} AS value OFFSET 0) AS tinkick_text
           CROSS JOIN LATERAL generate_series(#{minimum}, LEAST(#{maximum}, char_length(tinkick_text.value))) AS tinkick_lengths(length)
           #{positions}
           CROSS JOIN LATERAL (SELECT substring(tinkick_text.value FROM #{position} FOR tinkick_lengths.length) AS value) AS tinkick_grams
