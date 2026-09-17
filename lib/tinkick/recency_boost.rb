@@ -81,9 +81,7 @@ module Tinkick
     def date_origin(value)
       raise ArgumentError, "boost_by_recency date origin cannot be nil" if value.nil?
 
-      # DecayFunctionBuilder reads numeric JSON origins as text before date parsing.
-      value = value.to_s if value.is_a?(Numeric)
-      result = AggregationDate.new(now: @now).parse(value)
+      result = AggregationDate.new.parse(value)
       unless result && result.finite? && result.between?(-MAX_MILLISECONDS - 1, MAX_MILLISECONDS)
         raise ArgumentError, "boost_by_recency date origin must fit in signed 64-bit epoch milliseconds"
       end

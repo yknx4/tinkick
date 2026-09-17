@@ -42,9 +42,9 @@ class RecencyBoostTest < TinkickIntegrationTest
     assert_equal values.fetch(past.id), values.fetch(future.id)
   end
 
-  def test_date_time_epoch_and_date_math_origins_have_the_same_meaning
+  def test_date_time_and_epoch_origins_have_the_same_meaning
     row = cursor("Origin", at: NOW - 86_400)
-    origins = [NOW, NOW.to_datetime, NOW.iso8601, (NOW.to_r * 1_000).to_i, "now", "2026-09-16T12:00:00Z||+1d", "now/d+12h"]
+    origins = [NOW, NOW.to_datetime, NOW.iso8601, (NOW.to_r * 1_000).to_i]
     origins.each do |origin|
       assert_in_delta 0.5, scores(recorded_at: { origin: origin, scale: "1d" }).fetch(row.id), 0.000001, origin.inspect
     end
@@ -56,7 +56,7 @@ class RecencyBoostTest < TinkickIntegrationTest
     values = scores(recorded_at: { origin: 0, scale: "1ms" })
 
     assert_in_delta 0.5, values.fetch(row.id), 0.000001
-    assert_in_delta 1, scores(recorded_at: { origin: "-0.1", scale: "1ms" }).fetch(row.id), 0.000001
+    assert_in_delta 1, scores(recorded_at: { origin: -0.1, scale: "1ms" }).fetch(row.id), 0.000001
   end
 
   def test_date_arrays_choose_the_nearest_value_not_the_earliest
@@ -161,7 +161,7 @@ class RecencyBoostTest < TinkickIntegrationTest
 
   def test_hostile_field_and_origin_values_never_become_sql
     assert_raises(Tinkick::MissingFieldError) { compiler("recorded_at); SELECT 1; --" => { scale: "1d" }) }
-    assert_raises(ArgumentError) { compiler(recorded_at: { origin: "now'); SELECT 1; --", scale: "1d" }) }
+    assert_raises(ArgumentError) { compiler(recorded_at: { origin: "hostile'); SELECT 1; --", scale: "1d" }) }
     assert_raises(ArgumentError) { compiler(price: { origin: "1); SELECT 1; --", scale: 1 }) }
     assert_equal 2, SearchProduct.count
   end
@@ -188,7 +188,15 @@ class RecencyBoostTest < TinkickIntegrationTest
     CursorValue.logger = original_logger
   end
 
+  def test_date_math_origins_require_application_computed_times
+    ["now", "now/d+12h", "2026-09-16T12:00:00Z||+1d"].each do |origin|
+      error = assert_raises(Tinkick::NotImplementedError) { compiler(recorded_at: { origin: origin, scale: "1d" }) }
+      assert_includes error.message, "Compute a Time or Date boundary"
+    end
+  end
+
   private
+
 
   def cursor(name, at: NOW, price: 0, times: nil)
     CursorValue.create!(name: name, recorded_at: at, recorded_on: "2026-09-17", price: price, recorded_times: times,
