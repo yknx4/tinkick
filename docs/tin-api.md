@@ -185,6 +185,15 @@ not escaped. Empty or invalid explicit highlight queries sometimes returned
 unmodified text instead of the parse error raised by `==>`; highlighting must
 not serve as a query validator.
 
+A later isolated test on TIN 1.0.2 used a whitespace index with case and accent
+preservation. Implicit highlighting raised SQLSTATE `XX000`: nondefault index
+tokenization requires an explicit query. Explicit indexed-column highlighting
+still used default analysis: `MATCHES FooBar` did not mark the preserved matching
+token, while `MATCHES jalapeno` also marked accented/case variants. Supplying an
+explicit query therefore does not establish analyzer-equivalent highlighting.
+The public adapter needs a separate verified path for these settings; this
+observation does not make all custom-analysis highlighting impossible.
+
 Default scoring, full scoring, and disabled dense-term elision each returned
 `0.9517491` for the two visible apple/pear matches during the probe. That is
 not a stable expected value: previous writes affect retained corpus statistics.

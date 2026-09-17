@@ -849,7 +849,8 @@ offset 5, hard min 0, and extended min 0 can emit an empty bucket at -5. Use
 explicit input filters when a value range must restrict matching records.
 
 Date ranges accept `Date`, `Time`, ISO8601 strings, or epoch-millisecond bounds.
-`time_zone` accepts an IANA name or a fixed `+HH:MM`/`-HH:MM` offset; UTC is the
+`time_zone` accepts an IANA name, a fixed ISO offset, or numeric hours (truncated
+toward zero); UTC is the
 default. Output strings include milliseconds and the selected zone. Explicit
 input offsets and epoch values preserve their instant.
 
@@ -888,7 +889,7 @@ when small numbers must mean milliseconds. Missing custom date components use
 1970-01-01 and midnight. Locale names, week/era tokens, optional pattern sections,
 and fractions beyond three custom digits remain adapter work.
 
-UTC calendar date histograms count matching records independently of result
+Calendar date histograms count matching records independently of result
 pagination and fill intervening empty buckets by default:
 
 ```ruby
@@ -907,10 +908,19 @@ on both sides of 1970. `micros` and `nanos` durations truncate to whole
 milliseconds and must be at least one millisecond. Fractional quantities and
 calendar units such as months are invalid fixed durations.
 
+Date histograms default to UTC and accept fixed `time_zone` offsets, such as
+`"+01:30"`, `"-05:00"`, or numeric `-5`, inside `date_histogram:`. Buckets round
+on that local time grid; `key` remains UTC epoch milliseconds and
+`key_as_string` displays the local boundary. Calendar gaps advance in local
+calendar time, preserving month starts across February. Offsets may include
+seconds, though the upstream-compatible default label prints only offset hours
+and minutes. Fixed offsets are limited to ±18 hours. IANA histogram zones and
+their daylight-saving transitions remain adapter work.
+
 Put `min_doc_count`, `order`, and `keyed` inside `date_histogram:`;
 only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
 avoid generating empty buckets. The default logs a warning for small intervals
-over wide date ranges. Explicit zones, offsets, bounds, custom
+over wide date ranges. Bucket `offset`, bounds, custom
 formats, nested aggregations, and additional aggregate options remain adapter
 implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
