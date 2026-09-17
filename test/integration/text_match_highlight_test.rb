@@ -32,26 +32,11 @@ class TextMatchHighlightTest < Minitest::Test
     assert_equal [nil, nil], matches([text, "Unrelated town"], "' OR true --", :exact)
   end
 
-  def test_fuzzy_modes_reuse_the_same_edit_distance_prefix_and_transposition_rules
-    [:text_start, :text_middle, :text_end].each do |mode|
-      texts = ["Red Apple", "Distant village", nil]
-      assert_equal [nil, nil, nil], matches(texts, "rxx apple", mode, misspellings: true)
-      assert_equal ["Red Apple", nil, nil], matches(texts, "rxx apple", mode, misspellings: { edit_distance: 2 })
-    end
-
-    texts = ["abcdef", "badcef"]
-    assert_equal texts, matches(texts, "badcef", :text_start, misspellings: { edit_distance: 2 })
-    assert_equal [nil, "badcef"], matches(texts, "badcef", :text_start, misspellings: { edit_distance: 2, transpositions: false })
-    assert_equal [nil, "badcef"], matches(texts, "badcef", :text_start, misspellings: { edit_distance: 2, prefix_length: 1 })
-  end
-
-  def test_candidate_grams_retain_the_fifty_codepoint_boundary
+  def test_native_like_highlights_long_literal_values
     text = "😀" * 60
     [:text_start, :text_middle, :text_end].each do |mode|
       assert_equal [text], matches([text], "😀" * 50, mode)
-      assert_equal [nil], matches([text], "😀" * 51, mode)
-      assert_equal [text], matches([text], "😀" * 52, mode, misspellings: { edit_distance: 2 })
-      assert_equal [nil], matches([text], "😀" * 53, mode, misspellings: { edit_distance: 2 })
+      assert_equal [text], matches([text], "😀" * 51, mode)
       assert_equal [nil, nil, nil], matches([text, "", nil], "", mode)
     end
   end

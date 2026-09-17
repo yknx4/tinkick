@@ -45,13 +45,8 @@ module Tinkick
           settings = @settings.merge(overrides) #: highlight_settings
           matching = @query.highlight_matches(name, texts: texts)
           whole_fields = highlighter.whole_fields(matching, **settings)
-          spans = @query.highlight_spans(name, texts: texts)
-          values = if spans
-            highlighter.fragments_from_spans(texts, spans, **settings)
-          else
-            query = @query.highlight_query(name, texts: texts)
-            highlighter.fragments_many(texts, query, **settings)
-          end
+          query = @query.highlight_query(name)
+          values = highlighter.fragments_many(texts, query, **settings)
           values.each_with_index do |fragments, index|
             complete = whole_fields.fetch(index)
             fragments = complete unless complete.empty?

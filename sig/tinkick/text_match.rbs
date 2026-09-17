@@ -14,10 +14,6 @@ module Tinkick
 
     def normalize_sql: (String expression, bool case_sensitive, String? function) -> String
 
-    def distance_predicate: (String column_sql, String term, Symbol match, Integer prefix, bool transpositions) -> predicate
-
-    def fuzzy_pattern: (String term, Symbol match, Integer prefix, bool transpositions) -> String?
-
-    def fuzzy_settings: (QueryText::misspellings options) -> [ Integer, Integer, bool ]
+    def validate_misspellings!: (QueryText::misspellings options) -> void
   end
 end

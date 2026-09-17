@@ -64,18 +64,18 @@ class TextMatchTest < TinkickIntegrationTest
     assert_equal [product.id], ids(" ", :text_middle, column: :description)
   end
 
-  def test_uses_normalized_unicode_codepoints_for_the_fifty_character_limit
+  def test_native_like_has_no_elasticsearch_ngram_length_limit
     product = tinkick_test_products(:red_apple)
     product.update!(name: "😀" * 60)
 
     [:text_start, :text_middle, :text_end].each do |mode|
       assert_equal [product.id], ids("😀" * 50, mode)
-      assert_empty ids("😀" * 51, mode)
+      assert_equal [product.id], ids("😀" * 51, mode)
     end
 
     product.update!(name: "Æ" * 30)
     assert_equal [product.id], ids("Æ" * 25, :text_start)
-    assert_empty ids("Æ" * 26, :text_start)
+    assert_equal [product.id], ids("Æ" * 26, :text_start)
   end
 
   def test_zero_edit_distance_is_literal
@@ -109,165 +109,7 @@ class TextMatchTest < TinkickIntegrationTest
     SearchProduct.logger = original_logger
   end
 
-  def test_fuzzy_text_matches_substitution_insertion_deletion_and_swaps
-    expected = [tinkick_test_products(:red_apple).id]
-
-    assert_equal expected, ids("rex app", :text_start, misspellings: true)
-    assert_equal expected, ids("re app", :text_start, misspellings: true)
-    assert_equal expected, ids("redd app", :text_start, misspellings: true)
-    assert_equal expected, ids("rde app", :text_start, misspellings: true)
-    assert_equal expected, ids("d xp", :text_middle, misspellings: true)
-    assert_equal expected, ids("aplpe", :text_end, misspellings: true)
-    assert_empty ids("rxx app", :text_start, misspellings: true)
-  end
-
-  def test_fuzzy_text_honors_fixed_prefix_and_transposition_settings
-    expected = [tinkick_test_products(:red_apple).id]
-
-    assert_empty ids("xed ap", :text_start, misspellings: { prefix_length: 1 })
-    assert_equal expected, ids("rex ap", :text_start, misspellings: { prefix_length: 2 })
-    assert_empty ids("rde app", :text_start, misspellings: { transpositions: false })
-    assert_empty ids("rde app", :text_start, misspellings: { prefix_length: 2 })
-    assert_equal expected, ids("red applx", :text_start, misspellings: { distance: 1 })
-    assert_raises(ArgumentError) { ids("red", :text_start, misspellings: { edit_distance: 3 }) }
-  end
-
-  def test_fuzzy_text_normalizes_accents_and_preserves_literal_regex_characters
-    product = tinkick_test_products(:red_apple)
-    product.update!(name: "Jalapeño (a|b).* 😀x😀")
-
-    assert_equal [product.id], ids("JALAPENA", :text_start, misspellings: true)
-    assert_equal [product.id], ids("(a|b).x", :text_middle, misspellings: true)
-    assert_equal [product.id], ids("😀y😀", :text_end, misspellings: true)
-    assert_empty ids("(?s).*", :text_middle, misspellings: true)
-    assert_empty ids("' OR true --", :text_middle, misspellings: true)
-  end
-
-  def test_fuzzy_text_uses_absolute_field_anchors_and_can_edit_newlines
-    product = tinkick_test_products(:red_apple)
-    product.update!(name: "Header\nRed Apple\nFooter")
-
-    assert_empty ids("rex app", :text_start, misspellings: true)
-    assert_empty ids("red applx", :text_end, misspellings: true)
-    assert_equal [product.id], ids("headerxred", :text_start, misspellings: true)
-    assert_equal [product.id], ids("applexfooter", :text_end, misspellings: true)
-    assert_equal [product.id], ids("red applx", :text_middle, misspellings: true)
-  end
-
-  def test_fuzzy_text_limits_candidate_grams_to_fifty_codepoints
-    product = tinkick_test_products(:red_apple)
-    product.update!(name: "😀" * 60)
-
-    [:text_start, :text_middle, :text_end].each do |mode|
-      assert_equal [product.id], ids("😀" * 51, mode, misspellings: true)
-      assert_empty ids("😀" * 52, mode, misspellings: true)
-      assert_empty ids("", mode, misspellings: true)
-    end
-  end
-
-  def test_two_edit_text_matches_candidate_grams_in_all_positions
-    expected = [tinkick_test_products(:red_apple).id]
-
-    [:text_start, :text_middle, :text_end].each do |mode|
-      assert_equal expected, ids("rxx apple", mode, misspellings: { edit_distance: 2 })
-      assert_empty ids("rxx apple", mode, misspellings: true)
-      assert_empty ids("rxx apxle", mode, misspellings: { edit_distance: 2 })
-    end
-  end
-
-  def test_two_edit_text_honors_transpositions_and_fixed_prefix
-    product = tinkick_test_products(:red_apple)
-    product.update!(name: "abcdef")
-
-    assert_equal [product.id], ids("badcef", :text_start, misspellings: { edit_distance: 2 })
-    assert_empty ids("badcef", :text_start, misspellings: { edit_distance: 2, transpositions: false })
-    assert_empty ids("badcef", :text_start, misspellings: { edit_distance: 2, prefix_length: 1 })
-    assert_equal [product.id], ids("abcdfe", :text_start, misspellings: { edit_distance: 2, prefix_length: 4 })
-    assert_equal [product.id], ids("abcdef", :text_start, misspellings: { edit_distance: 2, prefix_length: 20 })
-  end
-
-  def test_two_edit_text_enumerates_infix_positions_and_normalizes_unicode
-    product = tinkick_test_products(:red_apple)
-    product.update!(name: "first\nJalapeño\nlast")
-
-    assert_equal [product.id], ids("XALAPENA", :text_middle, misspellings: { edit_distance: 2 })
-    assert_empty ids("XALAPENA", :text_start, misspellings: { edit_distance: 2 })
-    assert_empty ids("XALAPENA", :text_end, misspellings: { edit_distance: 2 })
-    assert_empty ids("' OR true --", :text_middle, misspellings: { edit_distance: 2 })
-    product.update!(description: nil)
-    assert_empty ids("apple", :text_middle, column: :description, misspellings: { edit_distance: 2 })
-  end
-
-  def test_two_edit_text_preserves_the_fifty_codepoint_gram_limit
-    product = tinkick_test_products(:red_apple)
-    product.update!(name: "😀" * 60)
-
-    [:text_start, :text_middle, :text_end].each do |mode|
-      assert_equal [product.id], ids("😀" * 52, mode, misspellings: { edit_distance: 2 })
-      assert_empty ids("😀" * 53, mode, misspellings: { edit_distance: 2 })
-    end
-    assert_equal [product.id], ids("😀" * 52, :text_start, misspellings: { edit_distance: 2, transpositions: false })
-  end
-
-  def test_fuzzy_text_preserves_lucene_zero_score_short_gram_matches
-    product = tinkick_test_products(:red_apple)
-    other = tinkick_test_products(:green_pear)
-    product.update!(name: "ab")
-    other.update!(name: "zz")
-    both = [product.id, other.id].sort
-
-    # Lucene 9.12.2 FuzzyQuery includes these zero-score hits for 1..50 text grams.
-    [:text_start, :text_middle, :text_end].each do |mode|
-      [1, 2].each do |distance|
-        assert_equal both, ids("a", mode, misspellings: { edit_distance: distance })
-        assert_equal both, ids("b", mode, misspellings: { edit_distance: distance })
-      end
-      assert_equal [product.id], ids("abcd", mode, misspellings: { edit_distance: 2 })
-    end
-
-    product.update!(name: "a")
-    [:text_start, :text_middle, :text_end].each do |mode|
-      assert_equal [product.id], ids("ab", mode, misspellings: true)
-      assert_equal both, ids("ab", mode, misspellings: { edit_distance: 2 })
-      assert_equal both, ids("ab", mode, misspellings: { edit_distance: 2, transpositions: false })
-      assert_equal [product.id], ids("a", mode, misspellings: { edit_distance: 2, prefix_length: 1 })
-      assert_empty ids("b", mode, misspellings: { edit_distance: 2, prefix_length: 1 })
-    end
-  end
-
-  def test_two_edit_text_normalizes_each_source_row_once
-    sql, values = Tinkick::TextMatch.new(SearchProduct).predicate('"name"', "zxqxz", match: :text_middle, misspellings: { edit_distance: 2 })
-    relation = SearchProduct.where(Arel.sql(sql, *values)).select(:id)
-    plan_json = SearchProduct.connection.select_value("EXPLAIN (ANALYZE, VERBOSE, FORMAT JSON) #{relation.to_sql}")
-    plan = JSON.parse(plan_json).first.fetch("Plan")
-    normalizations = plan_nodes(plan).select do |node|
-      node.fetch("Node Type") == "Result" && node.fetch("Output", []).any? { |output| output.include?("unaccent(lower(") }
-    end
-
-    assert_equal 0, plan.fetch("Actual Rows")
-    assert_equal 1, normalizations.length
-    assert_equal 1, normalizations.first.fetch("Actual Rows")
-    assert_equal SearchProduct.count, normalizations.first.fetch("Actual Loops")
-  end
-
-  def test_two_edit_text_warns_about_gram_enumeration_and_distance_cost
-    original_logger = SearchProduct.logger
-    output = StringIO.new
-    SearchProduct.logger = Logger.new(output)
-
-    ids("rxx apple", :text_middle, misspellings: { edit_distance: 2 })
-
-    assert_includes output.string, "enumerates candidate grams"
-    assert_includes output.string, "edit-distance comparisons"
-  ensure
-    SearchProduct.logger = original_logger
-  end
-
   private
-
-  def plan_nodes(node)
-    [node] + node.fetch("Plans", []).flat_map { |child| plan_nodes(child) }
-  end
 
   def ids(term, match, column: :name, misspellings: false)
     column_sql = SearchProduct.connection.quote_column_name(column)

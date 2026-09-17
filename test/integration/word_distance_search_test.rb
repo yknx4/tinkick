@@ -5,14 +5,14 @@ require_relative "../../lib/tinkick/model"
 
 class WordDistanceSearchTest < TinkickIntegrationTest
   def test_public_two_edit_search_matches_records_counts_and_projection
-    results = search("papel")
+    results = search("apxxe")
 
     assert_equal(["Red Apple"], results.map(&:name))
     assert_equal(1, results.total_count)
-    assert_equal(["Red Apple"], search("papel").pluck(:name))
-    assert_empty(search("papel", misspellings: true))
-    assert_empty(search("papel", misspellings: false))
-    assert_equal(["Red Apple"], search("papel", misspellings: { distance: 2 }).map(&:name))
+    assert_equal(["Red Apple"], search("apxxe").pluck(:name))
+    assert_empty(search("apxxe", misspellings: true))
+    assert_empty(search("apxxe", misspellings: false))
+    assert_equal(["Red Apple"], search("apxxe", misspellings: { distance: 2 }).map(&:name))
     assert_raises(ArgumentError) { search("apple", misspellings: { edit_distance: 2.0 }).to_a }
   end
 
@@ -20,31 +20,31 @@ class WordDistanceSearchTest < TinkickIntegrationTest
     apple = tinkick_test_products(:red_apple)
     pear = tinkick_test_products(:green_pear)
     pear.update!(description: "Apple orchard")
-    results = search("papel", fields: [:name, :description], order: :id)
+    results = search("apxxe", fields: [:name, :description], order: :id)
 
     assert_equal([apple.id, pear.id].sort, results.map(&:id))
     assert_equal(2, results.total_count)
-    assert_equal([apple.id], search("papel", fields: [:name, :description], where: { id: apple.id }).map(&:id))
+    assert_equal([apple.id], search("apxxe", fields: [:name, :description], where: { id: apple.id }).map(&:id))
 
-    pear.update!(name: "papel")
+    pear.update!(name: "apxxe")
     apple.update!(description: "Apple")
-    mixed = search("papel", fields: [{ name: :exact }, :description], order: :id)
+    mixed = search("apxxe", fields: [{ name: :exact }, :description], order: :id)
     assert_equal([apple.id, pear.id].sort, mixed.map(&:id))
     assert_equal(2, mixed.total_count)
   end
 
-  def test_json_scalar_guards_stay_attached_to_the_refinement
+  def test_json_scalar_guards_stay_attached_to_native_matching
     tinkick_test_products(:red_apple).update!(metadata: { title: "Apple" })
     tinkick_test_products(:green_pear).update!(metadata: { title: { text: "Apple" } })
-    results = search("papel", fields: ["metadata.title"])
+    results = search("apxxe", fields: ["metadata.title"])
 
     assert_equal(["Red Apple"], results.map(&:name))
     assert_equal(1, results.total_count)
   end
 
-  def test_long_tokens_use_bounded_distance_refinement_without_regex_expansion
+  def test_long_tokens_use_native_fuzzy_matching_without_sql_edit_distance
     word = "ab#{"c" * 180}de"
-    query = "ba#{"c" * 180}ed"
+    query = "xb#{"c" * 180}dx"
     tinkick_test_products(:red_apple).update!(name: word)
     statements = capture_queries do
       assert_equal([word], search(query).map(&:name))
@@ -60,15 +60,15 @@ class WordDistanceSearchTest < TinkickIntegrationTest
   def test_phrase_and_zero_distance_keep_their_existing_behavior
     assert_equal(["Red Apple"], search("Red Apple", match: :phrase, misspellings: false).map(&:name))
     assert_equal(["Red Apple"], search("apple", misspellings: { edit_distance: 0 }).map(&:name))
-    assert_empty(search("papel", misspellings: { edit_distance: 0 }))
+    assert_empty(search("apxxe", misspellings: { edit_distance: 0 }))
     assert_empty(search(""))
   end
 
-  def test_refined_query_keeps_indexed_candidates_and_every_eligible_id
+  def test_native_two_edit_query_keeps_top_k_ranking
     tinkick_test_products(:red_apple).update!(name: "Apple")
     tinkick_test_products(:green_pear).update!(name: "Apple apple")
     statements = capture_queries do
-      results = search("papel", limit: 10)
+      results = search("apxxe", limit: 10)
       assert_equal(SearchProduct.order(:id).ids, results.map(&:id).sort)
       assert_equal(2, results.total_count)
     end
@@ -80,9 +80,8 @@ class WordDistanceSearchTest < TinkickIntegrationTest
 
     assert_includes(plan, "Text Search Scan")
     assert_includes(plan, "index_tinkick_test_products_on_name")
-    assert_includes(plan, '"Function Name": "tokenize"')
-    assert_includes(plan, '"Node Type": "Sort"')
-    refute_includes(plan, '"Top K"')
+    refute_includes(plan, "edit_distance")
+    assert_includes(plan, '"Top K"')
   end
 
   private

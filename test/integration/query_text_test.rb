@@ -40,15 +40,15 @@ class QueryTextTest < TinkickIntegrationTest
     end
   end
 
-  def test_partial_words_preserve_the_fifty_character_gram_ceiling
+  def test_native_partial_words_have_no_elasticsearch_ngram_ceiling
     term = "𐐨" * 60
     tinkick_test_products(:red_apple).update!(name: term)
 
     [:word_start, :word_middle, :word_end].each do |mode|
       assert_equal([term], names("𐐨" * 50, match: mode))
-      assert_empty(names("𐐨" * 51, match: mode))
+      assert_equal([term], names("𐐨" * 51, match: mode))
       assert_empty(names("#{"𐐨" * 51} pear", match: mode))
-      assert_equal(["Green Pear"], names("#{"𐐨" * 51} pear", match: mode, operator: "or"))
+      assert_equal(["Green Pear", term], names("#{"𐐨" * 51} pear", match: mode, operator: "or"))
     end
   end
 
@@ -81,65 +81,6 @@ class QueryTextTest < TinkickIntegrationTest
       assert_equal(["#️⃣ pear"], names("#️⃣", match: mode))
       assert_equal(["#️⃣ pear", "*️⃣ apple"], names("*", match: mode).sort)
       assert_empty(names("!!!", match: mode))
-    end
-  end
-
-  def test_partial_words_match_one_edit_within_a_prefix_infix_or_suffix
-    assert_equal(["Red Apple"], names("apxl", match: :word_start, misspellings: true))
-    assert_equal(["Red Apple"], names("pxl", match: :word_middle, misspellings: true))
-    assert_equal(["Red Apple"], names("pxle", match: :word_end, misspellings: true))
-    assert_empty(names("apxl", match: :word_start))
-    assert_empty(names("pxl", match: :word_middle))
-    assert_empty(names("pxle", match: :word_end))
-  end
-
-  def test_partial_words_support_fuzzy_insertions_and_deletions
-    tinkick_test_products(:red_apple).update!(name: "Sriracha")
-
-    assert_equal(["Sriracha"], names("sirach", match: :word_start, misspellings: true))
-    assert_equal(["Sriracha"], names("rirracha", match: :word_end, misspellings: true))
-    assert_equal(["Sriracha"], names("riach", match: :word_middle, misspellings: true))
-  end
-
-  def test_partial_words_honor_transposition_controls
-    { word_start: "Applejack", word_middle: "Pineappletree", word_end: "Crabapple" }.each do |mode, name|
-      tinkick_test_products(:red_apple).update!(name: name)
-
-      assert_equal([name], names("aplpe", match: mode, misspellings: true))
-      assert_empty(names("aplpe", match: mode, misspellings: { transpositions: false }))
-    end
-  end
-
-  def test_partial_words_honor_the_fuzzy_prefix_length
-    [:word_start, :word_middle, :word_end].each do |mode|
-      assert_equal(["Red Apple"], names("apxle", match: mode, misspellings: { prefix_length: 2 }))
-      assert_empty(names("apxle", match: mode, misspellings: { prefix_length: 3 }))
-    end
-  end
-
-  def test_partial_fuzzy_words_combine_with_and_or_without_interpreting_operators
-    assert_equal(["Red Apple"], names("ryd apxl", match: :word_start, misspellings: true))
-    assert_empty(names("ryd peaz", match: :word_start, misspellings: true))
-    assert_equal(["Green Pear", "Red Apple"], names("apxl peaz", match: :word_start, operator: "or", misspellings: true))
-    assert_empty(names("apxl OR peaz", match: :word_start, misspellings: true))
-  end
-
-  def test_partial_fuzzy_words_preserve_unicode_and_literal_metacharacters
-    tinkick_test_products(:red_apple).update!(name: "Jalapeño foo_ab a𐐨b *️⃣")
-
-    assert_equal(["Jalapeño foo_ab a𐐨b *️⃣"], names("JALAPX foo_ba ab𐐨", match: :word_start, misspellings: true))
-    assert_equal(["Jalapeño foo_ab a𐐨b *️⃣"], names("*️⃣", match: :word_middle, misspellings: { prefix_length: 1 }))
-    assert_empty(names("jalapx) OR (pear", match: :word_start, misspellings: true))
-  end
-
-  def test_partial_fuzzy_words_preserve_the_candidate_gram_ceiling
-    term = "𐐨" * 60
-    tinkick_test_products(:red_apple).update!(name: term)
-
-    [:word_start, :word_middle, :word_end].each do |mode|
-      assert_equal([term], names("𐐨" * 51, match: mode, misspellings: true))
-      assert_empty(names("𐐨" * 52, match: mode, misspellings: true))
-      assert_equal(["Green Pear"], names("#{"𐐨" * 52} pear", match: mode, operator: "or", misspellings: true))
     end
   end
 
@@ -227,51 +168,11 @@ class QueryTextTest < TinkickIntegrationTest
     assert_raises(ArgumentError) { compile("apple", match: :unknown) }
   end
 
-  def test_fuzzy_matching_defaults_to_one_edit_including_transpositions
-    [true, {}, { edit_distance: 1 }, { transpositions: true }].each do |option|
-      assert_equal(["Red Apple"], names("aplpe", misspellings: option))
-      assert_equal(["Red Apple"], names("appl", misspellings: option))
-    end
-  end
-
-  def test_transpositions_do_not_combine_with_another_edit
-    tinkick_test_products(:green_pear).update!(name: "Apples")
-
-    assert_equal(["Red Apple"], names("aplpe", misspellings: true))
-  end
-
-  def test_transpositions_preserve_the_required_prefix
-    assert_equal(["Red Apple"], names("aplpe", misspellings: { prefix_length: 2 }))
-    assert_empty(names("aplpe", misspellings: { prefix_length: 3 }))
-  end
-
-  def test_transpositions_use_unicode_codepoints_and_literal_dictionary_terms
-    tinkick_test_products(:red_apple).update!(name: "a𐐨b foo_ab")
-
-    assert_equal(["a𐐨b foo_ab"], names("ab𐐨 foo_ba", misspellings: true))
-    assert_equal(["a𐐨b foo_ab"], names("ab𐐨", misspellings: { prefix_length: 1 }))
-    assert_empty(names("ab𐐨", misspellings: { prefix_length: 2 }))
-  end
-
-  def test_transpositions_group_alternatives_for_each_word
-    assert_equal(["Red Apple"], names("erd aplpe", misspellings: true))
-    assert_empty(names("erd zzzzz", misspellings: true))
-    assert_equal(["Red Apple"], names("aplpe zzzzz", operator: "or", misspellings: true))
-    assert_empty(names("aplpe OR pear", misspellings: true))
-  end
-
-  def test_transpositions_preserve_zero_distance_and_phrase_matching
+  def test_zero_distance_and_phrase_matching_remain_exact
     assert_equal(["Red Apple"], names("apple", misspellings: { edit_distance: 0 }))
     assert_empty(names("aplpe", misspellings: { edit_distance: 0 }))
     assert_equal(["Red Apple"], names("red apple", match: :phrase, misspellings: true))
     assert_empty(names("red aplpe", match: :phrase, misspellings: true))
-  end
-
-  def test_transpositions_at_larger_distances_fail_explicitly
-    error = assert_raises(ArgumentError) { compile("apple", misspellings: { edit_distance: 2 }) }
-
-    assert_includes(error.message, "transpositions")
-    assert_includes(error.message, "transpositions: false")
   end
 
   def test_native_fuzzy_matching_defaults_to_one_edit
@@ -332,7 +233,7 @@ class QueryTextTest < TinkickIntegrationTest
     tinkick_test_products(:red_apple).update!(name: "*️⃣ fruit")
 
     assert_equal(["*️⃣ fruit"], names("*️⃣", misspellings: true))
-    assert_equal(["*️⃣ fruit"], names("*️⃣ friut", misspellings: true))
+    assert_equal(["*️⃣ fruit"], names("*️⃣ fruut", misspellings: true))
     assert_empty(names("*️⃣ pear", misspellings: true))
     assert_equal(["*️⃣ fruit", "Green Pear"], names("*️⃣ pear", operator: "or", misspellings: true).sort)
   end
@@ -359,7 +260,7 @@ class QueryTextTest < TinkickIntegrationTest
     [
       { edit_distance: -1 }, { edit_distance: "1" }, { distance: 1.5 },
       { prefix_length: -1 }, { prefix_length: "0" },
-      { max_expansions: 3 }, { below: 5 }, { fields: [:name] }, { unknown: true },
+      { below: 5 }, { fields: [:name] }, { unknown: true },
     ].each do |options|
       assert_raises(ArgumentError) do
         compile("apple", misspellings: options.merge(transpositions: false))

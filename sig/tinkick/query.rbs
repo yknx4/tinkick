@@ -36,7 +36,6 @@ module Tinkick
     @scope: ActiveRecord::Relation?
     @scoring: String
     @mixed_matching: bool
-    @fuzzy_partial: bool
     @countless: bool
     @keyset: bool
     @has_next_page: bool?
@@ -61,8 +60,7 @@ module Tinkick
 
     def highlight_fields: () -> Array[String]
     def highlight_matches: (String name, texts: Array[String?]) -> Array[String?]
-    def highlight_spans: (String name, texts: Array[String?]) -> Array[Array[CustomSpans::span]]?
-    def highlight_query: (String name, texts: Array[String?]) -> String
+    def highlight_query: (String name) -> String
 
     def total_count: () -> Integer
     def misspellings?: () -> bool
@@ -73,7 +71,6 @@ module Tinkick
 
     private
 
-    def merge_highlight_spans: (Array[CustomSpans::span] spans) -> Array[CustomSpans::span]
     def measure_page: [T] () { () -> T } -> T
     def instrument: [T] (:search | :count | :aggregations operation) { () -> T } -> T
 
@@ -91,7 +88,6 @@ module Tinkick
     def scope: () -> ActiveRecord::Relation
     def build_scope: (filter_conditions conditions) -> ActiveRecord::Relation
     def excluding_scope: (ActiveRecord::Relation relation, Array[[ String, SearchField, Symbol, Float? ]] fields, QueryText compiler) -> [ ActiveRecord::Relation, String? ]
-    def two_edit_word?: (Symbol mode, QueryText::misspellings options) -> bool
     def field_predicate: (SearchField field, filter_predicate predicate) -> filter_predicate
     def matching_scope: (ActiveRecord::Relation relation, Array[filter_predicate] predicates) -> ActiveRecord::Relation
     def mixed_scope: (ActiveRecord::Relation relation, Array[filter_predicate] native, Array[filter_predicate] exact) -> ActiveRecord::Relation

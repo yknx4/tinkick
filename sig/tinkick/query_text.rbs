@@ -1,6 +1,8 @@
 module Tinkick
   class QueryText
-    type misspellings = bool | { ?transpositions: bool, ?edit_distance: Integer, ?distance: Integer, ?prefix_length: Integer, ?fields: Array[String | Symbol], ?below: Integer | Float | String | false | nil }
+    type misspellings = bool | { ?transpositions: bool, ?edit_distance: Integer, ?distance: Integer, ?prefix_length: Integer, ?max_expansions: Integer, ?fields: Array[String | Symbol], ?below: Integer | Float | String | false | nil }
+
+    ANALYSIS_DEFAULTS: Hash[String, String]
 
     @connection: ActiveRecord::ConnectionAdapters::AbstractAdapter
 
@@ -8,15 +10,11 @@ module Tinkick
 
     def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: misspellings, ?analysis: Hash[String, String]) -> String
 
-    def refinement_required?: (String term, misspellings: misspellings, ?analysis: Hash[String, String]) -> bool
-
     def exclusion: (String term, words: Array[String], match: Symbol) -> String
 
     def tokens: (String term, ?analysis: Hash[String, String]) -> Array[String]
 
     private
-
-    def literal_fuzzy_token?: (String word) -> bool
 
     def quote: (String term) -> String
 
@@ -24,10 +22,8 @@ module Tinkick
 
     def partial: (String word, Symbol match) -> String
 
-    def fuzzy_pattern: (String word, Symbol match, Integer distance, Integer prefix, bool transpositions) -> String
+    def fuzzy: (String word, Integer distance, Integer prefix, Hash[String, String] analysis) -> String
 
-    def fuzzy: (String word, Integer distance, Integer prefix, bool transpositions) -> String
-
-    def fuzzy_settings: (misspellings options) -> [ Integer, Integer, bool ]?
+    def fuzzy_settings: (misspellings options) -> [ Integer, Integer ]?
   end
 end

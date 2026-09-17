@@ -1,9 +1,16 @@
 # frozen_string_literal: true
 
 require "active_record"
+require_relative "errors"
 
 module Tinkick
   class QueryText
+    ANALYSIS_DEFAULTS = {
+      "tokenizer" => "unicode", "case_folding" => "fold", "accent_folding" => "fold",
+      "long_tokens" => "split", "max_token_bytes" => "256",
+      "graphemes" => "emoji", "position_gaps" => "preserve",
+    }.freeze
+
     def initialize(connection)
       @connection = connection
     end
@@ -21,54 +28,24 @@ module Tinkick
 
       separator = " #{operator.upcase} "
       if [:word_start, :word_middle, :word_end].include?(match)
-        queries = if settings && settings.first.positive?
-          distance, prefix, transpositions = settings
-          words.map { |word| fuzzy_pattern(word, match, distance, prefix, transpositions) }
-        else
-          words.map { |word| partial(word, match) }
+        if settings && settings.first.positive?
+          raise NotImplementedError, "Fuzzy wildcard matching is not supported by native TIN; use misspellings: false for token prefix, substring, or suffix matching"
         end
-        return "" if operator == "and" && queries.any?(&:empty?)
-
-        return queries.reject(&:empty?).join(separator)
+        return words.map { |word| partial(word, match) }.join(separator)
       end
 
       exact = words.map { |word| literal(word) }.join(separator)
       return exact unless settings
 
-      distance, prefix, transpositions = settings
+      distance, prefix = settings
       return exact if distance.zero?
 
-      words.map do |word|
-        if literal_fuzzy_token?(word)
-          if word.length > 50
-            raise ArgumentError, "Fuzzy tokens containing TINQL delimiters longer than 50 characters require SQL refinement"
-          end
-          fuzzy_pattern(word, :word, distance, prefix, transpositions)
-        else
-          fuzzy(word, distance, prefix, transpositions)
-        end
-      end.join(separator)
-    end
-
-    def refinement_required?(term, misspellings:, analysis: {})
-      return false if misspellings == false || !/[()\[\]"~^*#]/.match?(term)
-
-      settings = fuzzy_settings(misspellings)
-      return false unless settings
-
-      distance = settings.first
-      return false if distance.zero?
-
-      tokens(term, analysis: analysis).any? do |word|
-        literal_fuzzy_token?(word) && (distance > 1 || word.length > 50)
-      end
+      words.map { |word| fuzzy(word, distance, prefix, analysis) }.join(separator)
     end
 
     def exclusion(term, words:, match:)
       return "" if words.empty?
       return quote(term) if [:word, :phrase].include?(match)
-
-      return "" if words.any? { |word| word.length > 50 }
 
       leading = match == :word_start ? "" : ".*"
       trailing = match == :word_end ? "" : ".*"
@@ -97,10 +74,6 @@ module Tinkick
 
     private
 
-    def literal_fuzzy_token?(word)
-      ["*", "#"].include?(word) || /[()\[\]"~^]/.match?(word)
-    end
-
     def quote(term)
       escaped = term.gsub(/["\\_\[\]]/) { |character| "\\#{character}" }
       "\"#{escaped}\""
@@ -114,9 +87,6 @@ module Tinkick
     end
 
     def partial(word, match)
-      # Searchkick indexes word ngrams from 1 through 50 Unicode characters.
-      return "" if word.length > 50
-
       unless /\A[\p{L}\p{M}\p{N}_]+\z/.match?(word) && word == word.downcase
         prefix = match == :word_start ? "" : ".*"
         suffix = match == :word_end ? "" : ".*"
@@ -129,83 +99,44 @@ module Tinkick
       "#{prefix}#{escaped}#{suffix}"
     end
 
-    def fuzzy_pattern(word, match, distance, prefix, transpositions)
-      unless distance == 1
-        raise ArgumentError, "This fuzzy match mode currently supports edit_distance: 0 or 1"
+    def fuzzy(word, distance, prefix, analysis)
+      if /[()\[\]"~^]/.match?(word)
+        raise NotImplementedError, "Native TIN fuzzy syntax cannot represent this token; use misspellings: false for tokens containing parentheses, brackets, quotes, tildes, or carets"
       end
 
-      characters = word.chars.map { |character| Regexp.escape(character) }
-      alternatives = [characters]
-      fixed = [prefix, characters.length].min
-      (fixed...characters.length).each do |index|
-        substituted = characters.dup
-        substituted[index] = "."
-        alternatives << substituted
-
-        deleted = characters.dup
-        deleted.delete_at(index)
-        alternatives << deleted
-
-        if transpositions && index + 1 < characters.length
-          swapped = characters.dup
-          swapped[index] = characters.fetch(index + 1)
-          swapped[index + 1] = characters.fetch(index)
-          alternatives << swapped
-        end
-      end
-      (fixed..characters.length).each do |index|
-        alternatives << characters.dup.insert(index, ".")
-      end
-
-      patterns = alternatives.select { |candidate| candidate.length.positive? && (match == :word || candidate.length <= 50) }.map(&:join).uniq
-      return "" if patterns.empty?
-
-      leading = [:word_middle, :word_end].include?(match) ? ".*" : ""
-      trailing = [:word_start, :word_middle].include?(match) ? ".*" : ""
-      "MATCHES #{leading}(#{patterns.join('|')})#{trailing}"
-    end
-
-    def fuzzy(word, distance, prefix, transpositions)
-      native = "#{word}~#{prefix}:#{distance}"
-      return native unless transpositions
-
-      characters = word.chars
-      alternatives = [native]
-      (prefix...(characters.length - 1)).each do |index|
-        next if characters.fetch(index) == characters.fetch(index + 1)
-
-        swapped = characters.dup
-        swapped[index] = characters.fetch(index + 1)
-        swapped[index + 1] = characters.fetch(index)
-        alternatives << "MATCHES #{Regexp.escape(swapped.join)}"
-      end
-
-      alternatives.length == 1 ? native : "(#{alternatives.join(' OR ')})"
+      # Native analysis turns keycap emoji into these dictionary symbols.
+      folded_keycap = ["*", "#"].include?(word) && analysis.fetch("accent_folding", "fold") == "fold"
+      surface = folded_keycap ? "#{word}\uFE0F\u20E3" : word
+      surface = "CONTAINS #{surface}" if surface != surface.downcase
+      "#{surface}~#{prefix}:#{distance}"
     end
 
     def fuzzy_settings(options)
       return if options == false
 
-      options = { transpositions: true } if options == true
+      options = { transpositions: false } if options == true
       raise ArgumentError, "Misspellings must be true, false, or an options hash" unless options.is_a?(Hash)
 
+      if options.key?(:max_expansions)
+        raise NotImplementedError, "Elasticsearch max_expansions caps are not supported by native TIN; omit max_expansions to use native fuzzy matching"
+      end
       unknown = options.keys - [:transpositions, :edit_distance, :distance, :prefix_length]
       raise ArgumentError, "Unsupported misspellings options: #{unknown.join(', ')}" unless unknown.empty?
 
       distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
       prefix = options.fetch(:prefix_length, 0)
-      transpositions = options.fetch(:transpositions, true)
+      transpositions = options.fetch(:transpositions, false)
       unless distance.is_a?(Integer) && distance >= 0 && prefix.is_a?(Integer) && prefix >= 0
         raise ArgumentError, "Misspellings distance and prefix_length must be nonnegative integers"
       end
       unless transpositions == true || transpositions == false
         raise ArgumentError, "Misspellings transpositions must be true or false"
       end
-      if transpositions && distance > 1
-        raise ArgumentError, "Misspellings transpositions currently support edit_distance: 0 or 1; use transpositions: false for larger native TIN distances"
+      if transpositions
+        raise NotImplementedError, "Transposition edit matching is not supported by native TIN fuzzy search; omit transpositions or set transpositions: false for native Levenshtein distance"
       end
 
-      [distance, prefix, transpositions]
+      [distance, prefix]
     end
   end
 end

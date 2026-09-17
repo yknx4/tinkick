@@ -268,7 +268,7 @@ module Tinkick
         configurations = indexes.map do |index|
           options = index["options"]
           values = options.is_a?(String) ? JSON.parse(options) : [] #: Array[String]
-          analysis = WordMatch::ANALYSIS_DEFAULTS.dup
+          analysis = QueryText::ANALYSIS_DEFAULTS.dup
           values.each do |option|
             key, value = option.split("=", 2)
             analysis[key] = value if key && value && analysis.key?(key)

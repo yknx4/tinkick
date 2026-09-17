@@ -5,9 +5,7 @@ require_relative "query_text"
 require_relative "text_match"
 require_relative "keyset"
 require_relative "search_field"
-require_relative "word_match"
 require_relative "aggregations"
-require_relative "custom_spans"
 require_relative "boost_by"
 require "active_support/notifications"
 
@@ -53,7 +51,6 @@ module Tinkick
       @after = after
       @scoring = "1.0"
       @mixed_matching = false
-      @fuzzy_partial = false
       raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(@operator)
       raise ArgumentError, "limit and offset must be nonnegative" if @limit.negative? || @offset.negative?
       raise InvalidQueryError, "countless pagination requires a positive limit" if @countless && @limit.zero?
@@ -176,36 +173,7 @@ module Tinkick
       matched
     end
 
-    def highlight_spans(name, texts:)
-      resolve_misspellings
-      return if @term == "*"
-
-      modes = @fields.filter_map do |field_name, mode|
-        mode if field_name == name && [:word, :phrase, :word_start, :word_middle, :word_end].include?(mode)
-      end.uniq
-      return if modes.empty?
-
-      field = SearchField.new(@model, name, match: modes.first || :word)
-      analysis = @model.tinkick_index_analysis(name, field)
-      return if analysis == WordMatch::ANALYSIS_DEFAULTS
-
-      matcher = WordMatch.new(@model)
-      tokens = (modes - [:phrase]).flat_map do |mode|
-        matcher.highlight_tokens(name, @term, texts: texts, match: mode, misspellings: misspellings_for(name))
-      end.uniq
-      @model.with_connection do |connection|
-        locator = CustomSpans.new(connection)
-        spans = locator.locate(texts, tokens: tokens, analysis: analysis)
-        if modes.include?(:phrase)
-          phrases = locator.locate_phrase(texts, term: @term, analysis: analysis)
-          phrases.each_with_index { |values, index| spans.fetch(index).concat(values) }
-          spans.map! { |values| merge_highlight_spans(values) }
-        end
-        spans
-      end
-    end
-
-    def highlight_query(name, texts:)
+    def highlight_query(name)
       resolve_misspellings
       return "" if @term == "*"
 
@@ -216,33 +184,16 @@ module Tinkick
           next unless [:word, :phrase, :word_start, :word_middle, :word_end].include?(mode)
           field = SearchField.new(@model, name, match: mode)
           analysis = @model.tinkick_index_analysis(name, field)
-          unless analysis == WordMatch::ANALYSIS_DEFAULTS
-            raise ArgumentError, "Highlighting custom TIN analysis still requires Tinkick source-span support; native explicit highlighting uses default analysis"
+          unless analysis == QueryText::ANALYSIS_DEFAULTS
+            raise NotImplementedError, "Native TIN highlighting for #{name.inspect} does not support non-default index tokenization: implicit highlighting rejects this configuration and explicit highlighting uses default analysis. Omit highlighting for this field or select a default-analysis field."
           end
           misspellings = misspellings_for(name)
-          if two_edit_word?(mode, misspellings) || (mode == :word && compiler.refinement_required?(@term, misspellings: misspellings, analysis: analysis))
-            WordMatch.new(@model).highlight_query(name, @term, texts: texts, match: mode, misspellings: misspellings)
-          else
-            compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
-          end
+          compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
         end.reject(&:empty?).map { |query| "(#{query})" }.join(" OR ")
       end
     end
 
     private
-
-    def merge_highlight_spans(spans)
-      merged = [] #: Array[CustomSpans::span]
-      spans.sort.each do |first, last|
-        previous = merged.last
-        if previous && first <= previous.last
-          previous[1] = [previous.last, last].max
-        else
-          merged << [first, last]
-        end
-      end
-      merged
-    end
 
     def measure_page
       instrument(:search) do
@@ -299,19 +250,19 @@ module Tinkick
         return
       end
 
-      original = [@misspellings, @scoring, @mixed_matching, @fuzzy_partial] #: [QueryText::misspellings, String, bool, bool]
+      original = [@misspellings, @scoring, @mixed_matching] #: [QueryText::misspellings, String, bool]
       @misspellings = false
       begin
         @model.logger&.warn("Tinkick: misspellings: { below: #{threshold} } runs an extra bounded exact-match count before choosing the search mode. Omit below to use the native fuzzy search directly.")
         exact = build_scope(@where)
         if exact.except(:order, :limit, :offset).limit(threshold).count < threshold
-          @misspellings, @scoring, @mixed_matching, @fuzzy_partial = original
+          @misspellings, @scoring, @mixed_matching = original
         else
           @scope = exact
         end
         @misspellings_below = nil
       rescue StandardError
-        @misspellings, @scoring, @mixed_matching, @fuzzy_partial = original
+        @misspellings, @scoring, @mixed_matching = original
         raise
       end
     end
@@ -386,19 +337,12 @@ module Tinkick
           else
             analysis = @model.tinkick_index_analysis(name, field)
             native_boost = boost && boost > 10_000 ? 1.0 : boost
-            if two_edit_word?(mode, misspellings) || (mode == :word && compiler.refinement_required?(@term, misspellings: misspellings, analysis: analysis))
-              predicate = field_predicate(field, WordMatch.new(@model).predicate(name, @term, operator: @operator, match: mode, misspellings: misspellings, excluded: excluded, boost: native_boost))
-            else
-              compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
-              next if compiled.empty?
+            compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
+            next if compiled.empty?
 
-              compiled = "(#{compiled})^#{native_boost}" if native_boost
-              compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded
-              if [:word_start, :word_middle, :word_end].include?(mode) && misspellings != false && compiled.include?("MATCHES")
-                @fuzzy_partial = true
-              end
-              predicate = field_predicate(field, ["#{field.text_sql} ==> ?", [compiled]])
-            end
+            compiled = "(#{compiled})^#{native_boost}" if native_boost
+            compiled = "(#{compiled}) AND NOT (#{excluded})" if excluded
+            predicate = field_predicate(field, ["#{field.text_sql} ==> ?", [compiled]])
             native << predicate
             score = "tin.full_score(#{quoted_table}.ctid)"
             score = "#{score}::double precision * #{boost}" if boost && boost > 10_000
@@ -437,14 +381,14 @@ module Tinkick
           next
         end
 
-        analysis = WordMatch.new(@model).index_analysis(name, field)
+        analysis = @model.tinkick_index_analysis(name, field)
         phrases = @exclude.map do |phrase|
           compiler.exclusion(phrase, words: compiler.tokens(phrase, analysis: analysis), match: mode)
         end.reject(&:empty?)
         next if phrases.empty?
 
         excluded = phrases.map { |phrase| "(#{phrase})" }.join(" OR ")
-        if fields.length == 1 && @term != "*" && !two_edit_word?(mode, misspellings_for(name))
+        if fields.length == 1 && @term != "*"
           combined = excluded
           next
         end
@@ -455,18 +399,9 @@ module Tinkick
         sql, binds = field_predicate(field, ["#{field.text_sql} ==> ?", [excluded]])
         identifiers = base.where(Arel.sql(sql, *binds)).select(primary_key)
         relation = relation.where.not(primary_key => identifiers)
-        @model.logger&.warn("Tinkick: phrase exclusions across fields, match-all searches, or refined fuzzy modes use TIN matching-ID subqueries to preserve null values. These extra index queries can increase cost; inspect EXPLAIN ANALYZE for your workload.")
+        @model.logger&.warn("Tinkick: phrase exclusions across fields or match-all searches use TIN matching-ID subqueries to preserve null values. These extra index queries can increase cost; inspect EXPLAIN ANALYZE for your workload.")
       end
       [relation, combined]
-    end
-
-    def two_edit_word?(mode, options)
-      return false unless options.is_a?(Hash)
-
-      distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
-      supported = [:word_start, :word_middle, :word_end].include?(mode) ||
-        (mode == :word && options.fetch(:transpositions, true) == true)
-      supported && distance.is_a?(Integer) && distance == 2
     end
 
     def field_predicate(field, predicate)
@@ -515,9 +450,6 @@ module Tinkick
       raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
 
       score = score_sql
-      if @fuzzy_partial
-        @model.logger&.warn("Tinkick: Fuzzy partial matching expands patterns in TIN's token dictionary. Broad prefixes or infixes can increase query cost; use misspellings: false when typo matching is unnecessary and inspect EXPLAIN ANALYZE with representative data.")
-      end
       if @weighted_scoring && @mixed_matching
         @model.logger&.warn("Tinkick: weighted SQL scoring combines field queries, then can group and sort matching rows. Explicit SQL field weights and native field boosts above 10000 require this path; native-only field boosts up to 10000 keep TIN scoring. Inspect EXPLAIN ANALYZE for your workload.")
       elsif @mixed_matching
