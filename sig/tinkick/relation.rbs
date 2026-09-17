@@ -1,0 +1,113 @@
+module Tinkick
+  type relation_number = Integer | String | nil
+
+  type relation_field = String | Symbol | Array[String | Symbol]
+
+  type relation_options = { fields: Array[String | Symbol], misspellings: QueryText::misspellings, where: filter_conditions, order: query_order?, limit: relation_number, offset: relation_number, page: relation_number, per_page: relation_number, padding: relation_number, match: Symbol, operator: String | Symbol, load: bool?, total_entries: Integer? }
+
+  class Relation
+    include Enumerable[result_record]
+    extend Forwardable
+
+    class DefaultValue
+    end
+
+    NO_DEFAULT_VALUE: DefaultValue
+
+    @term: Object?
+    @options: relation_options
+    @query: Query?
+    @results: Results?
+
+    attr_reader model: singleton(ActiveRecord::Base)
+    alias klass model
+
+    def initialize: (singleton(ActiveRecord::Base) model, ?Object? term, fields: Array[String | Symbol], misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?) -> void
+
+    def loaded?: () -> bool
+    def load: () -> Relation
+            | (bool? value) -> Relation
+    def load!: (bool? value) -> Relation
+    def fields: (*relation_field values) -> Relation
+    def fields!: (*relation_field values) -> Relation
+    def where: () -> Where
+             | (filter_conditions? value) -> Relation
+    def where!: (filter_conditions value) -> Relation
+    def rewhere: (filter_conditions value) -> Relation
+    def rewhere!: (filter_conditions value) -> Relation
+    def order: (*query_order values) -> Relation
+    def order!: (*query_order values) -> Relation
+    def reorder: (*query_order values) -> Relation
+    def reorder!: (*query_order values) -> Relation
+    def limit: (relation_number value) -> Relation
+    def limit!: (relation_number value) -> Relation
+    def offset: () -> Integer
+              | (relation_number value) -> Relation
+    def offset!: (relation_number value) -> Relation
+    def page: (relation_number value) -> Relation
+    def page!: (relation_number value) -> Relation
+    def per_page: () -> Integer
+                | (relation_number value) -> Relation
+    def per: (relation_number value) -> Relation
+    def per_page!: (relation_number value) -> Relation
+    def padding: () -> Integer
+               | (relation_number value) -> Relation
+    def padding!: (relation_number value) -> Relation
+    def match: (Symbol value) -> Relation
+    def match!: (Symbol value) -> Relation
+    def operator: (String | Symbol value) -> Relation
+    def operator!: (String | Symbol value) -> Relation
+    def misspellings: (QueryText::misspellings value) -> Relation
+    def misspellings!: (QueryText::misspellings value) -> Relation
+    def total_entries: () -> Integer
+                     | (Integer? value) -> Relation
+    def total_entries!: (Integer? value) -> Relation
+    def first: () -> result_record?
+             | (Integer limit) -> Array[result_record]
+
+    def each: () -> Enumerator[result_record, Array[result_record]]
+            | () { (result_record) -> void } -> Array[result_record]
+    def any?: () -> bool
+            | (Object pattern) -> bool
+            | () { (result_record) -> boolish } -> bool
+    def empty?: () -> bool
+    def size: () -> Integer
+    alias length size
+    def []: (Integer index) -> result_record?
+          | (Integer start, Integer length) -> Array[result_record]?
+          | (Range[Integer?] range) -> Array[result_record]?
+    alias slice []
+    def to_ary: () -> Array[result_record]
+    def total_count: () -> Integer
+    def current_page: () -> Integer
+    def limit_value: () -> Integer
+    def total_pages: () -> Integer
+    alias num_pages total_pages
+    def offset_value: () -> Integer
+    def previous_page: () -> Integer?
+    alias prev_page previous_page
+    def next_page: () -> Integer?
+    def first_page?: () -> bool
+    def last_page?: () -> bool
+    def out_of_range?: () -> bool
+    def with_score: () -> Enumerator[[ result_record, Float ], Array[[ result_record, Float ]]]
+                  | () { (result_record, Float) -> void } -> Array[[ result_record, Float ]]
+
+    private
+
+    def initialize_copy: (Relation other) -> void
+    def check_loaded: () -> void
+    def page_number: () -> Integer
+    def page_size: () -> Integer
+    def page_padding: () -> Integer
+    def query: () -> Query
+    def execute: () -> Results
+  end
+
+  class Where
+    @relation: Relation
+
+    def initialize: (Relation relation) -> void
+    def not: (filter_conditions conditions) -> Relation
+  end
+end
