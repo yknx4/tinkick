@@ -1492,8 +1492,11 @@ embeddings outside the database, run a bounded pgvector nearest-neighbor query,
 and combine its IDs with a bounded lexical query. Use the same embedding model
 and dimensions for documents and queries. Cosine, Euclidean, inner-product
 operators and HNSW settings belong to [pgvector](https://github.com/pgvector/pgvector),
-not TINQL. RRF or model-based reranking requires explicit application code and
-returns an application-defined result list.
+not TINQL. `Tinkick::Reranking.rrf(first_page, second_page)` combines ordered
+lists and returns hashes with the original `:result` and fused `:score`.
+It uses rank positions, with `k: 60` by default, and materializes its inputs;
+bound each search with a limit. See [rank fusion](docs/reranking.md).
+Model-based reranking still requires explicit application code.
 
 ## Pagination and large result sets
 
