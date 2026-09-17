@@ -511,8 +511,15 @@ For Rails enums, equality, `in`, `all`, and negation use the serialized label.
 For example, `status: :published` matches an enum declared as `published: 0`;
 `status: 0` looks for a label named `"0"`, not the backing ordinal. Unknown labels
 match nothing and do not become NULL comparisons. Known labels use bound backing
-values, allowing ordinary column indexes. Enum label ranges/patterns and unusual
-duplicate or nil backing mappings are still being completed.
+values, allowing ordinary column indexes. Duplicate mappings use the first label
+returned by Rails when a record is reloaded. A label mapped to SQL NULL counts as
+present; an unrecognized stored backing value counts as missing.
+
+Ranges, comparisons, prefix/LIKE/ILIKE, and Ruby Regexp filters operate on those
+canonical labels too. Ranges use byte ordering, so backing ordinal order cannot
+change the result. These paths evaluate a SQL `CASE` expression and warn about
+their cost; an ordinary backing-column index cannot accelerate that expression.
+Use selective filters and inspect the query plan, or add an expression index.
 
 The `all` operator is accepted on scalar columns as a conjunction of equalities;
 a scalar cannot equal two distinct values. PostgreSQL array equality means
@@ -1009,7 +1016,8 @@ zeros scores; multiple functions whose applicable weights are all zero retain
 the original score, matching the upstream sum-group behavior.
 
 `boost_by_distance`, `indices_boost`, and `conversions`/`conversions_v2` remain
-adapter work.
+adapter work. The [conversion scoring contract](docs/conversions-contract.md)
+records the pinned data shapes, score composition, and remaining proof items.
 
 Recipe: rank a bounded SQL search with application-owned numeric weights:
 
