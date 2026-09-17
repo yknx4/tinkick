@@ -425,16 +425,25 @@ An unfiltered source contains physical model columns, including its primary key,
 with PostgreSQL/ActiveRecord value types; it never evaluates `search_data` values.
 Sources preserve the fetched values when result objects are subsequently edited.
 
-### Metadata still missing
+### Response metadata
 
-`response`, suggestions,
-and public highlight result methods are not implemented. Aggregation metadata
-is available through `aggs` and `aggregations`. Searchkick 6 removed
+`response` returns a cached hash with `"took"`, `"hits" => {"hits" => [...]}`,
+and `"aggregations"` when requested. Its hits are the same pre-scope page returned
+by `hits`; calling it does not invoke `scope_results` or association preloads.
+Ordinary pagination also includes `"hits" => {"total" => {"value" => count,
+"relation" => "eq"}}`, which requests an exact SQL count. Countless and keyset
+responses omit `"total"` unless the application supplies `total_entries:`;
+reading their response does not introduce a count query. The supplied total is
+reported as given, including with countless pagination. `took` remains the page
+fetch timing described above, excluding separate count and aggregation queries.
+
+Suggestions and public highlight result methods remain implementation work.
+Aggregation metadata is also available through `aggs` and `aggregations`. Searchkick 6 removed
 `each_with_hit` and `with_details`; use `with_hit.each`; `with_highlights` remains
 implementation work.
-Do not expect Elasticsearch index aliases, `_shards`, scroll IDs, or JSON
-response envelopes. Use ActiveRecord instrumentation for timing and explicitly
-serialize the visible records for an HTTP response.
+The portable response does not fabricate Elasticsearch index aliases, `_shards`,
+scroll IDs, or transport status. Use ActiveRecord instrumentation for timing and
+explicitly serialize the visible records for an HTTP response.
 
 ## Filtering
 
@@ -1259,8 +1268,9 @@ not escape TINQL metacharacters.
 
 ### Inspect analysis, score terms, and plans
 
-Searchkick's `debug`, `explain`, `search_index.tokens`, and raw `response` methods
-are not implemented. Recipe queries can inspect the native engine:
+Searchkick's `debug`, `explain`, and `search_index.tokens` methods are not yet
+implemented. Tinkick's `response` exposes portable result metadata, not a query
+plan. Recipe queries can inspect the native engine:
 
 ```sql
 SELECT tin.tokenize('Jalapeño Wi-Fi')
