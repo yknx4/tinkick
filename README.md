@@ -1044,6 +1044,23 @@ so a record matching another field does not create a false highlight. Fuzzy
 whole-field highlighting retains the matching path's optional dependencies and
 cost warnings.
 
+The [captured highlight plans](docs/benchmarks/2026-09-17-highlight-plans.json)
+measure 20 supplied texts totaling 8,840 characters on PostgreSQL 18.6 / TIN 1.0.2:
+
+| Page operation | Database execution time |
+| --- | --- |
+| Two-edit token eligibility | 2.038 ms |
+| Native marking of eligible tokens | 2.704 ms |
+| Exact `text_middle` field eligibility | 0.273 ms |
+
+The refinement processed 1,360 token occurrences, deduplicated them to 36 terms,
+and retained two eligible terms. These helper plans read supplied page text and
+`pg_extension`, without scanning model tables. They are single warm executions,
+excluding record retrieval, network time, Ruby snippet rendering, and application
+latency. Reproduce them with `direnv exec . bundle exec ruby script/explain_highlights.rb`
+after preparing the integration test database; larger or less repetitive fields
+will have different costs.
+
 Native highlighting preserves document HTML. `encoder: "html"` escapes source
 text separately from trusted highlight tags; returned strings are not marked
 HTML-safe. Do not mark untrusted native output `html_safe`.
