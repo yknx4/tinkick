@@ -41,15 +41,12 @@ module Tinkick
       raise Error, "search must be called on model, not relation" if current_scope
 
       schema = tinkick_schema
-      fields ||= options[:default_fields] || options[:searchable] || schema[:data_fields].select do |field|
-        column = schema[:columns].fetch(field)
-        array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
-        !array && [:text, :citext].include?(column.type)
-      end
+      fields ||= options[:default_fields] || options[:searchable] || tinkick_default_fields(schema)
       match ||= options[:match]
-      selected_names = fields.map { |field| field.is_a?(Hash) ? field.keys.first.to_s : field.to_s }
+      selected = tinkick_expand_fields(fields, match: match)
+      selected_names = selected.map { |field| field.is_a?(Hash) ? field.keys.first.to_s : field.to_s }
       declared = (options[:searchable] || []).reject { |field| selected_names.include?(field.to_s) }
-      tinkick_validate_fields(schema, declared + fields, match)
+      tinkick_validate_fields(schema, declared + selected, match)
 
       Relation.new(self, term, fields: fields, misspellings: misspellings,
         where: where, order: order, limit: limit, offset: offset, page: page,
@@ -58,7 +55,60 @@ module Tinkick
         countless: countless, keyset: keyset, after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results, exclude: exclude, select: select)
     end
 
+    def tinkick_expand_fields(fields, match:)
+      # @type self: singleton(ActiveRecord::Base)
+      fields.flat_map do |entry|
+        if entry.is_a?(Hash)
+          raise ArgumentError, "Each field hash must contain one field and match mode" unless entry.length == 1
+
+          name, mode = entry.to_a.fetch(0)
+        else
+          name = entry
+          mode = match
+        end
+        name = name.to_s
+        next [entry] if mode == :exact || !(name == "*" || name.start_with?("*."))
+
+        schema = tinkick_schema
+        pattern = /\A#{Regexp.escape(name).gsub('\*', '.*')}\z/m
+        expanded = tinkick_wildcard_candidates(schema, mode).grep(pattern).map { |field| { field => mode } } #: model_fields
+        tinkick_validate_fields(schema, expanded, match)
+        expanded
+      end
+    end
+
     private
+
+    def tinkick_default_fields(schema)
+      schema[:data_fields].select do |field|
+        column = schema[:columns].fetch(field)
+        array = column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
+        !array && [:text, :citext].include?(column.type)
+      end
+    end
+
+    def tinkick_wildcard_candidates(schema, mode)
+      # @type self: singleton(ActiveRecord::Base)
+      options = tinkick_options
+      fields = options&.fetch(:searchable) || tinkick_default_fields(schema)
+      candidates = fields.map { |field| field.is_a?(Hash) ? field.keys.first.to_s : field.to_s }
+      default_match = options ? options[:match] : :word
+      return default_match == :word ? candidates : [] if [:word, :phrase].include?(mode)
+      return candidates if default_match == mode
+
+      # Searchkick maps partial fields only for the model's match mode or an
+      # explicit declaration. Concrete field queries keep their own semantics.
+      declared = case mode
+      when :word_start then options&.fetch(:word_start)
+      when :word_middle then options&.fetch(:word_middle)
+      when :word_end then options&.fetch(:word_end)
+      when :text_start then options&.fetch(:text_start)
+      when :text_middle then options&.fetch(:text_middle)
+      when :text_end then options&.fetch(:text_end)
+      else return candidates
+      end
+      candidates & (declared || []).map(&:to_s)
+    end
 
     def tinkick_schema
       # @type self: singleton(ActiveRecord::Base)

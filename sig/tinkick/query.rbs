@@ -64,7 +64,7 @@ module Tinkick
 
     private
 
-    def normalize_misspellings: (QueryText::misspellings options) -> QueryText::misspellings
+    def normalize_misspellings: (QueryText::misspellings options, search_fields fields) -> QueryText::misspellings
     def resolve_misspellings: () -> void
     def misspellings_for: (String name) -> QueryText::misspellings
 

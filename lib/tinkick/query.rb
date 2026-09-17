@@ -17,7 +17,7 @@ module Tinkick
 
       @model = model
       @term = term.to_s
-      @fields = fields.map do |field|
+      @fields = model.tinkick_expand_fields(fields, match: match).map do |field|
         if field.is_a?(Hash)
           raise ArgumentError, "Each field hash must contain one field and match mode" unless field.length == 1
 
@@ -37,7 +37,7 @@ module Tinkick
       @match = match
       @misspelling_fields = nil
       @misspellings_below = nil
-      @misspellings = normalize_misspellings(misspellings)
+      @misspellings = normalize_misspellings(misspellings, fields)
       @exclude = normalize_exclusions(exclude)
       @countless = countless || keyset
       @keyset = keyset
@@ -145,7 +145,7 @@ module Tinkick
 
     private
 
-    def normalize_misspellings(options)
+    def normalize_misspellings(options, fields)
       return options unless options.is_a?(Hash)
 
       normalized = options.dup
@@ -163,10 +163,16 @@ module Tinkick
         raise ArgumentError, "misspellings fields must be an array of field names"
       end
       selected = names.map(&:to_s)
-      unless (selected - @fields.map(&:first)).empty?
+      selectors = fields.map { |field| field.is_a?(Hash) ? field.keys.first.to_s : field.to_s }
+      unless (selected - selectors).empty?
         raise ArgumentError, "All fields in per-field misspellings must also be specified in fields option"
       end
-      @misspelling_fields = selected
+      selected_fields = fields.select do |field|
+        selected.include?(field.is_a?(Hash) ? field.keys.first.to_s : field.to_s)
+      end
+      @misspelling_fields = @model.tinkick_expand_fields(selected_fields, match: @match).map do |field|
+        field.is_a?(Hash) ? field.keys.first.to_s : field.to_s
+      end
       normalized
     end
 
