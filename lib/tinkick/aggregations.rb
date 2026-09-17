@@ -30,7 +30,7 @@ module Tinkick
 
         # @type var metric_names: Array[aggregation_metric_name]
         metric_names = [:avg, :cardinality, :max, :min, :sum]
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :histogram, :date_histogram, :keyed, :time_zone, :format, *metric_names]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, :ranges, :date_ranges, :histogram, :date_histogram, :keyed, :time_zone, :format, :include, :exclude, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
         metrics = metric_names.select { |metric| options.key?(metric) }
@@ -39,6 +39,9 @@ module Tinkick
         histogram_kinds = [:histogram, :date_histogram].select { |kind| options.key?(kind) }
         if range_kinds.length + metrics.length + histogram_kinds.length > 1
           raise ArgumentError, "Each aggregation must select only one range kind, histogram, or metric"
+        end
+        if (options.key?(:include) || options.key?(:exclude)) && (range_kinds.any? || metrics.any? || histogram_kinds.any?)
+          raise ArgumentError, "include and exclude apply only to terms aggregations"
         end
         raise ArgumentError, "keyed applies only to range aggregations" if options.key?(:keyed) && range_kinds.empty?
         raise ArgumentError, "time_zone applies only to date aggregations" if options.key?(:time_zone) && !options.key?(:date_ranges)
@@ -365,6 +368,9 @@ module Tinkick
       end
       query = @unscoped.from(counts, :tinkick_counts)
         .where(Arel.sql("_tinkick_count >= ?", minimum))
+      query = term_filter(query, options.fetch(:include), exclude: false) if options.key?(:include)
+      query = term_filter(query, options.fetch(:exclude), exclude: true) if options.key?(:exclude)
+      query = query
         .select(Arel.sql("_tinkick_key, _tinkick_count, SUM(_tinkick_count) OVER () AS _tinkick_total"))
         .order(Arel.sql(order_sql(options.fetch(:order, { _count: :desc }))))
         .limit(limit)
@@ -376,6 +382,28 @@ module Tinkick
       result = { "doc_count_error_upper_bound" => 0, "sum_other_doc_count" => total - buckets.sum { |entry| entry.fetch("doc_count") }, "buckets" => buckets }
       result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
       result
+    end
+
+    def term_filter(query, value, exclude:)
+      case value
+      when String
+        @model.logger&.warn("Tinkick: PostgreSQL regex aggregation include/exclude evaluates term values before selecting buckets. Use exact-value arrays when possible and inspect EXPLAIN ANALYZE for large dictionaries.")
+        query.where(Arel.sql("_tinkick_key::text #{exclude ? "!~" : "~"} ?", value))
+      when Array
+        unless value.all? { |entry| entry.nil? || entry.is_a?(String) || entry.is_a?(Symbol) || entry.is_a?(Numeric) || entry.is_a?(Date) || entry.is_a?(Time) || entry == true || entry == false }
+          raise ArgumentError, "Aggregation include/exclude arrays must contain scalar values"
+        end
+        values = value.compact.map { |entry| entry.is_a?(Symbol) ? entry.to_s : entry }
+        return exclude ? query : query.none if values.empty?
+
+        query.where(Arel.sql("_tinkick_key #{exclude ? "NOT IN" : "IN"} (?)", values))
+      when Regexp
+        raise NotImplementedError, "Aggregation include/exclude requires a native PostgreSQL regex string; Ruby Regexp sources and flags are not translated"
+      when Hash
+        raise NotImplementedError, "Elasticsearch terms partition hashing is not implemented; use an aggregation where: filter to partition rows with native PostgreSQL conditions"
+      else
+        raise ArgumentError, "Aggregation include/exclude must be an exact-value array or a native PostgreSQL regex string"
+      end
     end
 
     def calculate_metric(metric, field, conditions)
