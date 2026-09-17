@@ -645,7 +645,7 @@ one-edit native token matching do not require them. The helper migration install
 
 ### Case, accents, whitespace, and emoji
 
-The current compiler uses TIN's default Unicode analysis. Case and accents fold,
+With default index settings, TIN uses Unicode analysis. Case and accents fold,
 so `JALAPEÑO` can match `jalapeno`; hyphens can split words, while underscores and
 apostrophes can remain within tokens. Emoji can be indexed as tokens. This does
 not provide Searchkick's emoji-to-name expansion: `🍰` is not automatically
@@ -658,9 +658,13 @@ application-normalized search column if that behavior is required.
 
 TIN provides case/accent preservation and tokenizer options, but Tinkick's
 `case_sensitive`, `special_characters`, and custom analyzer mappings are not yet
-implemented. Do not change index analysis independently and assume the compiler
-will follow it. Index/query analysis must agree; changed index tokenization
-requires rebuilding stored index entries through explicit operations.
+implemented. Native literal, phrase, and partial queries read the selected
+index's actual analysis settings, including preserved case/accents and whitespace
+tokenization. Each selected field uses its own configuration. Preserved-token
+fuzzy punctuation still needs a compiler fix. Index metadata is cached per model
+and connection pool; after rebuilding an index with changed tokenization, call
+`Product.reset_column_information` or restart application processes to refresh
+it. Multiple indexes for the same source must agree on analysis.
 See [TIN index options](https://planetscale.com/docs/postgres/search/reference/indexes).
 
 ### Stemming and language
