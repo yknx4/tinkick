@@ -5,8 +5,6 @@ require_relative "recency_boost"
 
 module Tinkick
   class BoostBy
-    MAX_SCORE = 3.4028234663852886e38
-
     def initialize(model, specification, boost_where: nil, boost: nil, boost_by_recency: nil)
       @model = model
       @sums = [] #: Array[[String, String]]
@@ -121,20 +119,16 @@ module Tinkick
 
     def conditional_number(value)
       unless value.is_a?(Integer) || value.is_a?(Float) || value.is_a?(BigDecimal) || value.is_a?(String)
-        raise ArgumentError, "boost_where factor must be a nonnegative number or numeric string"
+        raise ArgumentError, "boost_where factor must be a finite nonnegative number or numeric string"
       end
-      result = if value.is_a?(String) && ["Infinity", "+Infinity"].include?(value.strip)
-        Float::INFINITY
-      else
-        Float(value)
-      end
-      if result.nan? || result.negative? || (result.zero? && (1.0 / result).negative?)
-        raise ArgumentError, "boost_where factor must be a nonnegative number or numeric string"
+      result = Float(value)
+      unless result.is_a?(Float) && result.finite? && !result.negative?
+        raise ArgumentError, "boost_where factor must be a finite nonnegative number or numeric string"
       end
 
-      [result, MAX_SCORE].min
+      result
     rescue ArgumentError, TypeError
-      raise ArgumentError, "boost_where factor must be a nonnegative number or numeric string"
+      raise ArgumentError, "boost_where factor must be a finite nonnegative number or numeric string"
     end
 
     def compile_conditions
@@ -236,7 +230,7 @@ module Tinkick
       when "ln2p" then "ln(2.0 + #{value})"
       when "square" then "power(#{value}, 2)"
       when "sqrt" then "sqrt(#{value})"
-      when "reciprocal" then "(CASE WHEN #{value} = 0 THEN 'Infinity'::numeric ELSE 1.0 / #{value} END)"
+      when "reciprocal" then "(1.0 / #{value})"
       else raise ArgumentError, "Unsupported boost_by modifier: #{modifier.inspect}"
       end
     end
@@ -250,7 +244,7 @@ module Tinkick
         present = functions.map { |condition, _score| "(#{condition})" }.join(" OR ")
         combined = "CASE WHEN #{present} THEN (#{combined}) ELSE 1.0 END"
       end
-      "LEAST((#{combined}), #{MAX_SCORE})::double precision"
+      "(#{combined})::double precision"
     end
   end
 end

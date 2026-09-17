@@ -893,9 +893,10 @@ multiplied together and also multiply the base score. Supported modifiers are
 Missing values skip their contribution unless `missing:` supplies a replacement;
 `missing: 0` is a real replacement. A group with no applicable contributions
 leaves the score unchanged. Arrays use their minimum non-NULL value before
-applying the factor and modifier; empty/all-NULL arrays are missing. Each combined
-group is capped at the single-precision maximum, including reciprocal zero.
-Invalid arithmetic and negative/NaN function scores raise a database error.
+applying the factor and modifier; empty/all-NULL arrays are missing. Groups use
+PostgreSQL arithmetic and return double-precision scores without an Elasticsearch
+Float32 cap. Division by zero and overflow raise native database errors, including
+`reciprocal` applied to zero. Negative/NaN function scores also raise an error.
 
 These calculations require only PostgreSQL arithmetic. They log a warning because
 numeric ranking can sort all matches instead of using TIN top-k, and arrays inspect
@@ -935,8 +936,9 @@ Product.search("coffee", boost_where: {
 Product.search("coffee").boost_where(in_stock: true).boost_where(category: {value: "featured", factor: 5})
 ```
 
-The shorthand weight is 1,000. Explicit factors accept nonnegative numbers or
-numeric strings; factors between zero and one demote matching records. All
+The shorthand weight is 1,000. Explicit factors accept finite nonnegative numbers
+or numeric strings; factors between zero and one demote matching records. Signed
+zero behaves as zero, and infinite factors are rejected. All
 matching conditional weights are summed with the default `boost_by` contributions,
 then multiply the native score. Records with no applicable contribution keep
 their original score. A zero conditional weight adds no contribution, so zero

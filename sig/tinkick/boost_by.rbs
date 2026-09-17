@@ -10,8 +10,6 @@ module Tinkick
   type legacy_boost = String | Symbol | false | nil
 
   class BoostBy
-    MAX_SCORE: Float
-
     @model: singleton(ActiveRecord::Base)
     @sums: Array[[ String, String ]]
     @multipliers: Array[[ String, String ]]

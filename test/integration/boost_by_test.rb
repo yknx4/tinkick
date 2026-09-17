@@ -99,11 +99,35 @@ class BoostByTest < TinkickIntegrationTest
     end
   end
 
-  def test_zero_reciprocal_is_clamped_to_the_elasticsearch_default_group_maximum
+  def test_zero_reciprocal_raises_native_postgresql_division_by_zero
     row = cursor("Reciprocal zero", price: 0, ratio: 0)
-    actual = scores(CursorValue, { price: { modifier: "reciprocal" } }, base: "1.0").fetch(row.id)
+    error = assert_raises(ActiveRecord::StatementInvalid) do
+      CursorValue.transaction(requires_new: true) do
+        scores(CursorValue, { price: { modifier: "reciprocal" } }, base: "1.0").fetch(row.id)
+      end
+    end
 
-    assert_in_delta 3.4028234663852886e38, actual, 1e30
+    assert_kind_of PG::DivisionByZero, error.cause
+  end
+
+  def test_large_sum_and_multiply_groups_retain_native_double_precision_values
+    row = cursor("Large score", price: 1, ratio: 1)
+    sum = { price: { factor: 1e100, modifier: "none" }, ratio: { factor: 1e100, modifier: "none" } }
+    product = { price: { factor: 1e100, boost_mode: "multiply" }, ratio: { factor: 1e100, boost_mode: "multiply" } }
+
+    assert_in_delta 2e100, scores(CursorValue, sum, base: "1.0").fetch(row.id), 1e90
+    assert_in_delta 1e200, scores(CursorValue, product, base: "1.0").fetch(row.id), 1e190
+  end
+
+  def test_numeric_group_overflow_raises_the_native_postgresql_error
+    row = cursor("Overflow", price: 2, ratio: 0)
+    error = assert_raises(ActiveRecord::StatementInvalid) do
+      CursorValue.transaction(requires_new: true) do
+        scores(CursorValue, { price: { factor: 1e308, modifier: "none" } }).fetch(row.id)
+      end
+    end
+
+    assert_kind_of PG::NumericValueOutOfRange, error.cause
   end
 
   def test_filtered_out_invalid_rows_are_not_scored

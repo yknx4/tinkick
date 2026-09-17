@@ -72,21 +72,29 @@ class ConditionalBoostTest < TinkickIntegrationTest
     end
   end
 
-  def test_negative_nan_boolean_and_malformed_weights_do_not_silently_become_zero
-    invalid = [-1, -0.0, "-0", Float::NAN, true, false, "", "2x", "not numeric", [], {}]
+  def test_negative_nonfinite_boolean_and_malformed_weights_are_rejected
+    invalid = [-1, Float::NAN, Float::INFINITY, "Infinity", "+Infinity", "1e1000", true, false, "", "2x", "not numeric", [], {}]
 
     invalid.each do |factor|
       assert_raises(ArgumentError, factor.inspect) { scores(name: { value: "Red Apple", factor: factor }) }
     end
   end
 
-  def test_positive_infinity_and_large_weights_use_the_shared_group_score_cap
+  def test_large_finite_conditional_weights_are_not_clamped_to_float32
     apple, pear = products
 
-    [Float::INFINITY, "Infinity", "1e1000", 1e100].each do |factor|
+    [1e100, "1e100"].each do |factor|
       values = scores(base: "1.0", name: { value: apple.name, factor: factor })
-      assert_in_delta Tinkick::BoostBy::MAX_SCORE, values.fetch(apple.id), 1e30
+      assert_in_delta 1e100, values.fetch(apple.id), 1e90
       assert_equal 1.0, values.fetch(pear.id)
+    end
+  end
+
+  def test_signed_zero_uses_the_same_behavior_as_zero
+    apple, pear = products
+
+    [-0.0, "-0", "-0.0", 0].each do |factor|
+      assert_equal({ apple.id => 2.0, pear.id => 2.0 }, scores(name: { value: apple.name, factor: factor }))
     end
   end
 
