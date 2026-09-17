@@ -2,12 +2,13 @@
 
 require_relative "filter"
 require_relative "query_text"
+require_relative "keyset"
 
 module Tinkick
   class Query
-    attr_reader :model, :limit
+    attr_reader :model, :limit, :after
 
-    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: 0, operator: "and", match: :word, misspellings: false, countless: false)
+    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
@@ -20,9 +21,14 @@ module Tinkick
       @operator = operator.to_s
       @match = match
       @misspellings = misspellings
-      @countless = countless
+      @countless = countless || keyset
+      @keyset = keyset
+      @after = after
       raise ArgumentError, "limit and offset must be nonnegative" if @limit.negative? || @offset.negative?
       raise InvalidQueryError, "countless pagination requires a positive limit" if @countless && @limit.zero?
+      raise InvalidQueryError, "keyset pagination does not accept offset; use after: with next_cursor" if keyset && !offset.nil?
+      raise InvalidQueryError, "after must be an opaque cursor string" unless after.nil? || after.is_a?(String)
+      raise InvalidQueryError, "after requires keyset: true" if after && !keyset
     end
 
     def records
@@ -37,9 +43,20 @@ module Tinkick
       @countless
     end
 
+    def keyset?
+      @keyset
+    end
+
     def has_next_page?
       records if @has_next_page.nil?
       @has_next_page == true
+    end
+
+    def next_cursor
+      return unless keyset? && has_next_page?
+
+      row = @rows&.last || @records&.last&.attributes
+      row ? keyset_order.encode(row) : nil
     end
 
     def total_count
@@ -51,6 +68,10 @@ module Tinkick
     def trim_page(values)
       @has_next_page = countless? && values.length > @limit
       countless? ? values.first(@limit) : values
+    end
+
+    def keyset_order
+      @keyset_order ||= Keyset.new(@model, @order)
     end
 
     def scope
@@ -92,13 +113,22 @@ module Tinkick
         "tin.score(#{quoted_table}.ctid)"
       end
       if @offset.positive? && score != "1.0"
-        @model.logger&.warn("Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Large offsets may be slow.")
+        @model.logger&.warn("Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Consider keyset pagination on stable indexed columns to avoid large offsets. Countless pagination avoids automatic counts but does not remove offset costs.")
       end
       if @fields.length > 1 && score != "1.0"
         @model.logger&.warn("Tinkick: ranking across multiple fields uses full scoring to preserve matching rows and can sort matches instead of using TIN's native top-k path. Consider a stored or generated combined text column with one TIN index when ranking performance matters.")
       end
+      if (keyset? || !@order.nil?) && score != "1.0"
+        @model.logger&.warn("Tinkick: lexical search with column order can sort matching rows instead of using TIN's relevance top-k path. Use stable indexed columns for keyset pagination and check the query plan for your workload.")
+      end
       order = @order
-      ordering = order.nil? ? ["_tinkick_score DESC"] : order_clauses(order)
+      ordering = if keyset?
+        after = @after
+        relation = keyset_order.apply(relation, after) if after
+        [keyset_order.order_sql]
+      else
+        order.nil? ? ["_tinkick_score DESC"] : order_clauses(order)
+      end
 
       relation.reselect(Arel.sql("#{quoted_table}.*"), Arel.sql("#{score} AS _tinkick_score"))
         .reorder(Arel.sql(ordering.join(", ")))

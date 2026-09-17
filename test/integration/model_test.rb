@@ -58,6 +58,18 @@ class ModelTest < TinkickIntegrationTest
     assert_equal(["Red Apple"], model.tinkick_search("apple", misspellings: false).map(&:name))
   end
 
+  def test_search_forwards_countless_and_keyset_pagination
+    model = search_model(searchable: [:name])
+    countless = model.search("*", countless: true, limit: 1)
+    assert(countless.has_next_page?)
+    assert_equal(2, countless.next_page)
+
+    first = model.search("*", keyset: true, limit: 1)
+    second = model.search("*", keyset: true, after: first.next_cursor, limit: 1)
+    assert_equal(model.order(:id).ids, first.map(&:id) + second.map(&:id))
+    assert_nil(second.next_cursor)
+  end
+
   def test_nonpublic_search_methods_are_preserved
     [:private, :protected].each do |visibility|
       model = Class.new(SearchProduct) do

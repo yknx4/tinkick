@@ -17,7 +17,7 @@ module Tinkick
       @tinkick_options || (superclass.respond_to?(:tinkick_options) ? superclass.public_send(:tinkick_options) : nil)
     end
 
-    def tinkick_search(term = "*", fields: nil, misspellings: true, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: nil, operator: "and", load: true, total_entries: nil, countless: false)
+    def tinkick_search(term = "*", fields: nil, misspellings: true, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: nil, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil)
       # @type self: singleton(ActiveRecord::Base)
       options = tinkick_options
       raise Error, "Declare tinkick on #{name} before calling tinkick_search" unless options
@@ -30,7 +30,8 @@ module Tinkick
       Relation.new(self, term, fields: fields, misspellings: misspellings,
         where: where, order: order, limit: limit, offset: offset, page: page,
         per_page: per_page, padding: padding, match: match || options[:match],
-        operator: operator, load: load, total_entries: total_entries, countless: countless)
+        operator: operator, load: load, total_entries: total_entries,
+        countless: countless, keyset: keyset, after: after)
     end
 
     private

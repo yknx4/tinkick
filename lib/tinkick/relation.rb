@@ -15,15 +15,17 @@ module Tinkick
     alias_method :klass, :model
     def_delegators :execute, :each, :any?, :empty?, :size, :length, :slice, :[], :to_ary,
       :total_count, :current_page, :limit_value, :total_pages, :num_pages, :offset_value,
-      :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score, :has_next_page?
+      :previous_page, :prev_page, :next_page, :first_page?, :last_page?, :out_of_range?, :with_score,
+      :has_next_page?, :next_cursor
 
-    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false)
+    def initialize(model, term = "*", fields:, misspellings:, where: {}, order: nil, limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: :word, operator: "and", load: true, total_entries: nil, countless: false, keyset: false, after: nil)
       @model = model
       @term = term
       @options = {
         fields: fields, misspellings: misspellings, where: where, order: order,
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding,
-        match: match, operator: operator, load: load, total_entries: total_entries, countless: countless,
+        match: match, operator: operator, load: load, total_entries: total_entries,
+        countless: countless, keyset: keyset, after: after,
       }
       query
     end
@@ -39,6 +41,17 @@ module Tinkick
     def countless!(value = true)
       check_loaded
       @options[:countless] = value
+      self
+    end
+
+    def keyset(after: nil)
+      clone.keyset!(after: after)
+    end
+
+    def keyset!(after: nil)
+      check_loaded
+      @options[:keyset] = true
+      @options[:after] = after
       self
     end
 
@@ -272,10 +285,14 @@ module Tinkick
     end
 
     def query
+      if @options[:keyset] && (!@options[:offset].nil? || @options[:page].to_i > 1 || !@options[:padding].to_i.zero?)
+        raise InvalidQueryError, "keyset pagination does not accept offset, page > 1, or padding; use after: with next_cursor"
+      end
       @query ||= Query.new(@model, @term,
         fields: @options[:fields], where: @options[:where], order: @options[:order],
-        limit: page_size, offset: (@options[:offset] || (page_number - 1) * page_size + page_padding).to_i,
-        match: @options[:match], operator: @options[:operator], misspellings: @options[:misspellings], countless: @options[:countless])
+        limit: page_size, offset: @options[:keyset] ? nil : (@options[:offset] || (page_number - 1) * page_size + page_padding).to_i,
+        match: @options[:match], operator: @options[:operator], misspellings: @options[:misspellings],
+        countless: @options[:countless], keyset: @options[:keyset], after: @options[:after])
     end
 
     def execute

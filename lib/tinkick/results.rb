@@ -13,6 +13,9 @@ module Tinkick
     attr_reader :current_page, :padding
 
     def initialize(query, page: 1, padding: 0, total_entries: nil, load: true)
+      if query.keyset? && (page != 1 || !padding.zero?)
+        raise InvalidQueryError, "keyset pagination does not accept page or padding; use after: with next_cursor"
+      end
       @query = query
       @current_page = page
       @padding = padding
@@ -49,6 +52,8 @@ module Tinkick
     alias_method :prev_page, :previous_page
 
     def next_page
+      raise InvalidQueryError, "keyset pagination uses next_cursor instead of next_page" if @query.keyset?
+
       return has_next_page? ? current_page + 1 : nil if @query.countless?
 
       current_page < total_pages ? current_page + 1 : nil
@@ -61,7 +66,16 @@ module Tinkick
       @query.has_next_page?
     end
 
+    def next_cursor
+      return unless @query.keyset?
+
+      results
+      @query.next_cursor
+    end
+
     def first_page?
+      return @query.after.nil? if @query.keyset?
+
       previous_page.nil?
     end
 

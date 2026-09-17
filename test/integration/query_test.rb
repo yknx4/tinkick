@@ -166,6 +166,8 @@ class QueryTest < TinkickIntegrationTest
     search.records
     assert_includes(output.string, "offset pagination")
     assert_includes(output.string, "top-k")
+    assert_includes(output.string, "keyset pagination")
+    assert_includes(output.string, "does not remove offset costs")
 
     output.truncate(0)
     output.rewind

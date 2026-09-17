@@ -142,6 +142,20 @@ class RelationTest < TinkickIntegrationTest
     assert_instance_of(SearchProduct, original.load.first)
   end
 
+  def test_first_zero_is_empty_without_querying_for_countless_and_keyset
+    statements = []
+    callback = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      [:countless, :keyset].each do |mode|
+        search = relation(limit: 2, **{ mode => true })
+
+        assert_empty(search.first(0))
+        refute(search.loaded?)
+      end
+    end
+    assert_empty(statements)
+  end
+
   def test_total_count_does_not_instantiate_records_and_count_counts_the_page
     search = relation.limit(1)
     instantiations = []
