@@ -10,9 +10,15 @@ module Tinkick
 
       private
 
+      def plain_identifier?: (String identifier) -> bool
+
+      def valid_field?: (String field) -> bool
+
       def migration_name: () -> String
 
       def index_name: (String field) -> String
+
+      def index_expression: (String field) -> String
     end
   end
 end

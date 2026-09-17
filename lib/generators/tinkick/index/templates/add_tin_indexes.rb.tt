@@ -3,7 +3,25 @@
 class <%= migration_class_name %> < ActiveRecord::Migration[8.0]
   def change
 <% fields.each do |field| -%>
-    add_index <%= table_name.inspect %>, <%= field.inspect %>, using: :tin, name: <%= index_name(field).inspect %>
+    add_index <%= table_name.inspect %>, <%= index_expression(field) %>, using: :tin, name: <%= index_name(field).inspect %>
 <% end -%>
   end
+<% if fields.any? { |field| field.include?(".") } -%>
+
+  private
+
+  def jsonb_expression(root, *path)
+    column = connection.columns(<%= table_name.inspect %>).find { |entry| entry.name == root }
+    unless column && column.type == :jsonb && !column.array
+      raise ArgumentError, "<%= table_name %>.#{root} must be an existing JSONB column; add or change it with a Rails migration"
+    end
+
+    expression = connection.quote_column_name(root)
+    path.each_with_index do |key, index|
+      operator = index == path.length - 1 ? " ->> " : " -> "
+      expression += operator + connection.quote(key)
+    end
+    "(#{expression})"
+  end
+<% end -%>
 end
