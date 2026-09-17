@@ -403,15 +403,36 @@ and returns `nil` on success. Database errors still raise normally. Neither
 metadata method adds a total-count query or invokes result scopes/preloads, and
 subsequent result loading reuses the page.
 
+### Hits
+
+```ruby
+results = Product.search("coffee", select: [:name])
+results.hits
+results.with_hit.each { |product, hit| puts [product.name, hit["_score"]] }
+```
+
+`hits` returns the original bounded search page. Each hash has a string `_id`
+from the model's primary key, the PostgreSQL table name as `_index`, and the
+native numeric `_score`. `with_hit` pairs those hashes with visible records after
+`scope_results`; missing records remain in `hits`. Both methods reuse the page
+query and preserve the original hit association when a loaded record is edited.
+
+Model results omit `_source` by default. Use `select: true` or source selectors
+to include it; model attributes still load completely. Raw results include
+source by default, including with `select: false`. `select: []` omits source in
+both modes. Source filters exclude hidden identity/cursor columns unless selected.
+An unfiltered source contains physical model columns, including its primary key,
+with PostgreSQL/ActiveRecord value types; it never evaluates `search_data` values.
+Sources preserve the fetched values when result objects are subsequently edited.
+
 ### Metadata still missing
 
-`response`, `hits`, `with_hit`,
-suggestions,
+`response`, suggestions,
 and public highlight result methods are not implemented. Aggregation metadata
 is available through `aggs` and `aggregations`. Searchkick 6 removed
-`each_with_hit` and `with_details`; use `with_hit.each` and `with_highlights` when
-those adapters are available.
-Do not expect Elasticsearch `_index`, `_shards`, `_source`, scroll IDs, or JSON
+`each_with_hit` and `with_details`; use `with_hit.each`; `with_highlights` remains
+implementation work.
+Do not expect Elasticsearch index aliases, `_shards`, scroll IDs, or JSON
 response envelopes. Use ActiveRecord instrumentation for timing and explicitly
 serialize the visible records for an HTTP response.
 
@@ -660,8 +681,10 @@ TIN provides case/accent preservation and tokenizer options, but Tinkick's
 `case_sensitive`, `special_characters`, and custom analyzer mappings are not yet
 implemented. Native literal, phrase, and partial queries read the selected
 index's actual analysis settings, including preserved case/accents and whitespace
-tokenization. Each selected field uses its own configuration. Preserved-token
-fuzzy punctuation still needs a compiler fix. Index metadata is cached per model
+tokenization. Each selected field uses its own configuration. One-edit fuzzy
+queries also escape short preserved punctuation tokens through native dictionary
+patterns; longer delimiter tokens and larger edit distances still need SQL
+refinement. Index metadata is cached per model
 and connection pool; after rebuilding an index with changed tokenization, call
 `Product.reset_column_information` or restart application processes to refresh
 it. Multiple indexes for the same source must agree on analysis.
