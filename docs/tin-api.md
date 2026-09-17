@@ -71,9 +71,10 @@ Scores therefore change over time. Guard a zero denominator if normalizing.
 An explicit boost, including `^1.0`, pins a term against dense-term elision;
 field-boost translation therefore also affects which terms contribute.
 
-Tinkick must test both dense-term settings, add deterministic tie handling,
-retain the model primary key for loading, and avoid scoring a plain SQL-only
-match-all query. Exact score equivalence to Elasticsearch is not established.
+Tinkick retains the model primary key, avoids scoring plain SQL-only match-all
+queries, and leaves default relevance ties to TIN. Callers can request explicit
+column ordering when deterministic ties matter, with its potential sorting cost.
+Exact score equivalence to Elasticsearch is not established.
 
 [Recommended SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes)
 favor ranked `ORDER BY ... DESC LIMIT ...` retrieval. SQL filters can cooperate
@@ -81,8 +82,8 @@ with ordinary indexes. Scoring both sides of a join requires a matching TIN
 predicate on each side. Proposed Tinkick queries must be checked with actual
 plans; composability in SQL is not evidence that every shape keeps top-k speed.
 The reference also documents `LATERAL` searches whose query comes from an outer
-row, allowing per-row top-k retrieval. This remains unverified through the
-current PlanetScale router.
+row, allowing per-row top-k retrieval. One such shape succeeded through the
+current PlanetScale router; the bounded probe is recorded below.
 
 ## Analysis, highlights and operational constraints
 
@@ -170,9 +171,9 @@ unchanged. Helpers must use the same analysis options as their target index.
 | Indexed `ryd~0:1 AND appl~0:1` | Matched Red Apple. Apply fuzzy modifiers to individual analyzed tokens. |
 | Indexed `"apple"~0:1` | Raised a parse error; a quoted phrase cannot take this fuzzy-prefix suffix. |
 
-The literal and phrase compiler's automated coverage is in
-[`query_text_test.rb`](../test/integration/query_text_test.rb). The fuzzy probes
-above are manual evidence; they do not claim a complete misspellings adapter.
+The literal, phrase, keycap and explicit native fuzzy compiler now have automated
+coverage in `test/integration/query_text_test.rb`. The earlier probes above
+remain a separate evidence record; neither proves a complete misspellings adapter.
 
 ### Highlighting and scoring
 
@@ -189,6 +190,48 @@ Default scoring, full scoring, and disabled dense-term elision each returned
 not a stable expected value: previous writes affect retained corpus statistics.
 Boosting apple by two returned `1.9034982` for that match, while pear remained
 `0.9517491`. Mixing `score` and `full_score` on one relation failed as
-documented; calls without a TIN scan also failed. Cross-field score composition,
-boosted ranking and normalized-score behavior still need representative
-automated coverage and query-plan inspection.
+documented; calls without a TIN scan also failed. Multi-field retrieval now has
+automated coverage. Boosted ranking and normalized-score behavior still need
+representative automated coverage and query-plan inspection.
+
+The executable Query integration tests also check the actual ranked SQL with
+`EXPLAIN (FORMAT JSON)`. Single-field native `tin.score`, a score-only descending
+order and `LIMIT` retain TIN's top-k path. On this endpoint, adding even `OFFSET 0`
+caused an extra sort and removed top-k. The adapter omits a zero offset and warns on
+nonzero offset pagination. No forced primary-key tie sort or synthetic fuzzy
+boost is added to the normal relevance query. Stable column cursor pagination
+is an explicit alternative ordering, not a claim that arbitrary column sorts
+have the same TIN top-k plan.
+
+### Parameterized LATERAL probe
+
+A read-only probe on the same TIN 1.0.2 endpoint inspected dictionary candidates
+in a materialized CTE, aggregated them into query text, and passed that text to
+a `CROSS JOIN LATERAL` search of the existing character table. It returned the
+expected `Hunleth` record. `EXPLAIN` showed a `Text Search Scan` with query
+`$exec1`, dense-term elision, and `Top K: "10"` for the inner search. Candidate
+selection had its own sort. A scalar-subquery variant also returned the record,
+but added a result sort and lost top-k.
+
+This ad hoc probe establishes those SQL shapes through the router; it is not an
+implemented expansion-cap API, an automated compatibility test, or part of the
+separate [captured query-plan artifact](query-plans.md).
+
+### Multi-field scoring regression and fallback
+
+On the same TIN 1.0.2 endpoint, a fresh connection reproduced a discrepancy for
+`name ==> 'apple OR ripe' OR description ==> 'apple OR ripe'`: `COUNT(*)` and a
+projection without scoring returned two matches, while selecting `tin.score(ctid)`
+returned no rows, with or without an explicit order. Selecting
+`tin.full_score(ctid)` returned both rows. The plan used a TIN multi-index scan
+with the `Stripe Solve` strategy. This is an observed regression in this query
+shape and endpoint state, not evidence that TIN lacks multi-field search.
+
+Tinkick therefore uses full scoring for multi-field lexical searches and warns
+about full-scoring and sorting costs. Single-field queries keep native
+`tin.score`; default relevance ordering without an offset preserves the tested
+top-k path. A stored/generated combined column with one TIN
+index is the recommended option when its matching semantics fit the application.
+The varied-corpus tests exercise a positive multi-field query and exclude terms
+split between fields; they do not weaken matching assertions to accommodate this
+endpoint behavior.

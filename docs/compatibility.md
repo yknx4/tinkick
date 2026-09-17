@@ -22,7 +22,7 @@ Source: [model.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a251016
 
 | Surface | Tinkick disposition |
 | --- | --- |
-| `searchkick(**options)`, `search`, `searchkick_search`, `searchkick_options`, `searchkick_klass` | Target; integrate through Active Record load hooks and preserve caller names. |
+| `searchkick(**options)`, `search`, `searchkick_search`, `searchkick_options`, `searchkick_klass` | Intentional naming change: use `tinkick`, `tinkick_search`, and Tinkick configuration names. Add `search` only when no method already exists. Both gems must coexist; never alias the Searchkick namespace. |
 | `searchable`, `filterable`, `default_fields`, `match`, `word*`, `text*` | Target; validate selected columns and required TIN indexes. Matching modes need separate proofs. |
 | `search_data` | Intentional change: validate field names against the model's columns; do not serialize or index returned values. Derived data belongs in stored or generated columns added through Rails migrations. Missing columns must request those migrations. |
 | `should_index?`, `search_import`, `unscope`, `inheritance` | No import pipeline. Establish a SQL scope policy; arbitrary Ruby predicates cannot become SQL automatically. |
@@ -41,6 +41,7 @@ and [query.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a6
 | Keyword arguments and equivalent fluent calls | Target both forms; validate unknown and unsupported options separately. |
 | `fields`, `where`, `where.not`, `order`, `limit`, `offset`, `select` | Target using validated identifiers, bound values, and TINQL generation. |
 | `page`, `per_page`, `per`, `padding`, `total_entries` | Target, including defaults and edge behavior. Count in SQL. |
+| Keyset / countless pagination | Additive Tinkick extension, opt-in. Stable column cursors for traversal; countless pagination retains relevance ordering. Existing offset/page calls keep their behavior. |
 | `rewhere`, `reorder`, `reselect`, `only`, `except` | Preserve replace/merge behavior and cloning. |
 | Bang modifiers, `loaded?`, `load`, `first`, `pluck`, Enumerable | Match lazy execution, mutation after loading, and projection semantics. |
 | `includes`, `model_includes`, `scope_results` | Load only the selected page; preserve ranking through association loading. |
@@ -94,7 +95,7 @@ These classifications supersede a broad “gap” label for the families above.
 | Fuzzy/prefix/infix/suffix matching | `term~P:N`, `*` and `?`. [TINQL](https://planetscale.com/docs/postgres/search/tinql) | Native support; explicit prefix/distance and token wildcards verified on TIN 1.0.2. Adjacent transpositions differ from Searchkick's default; expansion limits and faithful adapter translation remain open. Whole-field match modes need separate work. |
 | Cross-field relevance | Per-column predicates, combined scores and query boosts. [SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes) | Native support; one-column indexes do not prevent multi-field search. |
 | Numeric/recency/personalized boosts | SQL expressions can accompany ranked TIN queries. [SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes) | Adapter formulas and performance tests, not a proven missing capability. |
-| Full-field highlights/custom tags | `tin.highlight` with explicit tags and optional query. [Highlighting](https://planetscale.com/docs/postgres/search/highlighting) | Native support verified for automatic/explicit queries. Original document HTML is not escaped; the adapter must handle it. Snippets and compatible result format remain adapter work. |
+| Full-field highlights/custom tags | `tin.highlight` with explicit tags and optional query. [Highlighting](https://planetscale.com/docs/postgres/search/highlighting) | Internal full-field helper is tested with custom tags and optional HTML encoding. Default encoding preserves source HTML, matching Searchkick; returned strings are not marked HTML-safe. Snippets and public result integration remain adapter work. |
 | Case/accent controls | Configurable folding, token boundaries, gaps and emoji policy. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes) | Native support; map options and document migrations. |
 | Nested stored JSON text | Text-producing expression indexes. [Indexes](https://planetscale.com/docs/postgres/search/reference/indexes) | Native primitive; field-path validation and nested-object semantics need design. |
 | Filters/counts/aggregations | Boolean predicates combine with SQL and counts. [Operator](https://planetscale.com/docs/postgres/search/reference/operator) | Adapter SQL and smart-facet semantics. |
@@ -107,6 +108,22 @@ The [scoring reference](https://planetscale.com/docs/postgres/search/scoring)
 also documents full scoring, normalization, inspection and term-set overrides.
 These are translation tools; they do not prove identical Searchkick ranking.
 “Not tested” must remain distinct from “not supported.”
+
+The compiler supports default distance-one misspellings, including adjacent
+transpositions, and explicit native distance/prefix controls. Native fuzzy terms
+combine with exact swapped terms for distance-one transpositions. Scores remain
+native, without synthetic exact/fuzzy boosts. The user approved omitting the
+implicit Searchkick expansion cap: default TIN results may include additional
+valid typo matches. Explicit expansion limits, per-field selection, below-count
+retry, and transpositions at distances above one remain unfinished and fail
+explicitly. Literal keycap emoji work; nonzero-distance fuzzy keycaps currently
+fail explicitly instead of losing the token silently.
+
+For highlighting, Searchkick passes through the `encoder` option. The
+[Elasticsearch encoder contract](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/highlighting-settings)
+preserves text by default and escapes source text with `encoder: "html"` while
+retaining highlight tags. The internal Tinkick helper covers both modes; a
+native highlight function by itself does not implement that optional encoder.
 
 The separate [live evidence record](tin-api.md#live-evidence) identifies the
 database/version, actual query shapes, results and documentation discrepancies.
@@ -143,7 +160,8 @@ Sources: [searchkick.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a
 [index.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/lib/searchkick/index.rb),
 and [README](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/README.md).
 
-- Preserve the intended `Searchkick.search` and `multi_search` entry points.
+- Provide the intended global search and multi-search APIs under `Tinkick`.
+  Leave the real `Searchkick` module untouched during side-by-side transitions.
   Multi-search populates existing relations and records individual errors;
   PostgreSQL transaction aborts require deliberate isolation between queries.
 - Assess global model options, custom search method name, timeouts, model
