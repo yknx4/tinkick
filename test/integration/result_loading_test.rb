@@ -81,6 +81,42 @@ class ResultLoadingTest < TinkickIntegrationTest
     refute statements.any? { |sql| sql.include?('FROM "tinkick_test_reviews"') }
   end
 
+  def test_model_includes_combines_current_model_associations_with_generic_includes
+    search = Product.search("*", includes: :reviews, model_includes: { Product => :first_review, Review => :unknown }, order: :id)
+
+    search.each do |product|
+      assert product.association(:reviews).loaded?
+      assert product.association(:first_review).loaded?
+    end
+    assert_empty capture_queries { search.each { |product| product.first_review.body } }
+  end
+
+  def test_fluent_model_includes_merges_mappings_without_mutating_source
+    original = Product.search("*").model_includes(Product => :reviews)
+    included = original.model_includes(Review => :unknown).model_includes(Product => :first_review)
+
+    assert included.all? { |product| product.association(:first_review).loaded? }
+    refute included.any? { |product| product.association(:reviews).loaded? }
+    assert original.all? { |product| product.association(:reviews).loaded? }
+    refute original.any? { |product| product.association(:first_review).loaded? }
+  end
+
+  def test_model_includes_bang_returns_self_and_rejects_loaded_changes
+    search = Product.search("*")
+
+    assert_same search, search.model_includes!(Product => :reviews)
+    assert search.all? { |product| product.association(:reviews).loaded? }
+    assert_raises(Tinkick::Error) { search.model_includes!(Product => :first_review) }
+  end
+
+  def test_raw_results_ignore_model_includes
+    search = Product.search("*", load: false, model_includes: { Product => :unknown })
+    statements = capture_queries { assert_equal 2, search.length }
+
+    assert_instance_of Tinkick::HashWrapper, search.first
+    refute statements.any? { |sql| sql.include?('FROM "tinkick_test_reviews"') }
+  end
+
   private
 
   def capture_queries
