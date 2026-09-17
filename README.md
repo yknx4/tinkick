@@ -1015,7 +1015,11 @@ original value when no span matches. Match-all queries have empty highlight maps
 Existing model `search_highlights` methods are preserved for backend coexistence.
 
 Highlighting batches the bounded page in one native call per field and caches the
-result. It does not count matches or alter search ranking. Raw projections fetch
+result. Refined fuzzy searches first run one additional page-token eligibility
+query per field, preserving edit-distance, fixed-prefix, and partial-gram rules.
+Only eligible tokens are highlighted; broad candidate-only tokens are excluded.
+This path warns about extra SQL and long-field/partial-middle costs.
+Highlighting does not count matches or alter search ranking. Raw projections fetch
 only selected columns plus required highlight inputs; hidden inputs stay out of
 the source and raw result attributes. Large pages or long fields increase transfer
 and presentation work, so set a suitable page limit.
@@ -1024,7 +1028,7 @@ Native highlighting preserves document HTML. `encoder: "html"` escapes source
 text separately from trusted highlight tags; returned strings are not marked
 HTML-safe. Do not mark untrusted native output `html_safe`.
 
-Custom index analysis, SQL whole-field modes, and refined fuzzy highlighting
+Custom index analysis and SQL whole-field highlighting
 remain adapter work and raise actionable argument errors instead of returning
 incorrect spans. Explicit native highlighting applies default analysis even when
 an index uses different analysis; merely passing the index's query is insufficient.
