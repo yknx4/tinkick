@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "filter"
+
 module Tinkick
   class Aggregations
     def initialize(model, scope)
@@ -22,10 +24,25 @@ module Tinkick
       aggregations.to_h do |name, options|
         raise ArgumentError, "Aggregation options must be a hash" unless options.is_a?(Hash)
 
-        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where]
+        # @type var metric_names: Array[aggregation_metric_name]
+        metric_names = [:avg, :cardinality, :max, :min, :sum]
+        unknown = options.keys - [:field, :limit, :order, :min_doc_count, :where, *metric_names]
         raise ArgumentError, "Unknown aggregation options: #{unknown.join(", ")}" unless unknown.empty?
 
-        [name.to_s, terms((options[:field] || name).to_s, options)]
+        metrics = metric_names.select { |metric| options.key?(metric) }
+        raise ArgumentError, "Each aggregation must select only one metric" if metrics.length > 1
+
+        result = if metrics.empty?
+          terms((options[:field] || name).to_s, options)
+        else
+          metric = metrics.fetch(0)
+          metric_options = options.fetch(metric)
+          unless metric_options.is_a?(Hash) && (metric_options.keys - [:field]).empty?
+            raise ArgumentError, "Metric options must be a hash containing a field"
+          end
+          calculate_metric(metric, (metric_options[:field] || name).to_s, options[:where])
+        end
+        [name.to_s, result]
       end
     end
 
@@ -61,7 +78,31 @@ module Tinkick
       result
     end
 
-    def values_relation(scope, field)
+    def calculate_metric(metric, field, conditions)
+      scope = conditions ? Filter.new(@model).apply(@scope, conditions) : @scope
+      values = values_relation(scope, field, unique: false)
+      column = @model.columns_hash.fetch(field)
+      unless metric == :cardinality || [:integer, :decimal, :float].include?(column.type)
+        raise InvalidQueryError, "#{metric} requires a numeric aggregation column"
+      end
+
+      if metric == :cardinality
+        @model.logger&.warn("Tinkick: cardinality uses exact SQL COUNT(DISTINCT), which can cost more than an approximate estimate for many distinct values.")
+        expression = "COUNT(DISTINCT _tinkick_value)"
+      else
+        expression = "#{metric.to_s.upcase}(_tinkick_value)"
+      end
+      query = @model.unscoped.from(values, :tinkick_values).select(Arel.sql(expression))
+      # @type var value: Integer | Float | BigDecimal | nil
+      value = @model.with_connection { |connection| connection.select_value(query) }
+      # @type var result: aggregation_metric
+      result = { "value" => metric == :cardinality ? (value || 0).to_i : value&.to_f }
+      result["value"] = 0.0 if metric == :sum && value.nil?
+      result["doc_count"] = scope.distinct.count(@model.primary_key) if conditions && !conditions.empty?
+      result
+    end
+
+    def values_relation(scope, field, unique: true)
       column = @model.columns_hash[field]
       raise MissingFieldError, "#{@model.name} has no aggregation column #{field.inspect}; add it with a Rails migration" unless column
       if [:json, :jsonb].include?(column.type)
@@ -75,12 +116,16 @@ module Tinkick
         table = connection.quote_table_name(@model.table_name)
         identifier = "#{table}.#{connection.quote_column_name(primary_key)}"
         value = "#{table}.#{connection.quote_column_name(field)}"
+        documents = scope.select(Arel.sql("#{identifier} AS _tinkick_document_id, #{value} AS _tinkick_value")).distinct
         if column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
-          @model.logger&.warn("Tinkick: array aggregations expand matching array values in PostgreSQL before grouping. Use selective filters for frequent facets.")
-          scope = scope.joins(Arel.sql("CROSS JOIN LATERAL unnest(#{value}) AS tinkick_elements(value)"))
-          value = "tinkick_elements.value"
+          @model.logger&.warn("Tinkick: array aggregations expand matching array values in PostgreSQL before calculating buckets or metrics. Use selective filters for frequent facets.")
+          elements = @model.unscoped.from(documents, :tinkick_documents)
+            .joins(Arel.sql("CROSS JOIN LATERAL unnest(tinkick_documents._tinkick_value) AS tinkick_elements(value)"))
+            .select(Arel.sql("_tinkick_document_id, tinkick_elements.value AS _tinkick_value"))
+          unique ? elements.distinct : elements
+        else
+          documents
         end
-        scope.select(Arel.sql("#{identifier} AS _tinkick_document_id, #{value} AS _tinkick_value")).distinct
       end
     end
 

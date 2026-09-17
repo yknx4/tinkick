@@ -85,6 +85,69 @@ class AggregationsTest < TinkickIntegrationTest
     assert_equal 8, @scope.count
   end
 
+  def test_scalar_metrics_aggregate_the_entire_matching_scope
+    result = Tinkick::Aggregations.new(SearchProduct, @scope.limit(1).offset(3)).call(
+      low: { min: { field: :id } },
+      high: { max: { field: :id } },
+      total: { sum: { field: :id } },
+      average: { avg: { field: :id } },
+      categories: { cardinality: { field: :name } },
+    )
+
+    assert_equal({ "value" => 10_001.0 }, result.fetch("low"))
+    assert_equal({ "value" => 10_008.0 }, result.fetch("high"))
+    assert_equal({ "value" => 80_036.0 }, result.fetch("total"))
+    assert_equal({ "value" => 10_004.5 }, result.fetch("average"))
+    assert_equal({ "value" => 4 }, result.fetch("categories"))
+    refute @scope.loaded?
+  end
+
+  def test_array_metrics_keep_numeric_duplicates_and_ignore_nulls
+    SearchProduct.where(id: 10_001).update_all(ratings: [1, 1, nil])
+    result = aggregate(
+      low: { min: { field: :ratings } },
+      high: { max: { field: :ratings } },
+      total: { sum: { field: :ratings } },
+      average: { avg: { field: :ratings } },
+      distinct_values: { cardinality: { field: :ratings } },
+    )
+
+    assert_equal 1.0, result.fetch("low").fetch("value")
+    assert_equal 80.0, result.fetch("high").fetch("value")
+    assert_equal 387.0, result.fetch("total").fetch("value")
+    assert_equal 24.1875, result.fetch("average").fetch("value")
+    assert_equal 15, result.fetch("distinct_values").fetch("value")
+  end
+
+  def test_empty_metric_scopes_and_missing_array_values
+    [@scope.none, @scope].each do |scope|
+      SearchProduct.where(id: 10_001..10_008).update_all(ratings: [nil])
+      result = Tinkick::Aggregations.new(SearchProduct, scope).call(
+        low: { min: { field: :ratings } },
+        high: { max: { field: :ratings } },
+        total: { sum: { field: :ratings } },
+        average: { avg: { field: :ratings } },
+        distinct_values: { cardinality: { field: :ratings } },
+      )
+
+      assert_nil result.fetch("low").fetch("value")
+      assert_nil result.fetch("high").fetch("value")
+      assert_nil result.fetch("average").fetch("value")
+      assert_equal 0.0, result.fetch("total").fetch("value")
+      assert_equal 0, result.fetch("distinct_values").fetch("value")
+    end
+  end
+
+  def test_metric_filters_and_document_identity_are_preserved
+    scope = @scope.joins("CROSS JOIN generate_series(1, 2) AS duplicate_rows")
+    result = Tinkick::Aggregations.new(SearchProduct, scope).call(total: { sum: { field: :ratings }, where: { name: "amber" } })
+
+    assert_equal({ "value" => 66.0, "doc_count" => 3 }, result.fetch("total"))
+    assert_raises(Tinkick::InvalidQueryError) { aggregate(total: { sum: { field: :name } }) }
+    assert_raises(Tinkick::MissingFieldError) { aggregate(total: { sum: { field: "id); DROP TABLE x --" } }) }
+    assert_raises(ArgumentError) { aggregate(total: { sum: { field: :id }, avg: { field: :id } }) }
+  end
+
   private
 
   def aggregate(spec)
