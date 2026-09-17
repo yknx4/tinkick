@@ -1,7 +1,7 @@
 module Tinkick
   type model_fields = search_fields
 
-  type model_options = { searchable: model_fields?, default_fields: model_fields?, match: Symbol, word_start: Array[String | Symbol]?, word_middle: Array[String | Symbol]?, word_end: Array[String | Symbol]?, text_start: Array[String | Symbol]?, text_middle: Array[String | Symbol]?, text_end: Array[String | Symbol]? }
+  type model_options = { highlight: Array[String | Symbol] | false | nil, searchable: model_fields?, default_fields: model_fields?, match: Symbol, word_start: Array[String | Symbol]?, word_middle: Array[String | Symbol]?, word_end: Array[String | Symbol]?, text_start: Array[String | Symbol]?, text_middle: Array[String | Symbol]?, text_end: Array[String | Symbol]? }
 
   type index_configuration = { column_name: String?, expression: String?, analysis: Hash[String, String] }
 
@@ -12,7 +12,7 @@ module Tinkick
 
     @tinkick_schema: model_schema?
 
-    def tinkick: (?searchable: model_fields?, ?default_fields: model_fields?, ?match: Symbol, ?stem: bool, ?word_start: Array[String | Symbol]?, ?word_middle: Array[String | Symbol]?, ?word_end: Array[String | Symbol]?, ?text_start: Array[String | Symbol]?, ?text_middle: Array[String | Symbol]?, ?text_end: Array[String | Symbol]?, **Object? options) -> void
+    def tinkick: (?searchable: model_fields?, ?default_fields: model_fields?, ?match: Symbol, ?stem: bool, ?highlight: Array[String | Symbol] | false | nil, ?word_start: Array[String | Symbol]?, ?word_middle: Array[String | Symbol]?, ?word_end: Array[String | Symbol]?, ?text_start: Array[String | Symbol]?, ?text_middle: Array[String | Symbol]?, ?text_end: Array[String | Symbol]?, **Object? options) -> void
 
     def tinkick_options: () -> model_options?
 

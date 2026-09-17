@@ -6,7 +6,7 @@ require "json"
 
 module Tinkick
   module Model
-    def tinkick(searchable: nil, default_fields: nil, match: :word, stem: false,
+    def tinkick(searchable: nil, default_fields: nil, match: :word, stem: false, highlight: nil,
       word_start: nil, word_middle: nil, word_end: nil, text_start: nil, text_middle: nil, text_end: nil, **options)
       # @type self: singleton(ActiveRecord::Base)
       raise ArgumentError, "stem must be true or false" unless stem == true || stem == false
@@ -19,12 +19,16 @@ module Tinkick
       raise ArgumentError, "unknown keywords: #{options.keys.join(', ')}" unless options.empty?
       raise ArgumentError, "Only call tinkick once per model" if tinkick_options
 
+      unless !highlight || (highlight.is_a?(Array) && highlight.all? { |field| field.is_a?(String) || field.is_a?(Symbol) })
+        raise ArgumentError, "highlight must be an array of field names, false, or nil"
+      end
+
       [word_start, word_middle, word_end, text_start, text_middle, text_end].each do |fields|
         unless fields.nil? || (fields.is_a?(Array) && fields.all? { |field| field.is_a?(String) || field.is_a?(Symbol) })
           raise ArgumentError, "Partial match declarations must be arrays of field names"
         end
       end
-      @tinkick_options = { searchable: searchable, default_fields: default_fields, match: match,
+      @tinkick_options = { searchable: searchable, default_fields: default_fields, match: match, highlight: highlight,
                           word_start: word_start, word_middle: word_middle, word_end: word_end,
                           text_start: text_start, text_middle: text_middle, text_end: text_end }
       method_name = Tinkick.search_method_name
@@ -45,6 +49,7 @@ module Tinkick
       raise Error, "search must be called on model, not relation" if current_scope
 
       schema = tinkick_schema
+      (options[:highlight] || []).each { |field| SearchField.new(self, field.to_s, match: :exact) }
       fields ||= options[:default_fields] || options[:searchable] || tinkick_default_fields(schema)
       match ||= options[:match]
       selected = tinkick_expand_fields(fields, match: match)
