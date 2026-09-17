@@ -1328,8 +1328,19 @@ be expensive: the recorded prefix query took 285.655 ms for one synthetic
 for the complete measurements and reproduction command. Bound page and field
 sizes; `fragment_size` limits returned snippets, not the source text analyzed.
 
-Custom-analysis phrases still require additional span mapping and currently
-raise an argument error. This is adapter work, not an unsupported-TIN claim.
+Custom phrases reconstruct complete matching spans from cached page text.
+Whitespace tokenization supports split, truncate and discard policies, including
+preserved or collapsed position gaps. Unicode tokenization supports custom
+case/accent settings with default token-removal policies. Repeated and overlapping
+phrases are merged with word highlights without nested tags. A phrase span includes
+source text between its first and last matched token, including discarded internal
+context; discarded terms at the query's edges do not extend the highlight.
+
+Phrase reconstruction logs its additional tokenization cost, and complex source
+mapping can use the expensive prefix-analysis path described above. Changed
+Unicode removal policies remain adapter work and currently raise an argument
+error; native phrase matching itself is available.
+
 Model declarations such as `tinkick searchable: [:name], highlight: [:name]` are
 accepted. Declared highlight fields are checked when the model is searched, with
 a migration error for missing columns. The declaration does not enable query
