@@ -250,8 +250,9 @@ Product.search("apple", fields: [:name]).fields(:description)
 ```
 
 The fluent `fields` method **appends** fields. Use the keyword form to replace the
-model's defaults. Per-field match hashes, boosted names such as `"name^5"`, nested
-paths, and wildcard field names are not implemented.
+model's defaults. Per-field match hashes and dotted JSONB scalar paths are
+available. Boosted names such as `"name^5"` and wildcard field names remain
+implementation work.
 
 ### Laziness and modifiers
 
@@ -846,10 +847,35 @@ can provide another boundary where correctly configured; Tinkick does not instal
 policies or verify an Apartment integration.
 
 JSONB filter paths such as `store.city` are supported as described under
-[filtering](#filtering). Text search through a JSONB expression index is still
-implementation work. A generated text column can already expose a same-row JSON
-property. Flattened array-of-object filters do not preserve same-object correlation;
-use explicit `EXISTS`/joins or JSON predicates when that distinction matters.
+[filtering](#filtering). Text search also accepts dotted scalar paths:
+
+```sh
+bin/rails generate tinkick:index products metadata.title metadata.details.summary
+bin/rails db:migrate
+```
+
+```ruby
+class Product < ApplicationRecord
+  tinkick searchable: ["metadata.title", "metadata.details.summary"]
+end
+
+Product.search("voyage", fields: ["metadata.title"])
+Product.search("Voyage to Gondor", fields: [{ "metadata.title" => :exact }])
+```
+
+Each native search path requires its own valid, nonpartial TIN expression index.
+The generator emits nested `->` access followed by `->>` for the leaf. Registration
+checks the actual indexed expression; an index on another path does not qualify.
+Strings, numbers, and booleans search their text representation. Objects, arrays,
+missing paths, and JSON null do not match scalar text search. Exact and whole-field
+SQL match modes do not require a TIN index. Updating JSONB updates its expression
+indexes within the same transaction.
+
+`search_data` continues to validate physical column names: return the `metadata`
+column key, not dotted virtual keys. Use persisted or generated text columns when
+you need custom normalization or a combined document. Flattened array-of-object
+filters do not preserve same-object correlation; use explicit `EXISTS`/joins or
+JSON predicates when that distinction matters.
 
 ## Indexing and synchronization
 
