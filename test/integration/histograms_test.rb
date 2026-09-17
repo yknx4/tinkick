@@ -147,6 +147,13 @@ class HistogramsTest < TinkickIntegrationTest
       histogram(interval: 10, hard_bounds: { min: -10, max: 20 }, extended_bounds: { min: 0, max: 10 })
   end
 
+  def test_extended_empty_buckets_are_not_clipped_by_hard_bounds_after_offset_rounding
+    # Upstream applies hard bounds to collected ordinals, then extends the empty series separately.
+    buckets = histogram(interval: 10, offset: 5, hard_bounds: { min: 0, max: 10 }, extended_bounds: { min: 0, max: 10 }).fetch("buckets")
+
+    assert_equal [{ "key" => -5.0, "doc_count" => 0 }, { "key" => 5.0, "doc_count" => 1 }, { "key" => 15.0, "doc_count" => 2 }], buckets
+  end
+
   private
 
   def histogram(**options)
