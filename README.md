@@ -305,12 +305,18 @@ results.size
 results.any?
 results.empty?
 results.with_score.each { |product, score| puts [product.name, score] }
+results.pluck(:id, :name)
 ```
 
 `size`, `length`, Enumerable `count`, `slice`, and array access describe the loaded
 page. Use `total_count` or `total_entries` for the complete filtered result count;
 that runs SQL without instantiating every matching record. The count is not capped
 at the default 10,000-row retrieval limit.
+
+`pluck` reads only the result page. With model results it uses the loaded models;
+with an unloaded `load: false` relation it projects the requested SQL columns
+without instantiating models or loading the original relation. Already loaded
+pages are reused. `load: false` still logs its compatibility warning.
 
 Available pagination metadata includes `current_page`, `per_page`/`limit_value`,
 `padding`, `total_pages`/`num_pages`, `offset_value`/`offset`,
@@ -470,33 +476,46 @@ Per-field typo rules can likewise use separately compiled native SQL predicates.
 There is not yet a verified public replacement for an explicit expansion cap;
 retain the old search path if that cap is required for match eligibility.
 
-Literal keycap emoji such as `*️⃣` and `#️⃣` are supported with
-`misspellings: false`. Nonzero-distance fuzzy keycap queries currently fail
-explicitly rather than lose their analyzed token. See the
+Literal keycap emoji such as `*️⃣` and `#️⃣` support literal and distance-one
+fuzzy matching without interpreting their analyzed punctuation as match-all. See the
 [TINQL fuzzy syntax](https://planetscale.com/docs/postgres/search/tinql) and
 [compiler integration tests](test/integration/query_text_test.rb).
 
 ### Partial and exact field matching
 
-| Searchkick mode | Current Tinkick status | Recipe or implementation direction |
+| Searchkick mode | Current Tinkick status | Implementation |
 | --- | --- | --- |
 | `:word` | Available | Disable misspellings for exact token matching. |
 | `:phrase` | Available | Ordered adjacent tokens. |
-| `:word_start`, `:word_middle`, `:word_end` | Not implemented | TINQL token wildcards: `app*`, `*ppl*`, `*ple`. |
-| `:text_start`, `:text_middle`, `:text_end` | Not implemented | SQL whole-field prefix or LIKE patterns, with application-specific indexes. |
-| Per-field `:exact` | Not implemented | SQL equality with an appropriate text type/collation. |
-| Mixed per-field match modes | Not implemented | Separate explicit SQL predicates with the intended boolean grouping. |
+| `:word_start`, `:word_middle`, `:word_end` | Available | Native token wildcards; escaped dictionary patterns for distance-one typos. |
+| `:text_start`, `:text_middle`, `:text_end` | Available | Whole-field SQL matching with optional `unaccent`; distance-zero/one matching. |
+| `:exact` | Available globally and per field | Case-sensitive, accent-sensitive whole-field SQL equality; ignores misspellings. |
+| Mixed per-field match modes | Available | Each field keeps its own mode; SQL/TIN branches are combined and deduplicated in PostgreSQL. |
 
-A token wildcard is not a whole-field substring test. `citext` equality is not
-case-sensitive equality. For literal field substrings, an ActiveRecord recipe is:
+Declare Tinkick and choose match modes per query:
 
 ```ruby
-escaped = Product.sanitize_sql_like(user_text)
-Product.where("name LIKE ?", "%#{escaped}%")
+class Product < ApplicationRecord
+  tinkick searchable: [:name, :description], word_start: [:name]
+end
+
+Product.search("app", fields: [:name], match: :word_start, misspellings: false)
+Product.search("fresh orchard", fields: [:description], match: :text_start)
+Product.search("Red Apple", fields: [{ name: :exact }, { description: :phrase }])
 ```
 
-This has SQL pattern-matching costs and returns ordinary ActiveRecord results.
-It does not enable `match: :text_middle` in Tinkick.
+Token modes use existing TIN indexes; separate ngram indexes are unnecessary.
+Partial model declarations are accepted without opening a database connection.
+Whole-field modes preserve whitespace and fold case/accents with PostgreSQL
+`unaccent`; the extension is needed only when such a query executes. They use
+SQL scans and log a warning. Partial matches retain Searchkick's 1–50 character
+gram range; exact whole-field equality has no gram-length restriction.
+
+SQL-only matching returns constant scores and needs no TIN index on those fields.
+Mixed SQL/TIN matching adds native TIN scores and SQL-match scores, then groups
+record IDs before pagination. It logs a warning because grouping/sorting can cost
+more than native top-k search. Fuzzy token partial matching also warns about
+dictionary expansion. Use `misspellings: false` when typo matching is unnecessary.
 
 ### Case, accents, whitespace, and emoji
 
@@ -595,18 +614,15 @@ existing Searchkick hooks should not be assumed to run for Tinkick searches.
 
 ## Autocomplete and suggestions
 
-The Searchkick `word_start` model option, `match: :word_start`, `suggest`, and
-`suggestions` result API are not implemented. TIN has token wildcard/fuzzy
-primitives; a UI adapter and suggestion-ranking policy remain separate work.
-
-Recipe for a fixed native prefix query, returning a bounded list of titles:
+Token autocomplete is available through `word_start` and ordinary bounded results:
 
 ```ruby
-Movie.where("title ==> ?", "jurassic AND pa*").limit(10).pluck(:title)
+Movie.search("jurassic pa", fields: [:title], match: :word_start,
+  misspellings: false, limit: 10).pluck(:title)
 ```
 
-Expose such a query through a Rails JSON endpoint only after defining how user
-text becomes escaped TINQL. Debounce requests and cap returned rows. Alternatively,
+Tinkick escapes user text when compiling this query. A Rails JSON endpoint can
+return the bounded page; debounce requests and cap returned rows. Alternatively,
 use the scalar `prefix` filter for a whole-column prefix, understanding that its
 semantics differ from token autocomplete. Do not load an entire table solely to
 populate an autocomplete widget.
