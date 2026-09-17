@@ -13,7 +13,8 @@ module Tinkick
     @offset: Integer
     @zone: ActiveSupport::TimeZone?
 
-    def initialize: (?format: String?, ?time_zone: String?, ?now: Time) -> void
+    def initialize: (?format: String?, ?time_zone: String | Integer | Float | nil, ?now: Time) -> void
+    def fixed_offset: () -> Integer?
     def parse: (aggregation_range_bound value) -> Float?
     def format: (Float value) -> String
 

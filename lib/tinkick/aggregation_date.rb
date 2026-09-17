@@ -26,22 +26,37 @@ module Tinkick
       @now = now
       @offset = 0
       @zone = nil
-      zone_name = time_zone || "UTC"
-      raise ArgumentError, "time_zone must be a string" unless zone_name.is_a?(String)
+      zone_name = time_zone.nil? ? "UTC" : time_zone
+      case zone_name
+      when Integer, Float
+        raise ArgumentError, "time_zone numeric hours must be finite" if zone_name.is_a?(Float) && !zone_name.finite?
 
-      if /\A[+-]\d{2}:\d{2}\z/.match?(zone_name)
-        parts = zone_name.delete_prefix("+").delete_prefix("-").split(":").map(&:to_i)
-        raise ArgumentError, "Invalid time_zone offset minutes" if parts.fetch(1) > 59
+        @offset = zone_name.to_i * 3_600
+      when String
+        offset = zone_name.sub(/\A(?:UTC|GMT|UT)(?=[+-])/, "")
+        if /\A[+-](?:[0-9]{1,2}|[0-9]{4}|[0-9]{6}|[0-9]{2}:[0-9]{2}(?::[0-9]{2})?)\z/.match?(offset)
+          digits = offset[1..].to_s.delete(":").rjust(2, "0")
+          hours = digits[0, 2].to_i
+          minutes = digits[2, 2].to_s.to_i
+          seconds = digits[4, 2].to_s.to_i
+          raise ArgumentError, "Invalid time_zone offset minutes or seconds" if minutes > 59 || seconds > 59
 
-        @offset = (parts.fetch(0) * 3_600 + parts.fetch(1) * 60) * (zone_name.start_with?("-") ? -1 : 1)
-        raise ArgumentError, "time_zone offset must be within -18:00 and +18:00" if @offset.abs > 18 * 3_600
-      elsif !["UTC", "Z"].include?(zone_name)
-        zone = ActiveSupport::TimeZone[zone_name]
-        unless zone && zone.tzinfo.identifier == zone_name
-          raise ArgumentError, "time_zone must be an IANA zone name or an ISO8601 offset"
+          @offset = (hours * 3_600 + minutes * 60 + seconds) * (offset.start_with?("-") ? -1 : 1)
+        elsif !["UTC", "Z", "UT", "GMT"].include?(zone_name)
+          zone = ActiveSupport::TimeZone[zone_name]
+          unless zone && zone.tzinfo.identifier == zone_name
+            raise ArgumentError, "time_zone must be an IANA zone name or an ISO8601 offset"
+          end
+          @zone = zone
         end
-        @zone = zone
+      else
+        raise ArgumentError, "time_zone must be a string or numeric hours"
       end
+      raise ArgumentError, "time_zone offset must be within -18:00 and +18:00" if @offset.abs > 18 * 3_600
+    end
+
+    def fixed_offset
+      @offset unless @zone
     end
 
     def parse(value)
@@ -79,11 +94,13 @@ module Tinkick
       pattern = @formats.fetch(0)
       case pattern
       when "epoch_millis" then value.to_i.to_s
-      when "strict_date_optional_time" then instant.utc_offset.zero? ? instant.utc.iso8601(3) : instant.iso8601(3)
+      when "strict_date_optional_time"
+        # Upstream prints only offset hours/minutes, using Z when both are zero.
+        instant.iso8601(3).sub(/[+-]00:00\z/, "Z")
       else
         @custom_formats.fetch(pattern).last.map do |part, token|
           if token
-            part == "XXX" && instant.utc_offset.zero? ? "Z" : instant.strftime(FORMAT_TOKENS.fetch(part).fetch(2))
+            part == "XXX" && instant.utc_offset.abs < 60 ? "Z" : instant.strftime(FORMAT_TOKENS.fetch(part).fetch(2))
           else
             part
           end

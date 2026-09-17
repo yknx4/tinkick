@@ -134,8 +134,41 @@ class AggregationDateTest < Minitest::Test
     end
   end
 
+  def test_fixed_time_zone_forms_normalize_to_seconds_without_changing_iana_dates
+    {
+      nil => 0, 'UTC' => 0, 'Z' => 0, 'UT' => 0, 'GMT' => 0, 0 => 0,
+      1 => 3_600, 1.9 => 3_600, -1.9 => -3_600,
+      '+1' => 3_600, '+01' => 3_600, '+0130' => 5_400, '+01:30' => 5_400,
+      '+013015' => 5_415, '+01:30:15' => 5_415, 'UTC+01:30' => 5_400,
+      'GMT-01:30' => -5_400, 'UT+01' => 3_600,
+    }.each do |zone, seconds|
+      assert_equal seconds, Tinkick::AggregationDate.new(time_zone: zone).fixed_offset
+    end
+    assert_nil Tinkick::AggregationDate.new(time_zone: 'America/New_York').fixed_offset
+  end
+
+  def test_default_date_format_matches_upstream_labels_for_second_precision_offsets
+    positive = Tinkick::AggregationDate.new(time_zone: '+00:30:37')
+    negative = Tinkick::AggregationDate.new(time_zone: '-000001')
+
+    # ES's actual strict_date_optional_time printer omits offset seconds.
+    assert_equal '1970-01-01T00:30:37.000+00:30', positive.format(0.0)
+    assert_equal '1969-12-31T23:59:59.000Z', negative.format(0.0)
+    assert_equal(-1_837_000.0, positive.parse('1970-01-01T00:00:00'))
+    assert_equal 1_000.0, negative.parse('1970-01-01T00:00:00')
+    custom = Tinkick::AggregationDate.new(format: "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", time_zone: '-00:00:01')
+    assert_equal '1969-12-31T23:59:59.000Z', custom.format(0.0)
+  end
+
+  def test_fixed_offsets_validate_components_and_finite_numeric_hours
+    [false, true, 19, -19, Float::INFINITY, Float::NAN, '+18:00:01', '+12:60', '+00:00:60',
+      'UTCjunk', 'UTC+1:2', '+012', '+00:0', '1'].each do |zone|
+      assert_raises(ArgumentError) { Tinkick::AggregationDate.new(time_zone: zone) }
+    end
+  end
+
   def test_invalid_dates_math_and_time_zones_raise_clear_errors
-    ["Not/A_Zone", "+19:00", "+01:99", "Pacific Time (US & Canada)", 5].each do |zone|
+    ["Not/A_Zone", "+19:00", "+01:99", "Pacific Time (US & Canada)", 19].each do |zone|
       assert_raises(ArgumentError) { Tinkick::AggregationDate.new(time_zone: zone) }
     end
     ["", "2026-02-30", "2026-01-01T25:00:00", "now+", "now+2", "now+1q", "now/2d", "now||+1d", "2026-01-01+1d", "now+2147483648y"].each do |value|
