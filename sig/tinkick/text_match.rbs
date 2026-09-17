@@ -1,0 +1,15 @@
+module Tinkick
+  class TextMatch
+    type predicate = [ String, Array[String] ]
+
+    @model: singleton(ActiveRecord::Base)
+
+    def initialize: (singleton(ActiveRecord::Base) model) -> void
+
+    def predicate: (String column_sql, String term, match: Symbol, ?misspellings: QueryText::misspellings) -> predicate
+
+    private
+
+    def validate_misspellings: (QueryText::misspellings options) -> void
+  end
+end
