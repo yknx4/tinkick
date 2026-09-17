@@ -98,12 +98,51 @@ class QueryTextTest < TinkickIntegrationTest
     assert_raises(ArgumentError) { compile("apple", match: :unknown) }
   end
 
-  def test_native_fuzzy_matching_requires_explicit_transpositions_false
+  def test_fuzzy_matching_defaults_to_one_edit_including_transpositions
     [true, {}, { edit_distance: 1 }, { transpositions: true }].each do |option|
-      error = assert_raises(ArgumentError) { compile("apple", misspellings: option) }
-
-      assert_includes(error.message, "transpositions: false")
+      assert_equal(["Red Apple"], names("aplpe", misspellings: option))
+      assert_equal(["Red Apple"], names("appl", misspellings: option))
     end
+  end
+
+  def test_transpositions_do_not_combine_with_another_edit
+    tinkick_test_products(:green_pear).update!(name: "Apples")
+
+    assert_equal(["Red Apple"], names("aplpe", misspellings: true))
+  end
+
+  def test_transpositions_preserve_the_required_prefix
+    assert_equal(["Red Apple"], names("aplpe", misspellings: { prefix_length: 2 }))
+    assert_empty(names("aplpe", misspellings: { prefix_length: 3 }))
+  end
+
+  def test_transpositions_use_unicode_codepoints_and_literal_dictionary_terms
+    tinkick_test_products(:red_apple).update!(name: "a𐐨b foo_ab")
+
+    assert_equal(["a𐐨b foo_ab"], names("ab𐐨 foo_ba", misspellings: true))
+    assert_equal(["a𐐨b foo_ab"], names("ab𐐨", misspellings: { prefix_length: 1 }))
+    assert_empty(names("ab𐐨", misspellings: { prefix_length: 2 }))
+  end
+
+  def test_transpositions_group_alternatives_for_each_word
+    assert_equal(["Red Apple"], names("erd aplpe", misspellings: true))
+    assert_empty(names("erd zzzzz", misspellings: true))
+    assert_equal(["Red Apple"], names("aplpe zzzzz", operator: "or", misspellings: true))
+    assert_empty(names("aplpe OR pear", misspellings: true))
+  end
+
+  def test_transpositions_preserve_zero_distance_and_phrase_matching
+    assert_equal(["Red Apple"], names("apple", misspellings: { edit_distance: 0 }))
+    assert_empty(names("aplpe", misspellings: { edit_distance: 0 }))
+    assert_equal(["Red Apple"], names("red apple", match: :phrase, misspellings: true))
+    assert_empty(names("red aplpe", match: :phrase, misspellings: true))
+  end
+
+  def test_transpositions_at_larger_distances_fail_explicitly
+    error = assert_raises(ArgumentError) { compile("apple", misspellings: { edit_distance: 2 }) }
+
+    assert_includes(error.message, "transpositions")
+    assert_includes(error.message, "transpositions: false")
   end
 
   def test_native_fuzzy_matching_defaults_to_one_edit
@@ -144,12 +183,14 @@ class QueryTextTest < TinkickIntegrationTest
 
   def test_fuzzy_keycaps_require_a_source_preserving_translation
     ["*️⃣", "#️⃣"].each do |term|
-      error = assert_raises(ArgumentError) do
-        compile(term, misspellings: { transpositions: false })
-      end
+      [true, { transpositions: false }].each do |options|
+        error = assert_raises(ArgumentError) do
+          compile(term, misspellings: options)
+        end
 
-      assert_includes(error.message, "keycap")
-      assert_includes(error.message, "misspellings: false")
+        assert_includes(error.message, "keycap")
+        assert_includes(error.message, "misspellings: false")
+      end
     end
   end
 

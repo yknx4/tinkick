@@ -23,14 +23,14 @@ module Tinkick
       exact = words.map { |word| literal(word) }.join(separator)
       return exact unless settings
 
-      distance, prefix = settings
+      distance, prefix, transpositions = settings
       return exact if distance.zero?
 
       if words.any? { |word| ["*", "#"].include?(word) }
         raise ArgumentError, "Fuzzy keycap matching is not supported yet; use misspellings: false"
       end
 
-      words.map { |word| "#{word}~#{prefix}:#{distance}" }.join(separator)
+      words.map { |word| fuzzy(word, distance, prefix, transpositions) }.join(separator)
     end
 
     private
@@ -59,23 +59,47 @@ module Tinkick
       quote(word)
     end
 
+    def fuzzy(word, distance, prefix, transpositions)
+      native = "#{word}~#{prefix}:#{distance}"
+      return native unless transpositions
+
+      characters = word.chars
+      alternatives = [native]
+      (prefix...(characters.length - 1)).each do |index|
+        next if characters.fetch(index) == characters.fetch(index + 1)
+
+        swapped = characters.dup
+        swapped[index] = characters.fetch(index + 1)
+        swapped[index + 1] = characters.fetch(index)
+        alternatives << "MATCHES #{Regexp.escape(swapped.join)}"
+      end
+
+      alternatives.length == 1 ? native : "(#{alternatives.join(' OR ')})"
+    end
+
     def fuzzy_settings(options)
       return if options == false
 
-      unless options.is_a?(Hash) && options[:transpositions] == false
-        raise ArgumentError, "Searchkick transpositions are not supported yet; specify misspellings: { transpositions: false } for native TIN edits"
-      end
+      options = { transpositions: true } if options == true
+      raise ArgumentError, "Misspellings must be true, false, or an options hash" unless options.is_a?(Hash)
 
       unknown = options.keys - [:transpositions, :edit_distance, :distance, :prefix_length]
       raise ArgumentError, "Unsupported misspellings options: #{unknown.join(', ')}" unless unknown.empty?
 
       distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
       prefix = options.fetch(:prefix_length, 0)
+      transpositions = options.fetch(:transpositions, true)
       unless distance.is_a?(Integer) && distance >= 0 && prefix.is_a?(Integer) && prefix >= 0
         raise ArgumentError, "Misspellings distance and prefix_length must be nonnegative integers"
       end
+      unless transpositions == true || transpositions == false
+        raise ArgumentError, "Misspellings transpositions must be true or false"
+      end
+      if transpositions && distance > 1
+        raise ArgumentError, "Misspellings transpositions currently support edit_distance: 0 or 1; use transpositions: false for larger native TIN distances"
+      end
 
-      [distance, prefix]
+      [distance, prefix, transpositions]
     end
   end
 end

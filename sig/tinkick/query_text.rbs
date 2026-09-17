@@ -16,6 +16,8 @@ module Tinkick
 
     def literal: (String word) -> String
 
-    def fuzzy_settings: (misspellings options) -> [ Integer, Integer ]?
+    def fuzzy: (String word, Integer distance, Integer prefix, bool transpositions) -> String
+
+    def fuzzy_settings: (misspellings options) -> [ Integer, Integer, bool ]?
   end
 end
