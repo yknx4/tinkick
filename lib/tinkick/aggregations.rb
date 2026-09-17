@@ -84,11 +84,13 @@ module Tinkick
     private
 
     def date_histogram(field, options, conditions)
-      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format]
+      unknown = options.keys - [:field, :calendar_interval, :fixed_interval, :min_doc_count, :order, :keyed, :time_zone, :format, :offset]
       raise ArgumentError, "Unknown date histogram options: #{unknown.join(", ")}" unless unknown.empty?
       unless [:calendar_interval, :fixed_interval].count { |kind| options.key?(kind) } == 1
         raise ArgumentError, "Date histogram requires exactly one calendar_interval or fixed_interval"
       end
+      bucket_offset = date_histogram_offset(options.fetch(:offset, 0))
+      adjustment = "#{bucket_offset} milliseconds"
 
       unit = nil
       if options.key?(:fixed_interval)
@@ -124,11 +126,11 @@ module Tinkick
       end
       value = column.sql_type.include?("with time zone") ? "_tinkick_value AT TIME ZONE 'UTC'" : "_tinkick_value::timestamp"
       rounding = if offset.nil?
-        Arel.sql("date_trunc(?, (#{value}) AT TIME ZONE 'UTC' AT TIME ZONE ?) AS _tinkick_date, _tinkick_document_id", unit, options[:time_zone].to_s)
+        Arel.sql("date_trunc(?, ((#{value}) - ?::interval) AT TIME ZONE 'UTC' AT TIME ZONE ?) AS _tinkick_date, _tinkick_document_id", unit, adjustment, options[:time_zone].to_s)
       elsif unit
-        Arel.sql("date_trunc(?, (#{value}) + ?::interval) AS _tinkick_date, _tinkick_document_id", unit, shift)
+        Arel.sql("date_trunc(?, (#{value}) - ?::interval + ?::interval) AS _tinkick_date, _tinkick_document_id", unit, adjustment, shift)
       else
-        Arel.sql("date_bin(?::interval, (#{value}) + ?::interval, TIMESTAMP '1970-01-01') AS _tinkick_date, _tinkick_document_id", step, shift)
+        Arel.sql("date_bin(?::interval, (#{value}) - ?::interval + ?::interval, TIMESTAMP '1970-01-01') AS _tinkick_date, _tinkick_document_id", step, adjustment, shift)
       end
       dates = @model.unscoped.from(values, :tinkick_values)
         .where(Arel.sql("_tinkick_value IS NOT NULL"))
@@ -156,6 +158,7 @@ module Tinkick
       buckets = rows.map do |row|
         key = row.fetch("_tinkick_key")
         key = formatter.midnight_key(key) if offset.nil?
+        key += bucket_offset
         { "key" => key, "key_as_string" => formatter.format(key.to_f), "doc_count" => row.fetch("_tinkick_count") }
       end
       if offset.nil?
@@ -171,7 +174,29 @@ module Tinkick
       result
     end
 
-    def fixed_interval_milliseconds(value)
+    def date_histogram_offset(value)
+      milliseconds = case value
+      when Integer, Float
+        raise ArgumentError, "numeric milliseconds must be finite" if value.is_a?(Float) && !value.finite?
+
+        value.to_i
+      when String
+        direction = value.start_with?("-") ? -1 : 1
+        text = value.delete_prefix("-").delete_prefix("+")
+        /\A0+\z/.match?(text.strip) ? 0 : fixed_interval_milliseconds(text, allow_zero: true) * direction
+      else
+        raise ArgumentError, "must be numeric milliseconds or a signed time value"
+      end
+      unless milliseconds.between?(-(2**63), 2**63 - 1)
+        raise ArgumentError, "milliseconds must fit in a signed 64-bit integer"
+      end
+
+      milliseconds
+    rescue ArgumentError => error
+      raise ArgumentError, "Invalid date_histogram offset: #{error.message}"
+    end
+
+    def fixed_interval_milliseconds(value, allow_zero: false)
       text = value.to_s
       match = /\A(\+?[0-9]+)\s*(nanos|micros|ms|s|m|h|d)\z/.match(text.strip.downcase)
       unless match && (match[2] != "m" || text.end_with?("m"))
@@ -179,8 +204,8 @@ module Tinkick
       end
 
       quantity = match[1].to_s.to_i
-      unless quantity.positive? && quantity <= (2**63 - 1)
-        raise ArgumentError, "fixed_interval quantity must be a positive 64-bit integer"
+      unless quantity >= 0 && quantity <= (2**63 - 1)
+        raise ArgumentError, "fixed_interval quantity must be a nonnegative 64-bit integer"
       end
       unit = match[2].to_s
       milliseconds = case unit
@@ -188,7 +213,7 @@ module Tinkick
       when "micros" then quantity / 1_000
       else quantity * { "ms" => 1, "s" => 1_000, "m" => 60_000, "h" => 3_600_000, "d" => 86_400_000 }.fetch(unit)
       end
-      raise ArgumentError, "fixed_interval must be at least one millisecond" unless milliseconds.positive?
+      raise ArgumentError, "fixed_interval must be at least one millisecond" unless allow_zero || milliseconds.positive?
 
       milliseconds
     end
