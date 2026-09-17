@@ -460,8 +460,30 @@ These controls are **not implemented and currently raise**:
 - `max_expansions`, including an explicitly requested value of three.
 - `below`, which needs an exact-first search and conditional fuzzy retry.
 - `fields` inside `misspellings`, which needs per-field fuzzy selection.
-- Transpositions with `edit_distance` greater than one. Use
-  `transpositions: false` for native larger-distance matching.
+- Partial-token transpositions with `edit_distance: 2`; this adapter path remains
+  implementation work. Ordinary whole-word distance-two matching is available
+  through the optional SQL helper described below.
+
+Whole-word `edit_distance: 2` with transpositions uses native TIN candidates plus
+bounded SQL verification. Install its optional helper only if this feature is
+needed:
+
+```sh
+bin/rails generate tinkick:functions
+bin/rails db:migrate
+```
+
+```ruby
+Product.search("paelp", misspellings: {edit_distance: 2})
+```
+
+The helper checks the actual index tokenization settings, preserves fixed
+prefixes, and avoids constructing exponentially large regexes for long words.
+It logs a warning because token verification can bypass native top-k ranking;
+broad candidates and long text can increase cost. Scores come from the native
+candidate query and can differ from Searchkick. Normal distance-one search and
+gem loading do not require this helper. A missing helper raises migration
+guidance only when the corresponding feature is used.
 
 Recipe for application-owned `below` behavior, with two queries when needed:
 
