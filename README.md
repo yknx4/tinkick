@@ -626,16 +626,21 @@ normalized stored values and controlled query expansion from a synonym table.
 Keep multiword phrase meaning and one-way mappings explicit. No TIN-native
 impossibility is implied by the missing adapter.
 
-`exclude` and demotion through `boost_where` are also not implemented. A direct
-TINQL recipe can express an exclusion:
+`exclude` removes exact phrases from every selected search field:
 
 ```ruby
-Product.where("name ==> ?", 'butter AND NOT "peanut butter"')
+Product.search("butter", exclude: "peanut butter")
+Product.search("butter").exclude("peanut butter").exclude("almond butter")
 ```
 
-This fixed TINQL example is an ActiveRecord query. For user-entered values, build
-and escape a query deliberately; SQL parameter binding does not make arbitrary
-text literal within the TINQL language.
+Exclusions do not use typo matching. Phrase order and adjacency matter; partial
+word modes exclude adjacent partial-token phrases, while text and exact modes
+use their whole-field matching rules. Tinkick escapes literal input and follows
+the indexed field's tokenizer options. A single native field combines the
+negative phrase in the TIN query and retains top-k ranking. Multi-field,
+match-all, and refined fuzzy paths use matching-ID subqueries to preserve
+NULL/missing fields and log their additional cost. Demotion through `boost_where`
+remains adapter work.
 
 ## Boosting, conversions, and personalization
 
@@ -1299,7 +1304,8 @@ The following reference maps less common upstream options to their current statu
 | `case_sensitive`, `special_characters`, language/stem options | Adapter mapping missing; see analysis limitations above. |
 | `search_synonyms`, synonym file/reload | Not implemented; application synonym storage/expansion is a recipe. |
 | `conversions`, `conversions_v2`, `stem_conversions` | Not implemented; maintain SQL features and an explicit ranking formula. |
-| `suggest`, `similar`, `emoji`, `exclude` | Not implemented; see the corresponding recipes. |
+| `exclude` | Available across selected fields; exact phrase negatives with mode-specific matching. |
+| `suggest`, `similar`, `emoji` | Not implemented; see the corresponding recipes. |
 | `locations`, `geo_shape`, `knn` | Not implemented; design explicit PostGIS/pgvector integration where available. |
 | `callbacks`, queues, job priorities/parent jobs | Excluded synchronization configuration. |
 | Import batch size, resume, partial/bulk reindex | Excluded document import API; update real data with application jobs/migrations. |
