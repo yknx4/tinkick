@@ -45,6 +45,7 @@ module Tinkick
 
   class Aggregations
     @model: singleton(ActiveRecord::Base)
+    @unscoped: ActiveRecord::Relation
     @scope: ActiveRecord::Relation
     @dictionary_scope: ActiveRecord::Relation
 

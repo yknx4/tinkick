@@ -7,6 +7,8 @@ module Tinkick
   class Aggregations
     def initialize(model, scope, dictionary_scope: model.all)
       @model = model
+      # STI conditions belong in the inner search, not derived-table wrappers.
+      @unscoped = model.unscoped.unscope(:where)
       @scope = scope.except(:select, :order, :limit, :offset)
       @dictionary_scope = dictionary_scope.except(:select, :order, :limit, :offset)
     end
@@ -137,17 +139,17 @@ module Tinkick
       end
       value = column.sql_type.include?("with time zone") ? "_tinkick_value" : "_tinkick_value::timestamp AT TIME ZONE 'UTC'"
       rounding = zoned_rounding_sql("(#{value}) - CAST(:adjustment AS interval)", unit: unit)
-      dates = @model.unscoped.from(values, :tinkick_values)
+      dates = @unscoped.from(values, :tinkick_values)
         .where(Arel.sql("_tinkick_value IS NOT NULL"))
         .select(Arel.sql("#{rounding} AS _tinkick_date, _tinkick_document_id", **binds))
-      counts = @model.unscoped.from(dates, :tinkick_dates)
+      counts = @unscoped.from(dates, :tinkick_dates)
         .group(Arel.sql("_tinkick_date"))
         .select(Arel.sql("_tinkick_date, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count"))
       counts = counts.where(Arel.sql("_tinkick_date >= ?::timestamptz - ?::interval", hard_lower, adjustment)) if hard_lower
       counts = counts.where(Arel.sql("_tinkick_date < ?::timestamptz - ?::interval", hard_upper, adjustment)) if hard_upper
       query = if minimum.zero?
         @model.logger&.warn("Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
-        bounds = @model.unscoped.from("tinkick_date_counts")
+        bounds = @unscoped.from("tinkick_date_counts")
           .select(Arel.sql("LEAST(MIN(_tinkick_date), ?::timestamptz) AS lower, GREATEST(MAX(_tinkick_date), ?::timestamptz) AS upper", lower_date, upper_date))
         grid_join = @model.sanitize_sql_array([<<~SQL, step, binds.fetch(:series_zone)])
           CROSS JOIN LATERAL (
@@ -158,11 +160,11 @@ module Tinkick
         SQL
         # Native calendar series and truncation can land on different boundaries
         # across timezone changes. Retain every observed bucket alongside the series.
-        @model.unscoped.with(tinkick_date_counts: counts).from(bounds, :tinkick_bounds)
+        @unscoped.with(tinkick_date_counts: counts).from(bounds, :tinkick_bounds)
           .joins(grid_join)
           .joins("LEFT JOIN tinkick_date_counts USING (_tinkick_date)")
       else
-        @model.unscoped.from(counts, :tinkick_date_counts).where(Arel.sql("_tinkick_count >= ?", minimum))
+        @unscoped.from(counts, :tinkick_date_counts).where(Arel.sql("_tinkick_count >= ?", minimum))
       end
       shifted = "_tinkick_date + CAST(:adjustment AS interval)"
       query = query.select(Arel.sql(<<~SQL, **binds)).order(Arel.sql(order_sql(options.fetch(:order, { _key: :asc }))))
@@ -208,7 +210,7 @@ module Tinkick
 
       inputs = values.each_with_index.to_h { |value, index| ["bound#{index}".to_sym, value && Time.at(Rational(value, 1_000)).utc] }
       expressions = values.each_index.map { |index| "(EXTRACT(EPOCH FROM #{zoned_rounding_sql("CAST(:bound#{index} AS timestamptz)", unit: unit)}) * 1000)::bigint AS bound#{index}" }
-      query = @model.unscoped.from("pg_catalog.pg_extension").where("extname = 'tin'")
+      query = @unscoped.from("pg_catalog.pg_extension").where("extname = 'tin'")
         .select(Arel.sql(expressions.join(", "), **binds, **inputs))
       # @type var row: Hash[String, Integer?]
       row = @model.with_connection { |connection| connection.select_one(query) } || {}
@@ -289,10 +291,10 @@ module Tinkick
       unless [:integer, :decimal, :float].include?(@model.columns_hash.fetch(field).type)
         raise InvalidQueryError, "histogram requires a numeric aggregation column"
       end
-      ordinals = @model.unscoped.from(values, :tinkick_values)
+      ordinals = @unscoped.from(values, :tinkick_values)
         .where(Arel.sql("_tinkick_value IS NOT NULL"))
         .select(Arel.sql("FLOOR((_tinkick_value::double precision - ?) / ?) AS _tinkick_ordinal, _tinkick_document_id", offset, interval))
-      counts = @model.unscoped.from(ordinals, :tinkick_ordinals)
+      counts = @unscoped.from(ordinals, :tinkick_ordinals)
         .group(Arel.sql("_tinkick_ordinal"))
         .select(Arel.sql("_tinkick_ordinal, COUNT(DISTINCT _tinkick_document_id) AS _tinkick_count"))
       # Elasticsearch checks numeric hard bounds before adding the histogram offset.
@@ -302,15 +304,15 @@ module Tinkick
         @model.logger&.warn("Tinkick: histogram min_doc_count: 0 generates empty buckets across the matching numeric range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
         lower = extended_min && ((extended_min - offset) / interval).floor
         upper = extended_max && ((extended_max - offset) / interval).floor
-        bounds = @model.unscoped.from("tinkick_histogram_counts")
+        bounds = @unscoped.from("tinkick_histogram_counts")
           .select(Arel.sql("LEAST(MIN(_tinkick_ordinal), ?)::numeric AS lower, GREATEST(MAX(_tinkick_ordinal), ?)::numeric AS upper", lower, upper))
-        @model.unscoped.with(tinkick_histogram_counts: counts)
+        @unscoped.with(tinkick_histogram_counts: counts)
           .from(bounds, :tinkick_bounds)
           .joins("CROSS JOIN LATERAL generate_series(lower, upper, 1) AS tinkick_series(_tinkick_ordinal)")
           .joins("LEFT JOIN tinkick_histogram_counts USING (_tinkick_ordinal)")
           .select(Arel.sql("_tinkick_ordinal::double precision * ? + ? AS _tinkick_key, COALESCE(_tinkick_count, 0) AS _tinkick_count", interval, offset))
       else
-        @model.unscoped.from(counts, :tinkick_histogram_counts)
+        @unscoped.from(counts, :tinkick_histogram_counts)
           .where(Arel.sql("_tinkick_count >= ?", minimum))
           .select(Arel.sql("_tinkick_ordinal * ? + ? AS _tinkick_key, _tinkick_count", interval, offset))
       end
@@ -347,21 +349,21 @@ module Tinkick
       conditions = options[:where]
       scope = Filter.new(@model).apply(scope, conditions) if conditions
       values = values_relation(scope, field)
-      counts = @model.unscoped.from(values, :tinkick_values)
+      counts = @unscoped.from(values, :tinkick_values)
         .where(Arel.sql("_tinkick_value IS NOT NULL"))
         .group(Arel.sql("_tinkick_value"))
         .select(Arel.sql("_tinkick_value AS _tinkick_key, COUNT(*) AS _tinkick_count"))
       if minimum.zero?
         @model.logger&.warn("Tinkick: min_doc_count: 0 reads the model's scoped term dictionary in addition to matching documents. This can cost more for many distinct values.")
-        dictionary = @model.unscoped.from(values_relation(@dictionary_scope, field), :tinkick_values)
+        dictionary = @unscoped.from(values_relation(@dictionary_scope, field), :tinkick_values)
           .where(Arel.sql("_tinkick_value IS NOT NULL"))
           .select(Arel.sql("_tinkick_value AS _tinkick_key")).distinct
-        counts = @model.unscoped.with(tinkick_dictionary: dictionary, tinkick_matching_counts: counts)
+        counts = @unscoped.with(tinkick_dictionary: dictionary, tinkick_matching_counts: counts)
           .from("tinkick_dictionary")
           .joins("LEFT JOIN tinkick_matching_counts USING (_tinkick_key)")
           .select(Arel.sql("_tinkick_key, COALESCE(_tinkick_count, 0) AS _tinkick_count"))
       end
-      query = @model.unscoped.from(counts, :tinkick_counts)
+      query = @unscoped.from(counts, :tinkick_counts)
         .where(Arel.sql("_tinkick_count >= ?", minimum))
         .select(Arel.sql("_tinkick_key, _tinkick_count, SUM(_tinkick_count) OVER () AS _tinkick_total"))
         .order(Arel.sql(order_sql(options.fetch(:order, { _count: :desc }))))
@@ -390,7 +392,7 @@ module Tinkick
       else
         expression = "#{metric.to_s.upcase}(_tinkick_value)"
       end
-      query = @model.unscoped.from(values, :tinkick_values).select(Arel.sql(expression))
+      query = @unscoped.from(values, :tinkick_values).select(Arel.sql(expression))
       # @type var value: Integer | Float | BigDecimal | nil
       value = @model.with_connection { |connection| connection.select_value(query) }
       # @type var result: aggregation_metric
@@ -446,7 +448,7 @@ module Tinkick
         end
         "COUNT(DISTINCT _tinkick_document_id) FILTER (WHERE #{predicates.join(" AND ")}) AS _tinkick_range_#{index}"
       end
-      query = @model.unscoped.from(values, :tinkick_values).select(Arel.sql(selections.join(", "), *binds))
+      query = @unscoped.from(values, :tinkick_values).select(Arel.sql(selections.join(", "), *binds))
       # @type var counts: Hash[String, Integer]
       counts = @model.with_connection { |connection| connection.select_one(query) } || {}
       buckets.each_with_index { |entry, index| entry["doc_count"] = counts.fetch("_tinkick_range_#{index}", 0) }
@@ -501,7 +503,7 @@ module Tinkick
         documents = scope.select(Arel.sql("#{identifier} AS _tinkick_document_id, #{value} AS _tinkick_value")).distinct
         if column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
           @model.logger&.warn("Tinkick: array aggregations expand matching array values in PostgreSQL before calculating buckets or metrics. Use selective filters for frequent facets.")
-          elements = @model.unscoped.from(documents, :tinkick_documents)
+          elements = @unscoped.from(documents, :tinkick_documents)
             .joins(Arel.sql("CROSS JOIN LATERAL unnest(tinkick_documents._tinkick_value) AS tinkick_elements(value)"))
             .select(Arel.sql("_tinkick_document_id, tinkick_elements.value AS _tinkick_value"))
           unique ? elements.distinct : elements
