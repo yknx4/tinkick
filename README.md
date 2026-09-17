@@ -163,6 +163,18 @@ Set it to `nil` to create no alias. Existing methods with the chosen name are
 preserved, and `tinkick_search` remains available. Changing this setting affects
 subsequent declarations; it does not rename aliases already installed on models.
 
+Shared model declaration defaults are also independent of Searchkick:
+
+```ruby
+# Set before the affected models declare tinkick.
+Tinkick.model_options = {stem: false, match: :word}
+```
+
+Explicit model options override these defaults, including `nil`, `false`, and
+empty arrays. Defaults pass through the same validation as model declarations;
+they do not add database connections during class registration. Replacing the
+global defaults hash affects subsequent declarations.
+
 Audit the features below before changing callers. Existing Searchkick callbacks,
 queues, Redis dependencies, and reindex jobs still belong to Searchkick; retire
 them when the old backend is no longer needed. See the
@@ -1675,7 +1687,7 @@ The following reference maps less common upstream options to their current statu
 | `searchable`, `default_fields`, `match` | Available within the supported modes/types. |
 | `filterable` | Not accepted. Filter real scalar columns and add ordinary PostgreSQL indexes as needed. |
 | `unscope`, `inheritance`, query `type` | Not implemented as Searchkick options; define explicit model scopes and test the intended STI/tenant behavior. |
-| Global `model_options` | Not implemented; declare each model explicitly. |
+| Global `model_options` | `Tinkick.model_options` supplies defaults for subsequent declarations; explicit model values override them. |
 | `search_method_name` | `Tinkick.search_method_name` selects the alias for subsequent declarations; `nil` disables alias creation. Existing methods are preserved and `tinkick_search` remains available. |
 | `index_name`, dynamic names, prefix/suffix | Excluded index identity API; use explicit database/schema/table tenancy. |
 | Custom `search_document_id` | Excluded document identity API; results use the model's single primary key. |
