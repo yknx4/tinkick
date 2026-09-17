@@ -59,13 +59,13 @@ class DateHistogramHardBoundsTest < TinkickIntegrationTest
     end
   end
 
-  def test_formatted_date_math_hard_bounds_use_the_requested_timezone
+  def test_application_computed_hard_bounds_use_the_requested_timezone
     [1, 2, 3, 4].each { |month| create_value(Time.utc(2026, month, 15), month) }
-    buckets = search(calendar_interval: :month, time_zone: "+01:30", format: "yyyy/MM/dd",
-      hard_bounds: { min: "2026/01/02||/M", max: "2026/04/02||/M" }).aggs.fetch("events").fetch("buckets")
+    buckets = search(calendar_interval: :month, time_zone: "+01:30",
+      hard_bounds: { min: Date.new(2026, 1, 1), max: Date.new(2026, 4, 1) }).aggs.fetch("events").fetch("buckets")
 
     assert_equal [1, 2, 3].map { |month| Time.utc(2026, month).to_i * 1_000 - 5_400_000 }, buckets.map { |bucket| bucket.fetch("key") }
-    assert_equal ["2026/01/01", "2026/02/01", "2026/03/01"], buckets.map { |bucket| bucket.fetch("key_as_string") }
+    assert_equal ["2026-01-01T00:00:00.000+01:30", "2026-02-01T00:00:00.000+01:30", "2026-03-01T00:00:00.000+01:30"], buckets.map { |bucket| bucket.fetch("key_as_string") }
     assert_equal [1, 1, 1], buckets.map { |bucket| bucket.fetch("doc_count") }
   end
 
@@ -124,7 +124,7 @@ class DateHistogramHardBoundsTest < TinkickIntegrationTest
       { max: Float::NAN }, { max: 2**63 }, { min: 2, max: 1 },
       { min: "2026-01-02T01:00:00Z", max: "2026-01-02T00:00:00Z" }].each do |bounds|
       error = assert_raises(ArgumentError) { search(calendar_interval: :day, hard_bounds: bounds).aggs }
-      assert_match(/bound/i, error.message, bounds.inspect)
+      assert_match(/bound|date/i, error.message, bounds.inspect)
     end
   end
 

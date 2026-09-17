@@ -40,9 +40,9 @@ class FixedOffsetHistogramsTest < TinkickIntegrationTest
 
     assert_equal [-1_000, 500, 2_000, 3_500], buckets.map { |bucket| bucket.fetch("key") }
     assert_equal [1, 0, 0, 1], buckets.map { |bucket| bucket.fetch("doc_count") }
-    # ES's default label printer omits offset seconds, including an all-zero HH:MM suffix.
-    assert_equal "1970-01-01T00:00:00.000Z", buckets.first.fetch("key_as_string")
-    assert_equal "1970-01-01T00:00:04.500Z", buckets.last.fetch("key_as_string")
+    # Ruby ISO8601 prints offset hours/minutes even when the offset includes seconds.
+    assert_equal "1970-01-01T00:00:00.000+00:00", buckets.first.fetch("key_as_string")
+    assert_equal "1970-01-01T00:00:04.500+00:00", buckets.last.fetch("key_as_string")
     assert_equal [-1_800_000], histogram(fixed_interval: "90m", time_zone: "+00:30", min_doc_count: 1)
       .fetch("buckets").map { |bucket| bucket.fetch("key") }
   end

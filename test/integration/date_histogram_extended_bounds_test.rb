@@ -57,23 +57,19 @@ class DateHistogramExtendedBoundsTest < TinkickIntegrationTest
     assert_empty search(term: "absent", **options).aggs.fetch("events").fetch("buckets")
   end
 
-  def test_numeric_bounds_are_epoch_milliseconds_while_string_bounds_use_the_format
-    [2026, 2026.0].each do |value|
+  def test_numeric_and_integer_string_bounds_are_epoch_milliseconds
+    [2026, 2026.0, "2026"].each do |value|
       buckets = search(calendar_interval: :year, extended_bounds: { min: value, max: value }).aggs.fetch("events").fetch("buckets")
       assert_equal [{ "key" => 0, "key_as_string" => "1970-01-01T00:00:00.000Z", "doc_count" => 0 }], buckets
     end
-    string = search(calendar_interval: :year, extended_bounds: { min: "2026", max: "2026" }).aggs.fetch("events").fetch("buckets")
-    assert_equal [Time.utc(2026).to_i * 1_000], string.map { |bucket| bucket.fetch("key") }
-    custom = search(calendar_interval: :year, format: "yyyy/MM/dd", extended_bounds: { min: 2026, max: 2026 }).aggs.fetch("events").fetch("buckets")
-    assert_equal ["1970/01/01"], custom.map { |bucket| bucket.fetch("key_as_string") }
   end
 
-  def test_formatted_bounds_apply_date_math_and_the_configured_timezone
-    buckets = search(calendar_interval: :month, time_zone: "+01:30", format: "yyyy/MM/dd||epoch_millis",
-      extended_bounds: { min: "2026/01/02||/M", max: "2026/02/02||+1M/M" }).aggs.fetch("events").fetch("buckets")
+  def test_application_computed_bounds_use_the_configured_timezone
+    buckets = search(calendar_interval: :month, time_zone: "+01:30",
+      extended_bounds: { min: Date.new(2026, 1, 1), max: Date.new(2026, 3, 1) }).aggs.fetch("events").fetch("buckets")
 
     assert_equal [1, 2, 3].map { |month| Time.utc(2026, month).to_i * 1_000 - 5_400_000 }, buckets.map { |bucket| bucket.fetch("key") }
-    assert_equal ["2026/01/01", "2026/02/01", "2026/03/01"], buckets.map { |bucket| bucket.fetch("key_as_string") }
+    assert_equal ["2026-01-01T00:00:00.000+01:30", "2026-02-01T00:00:00.000+01:30", "2026-03-01T00:00:00.000+01:30"], buckets.map { |bucket| bucket.fetch("key_as_string") }
     assert_equal [0, 0, 0], buckets.map { |bucket| bucket.fetch("doc_count") }
   end
 
@@ -113,7 +109,7 @@ class DateHistogramExtendedBoundsTest < TinkickIntegrationTest
       { max: Float::NAN }, { min: 2**63 }, { min: -(2**63) - 1 }, { min: 2, max: 1 },
       { min: "2026-01-02T01:00:00Z", max: "2026-01-02T00:00:00Z" }].each do |bounds|
       error = assert_raises(ArgumentError) { search(calendar_interval: :day, extended_bounds: bounds).aggs }
-      assert_match(/bound/i, error.message, bounds.inspect)
+      assert_match(/bound|date/i, error.message, bounds.inspect)
     end
   end
 

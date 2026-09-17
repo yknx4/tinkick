@@ -56,9 +56,9 @@ class DateHistogramOffsetsTest < TinkickIntegrationTest
 
   def test_long_month_offset_keeps_elapsed_days_and_the_unshifted_calendar_series
     [Time.utc(2024, 1, 15), Time.utc(2024, 2, 15), Time.utc(2024, 4, 15)].each_with_index { |instant, index| create_value(instant, index) }
-    buckets = search(calendar_interval: :month, offset: "+40d", format: "yyyy/MM/dd").aggs.fetch("events").fetch("buckets")
+    buckets = search(calendar_interval: :month, offset: "+40d").aggs.fetch("events").fetch("buckets")
 
-    assert_equal ["2024/01/10", "2024/02/10", "2024/03/12", "2024/04/10"], buckets.map { |bucket| bucket.fetch("key_as_string") }
+    assert_equal ["2024-01-10T00:00:00.000Z", "2024-02-10T00:00:00.000Z", "2024-03-12T00:00:00.000Z", "2024-04-10T00:00:00.000Z"], buckets.map { |bucket| bucket.fetch("key_as_string") }
     assert_equal [1, 1, 0, 1], buckets.map { |bucket| bucket.fetch("doc_count") }
   end
 

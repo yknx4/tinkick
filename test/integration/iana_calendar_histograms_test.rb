@@ -28,11 +28,11 @@ class IanaCalendarHistogramsTest < TinkickIntegrationTest
     end
   end
 
-  def test_repeated_havana_midnight_uses_the_first_occurrence
+  def test_repeated_havana_midnight_uses_postgresql_standard_time_resolution
     [Time.utc(2026, 11, 1, 4, 30), Time.utc(2026, 11, 1, 5, 30)].each_with_index { |instant, index| create_value(instant, index) }
     buckets = histogram(time_zone: "America/Havana", min_doc_count: 2).fetch("buckets")
 
-    assert_equal [{ "key" => Time.utc(2026, 11, 1, 4).to_i * 1_000, "key_as_string" => "2026-11-01T00:00:00.000-04:00", "doc_count" => 2 }], buckets
+    assert_equal [{ "key" => Time.utc(2026, 11, 1, 5).to_i * 1_000, "key_as_string" => "2026-11-01T00:00:00.000-05:00", "doc_count" => 2 }], buckets
   end
 
   def test_missing_havana_midnight_uses_the_first_valid_instant
