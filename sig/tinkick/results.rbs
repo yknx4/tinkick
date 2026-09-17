@@ -11,6 +11,8 @@ module Tinkick
 
   type result_record = ActiveRecord::Base | HashWrapper
 
+  type missing_record = { id: String, model: singleton(ActiveRecord::Base) }
+
   class Results
     include Enumerable[result_record]
     extend Forwardable
@@ -24,6 +26,7 @@ module Tinkick
     @select: source_selection?
     @results: Array[result_record]?
     @record_pairs: Array[[ result_record, Float ]]?
+    @missing_records: Array[missing_record]
 
     attr_reader current_page: Integer
     attr_reader padding: Integer
@@ -50,6 +53,7 @@ module Tinkick
 
     def model_name: () -> ActiveModel::Name
     def entry_name: (?Hash[Symbol, Object?] options) -> String
+    def missing_records: () -> Array[missing_record]
     def total_count: () -> Integer
     alias total_entries total_count
     def per_page: () -> Integer

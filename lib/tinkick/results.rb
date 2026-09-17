@@ -25,6 +25,7 @@ module Tinkick
       @model_includes = model_includes
       @scope_results = scope_results
       @select = select
+      @missing_records = []
       unless load
         @query.model.logger&.warn("Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
       end
@@ -59,6 +60,11 @@ module Tinkick
 
       default = options[:count] == 1 ? name : name.pluralize
       model_name.human(options.reverse_merge(default: default))
+    end
+
+    def missing_records
+      record_pairs
+      @missing_records
     end
 
     def total_count
@@ -171,15 +177,20 @@ module Tinkick
       identifiers = rows.map { |row| row.fetch(primary_key) }
       loaded = scope.call(@query.model.all).where(primary_key => identifiers).to_a #: Array[ActiveRecord::Base]
       indexed = loaded.to_h { |record| [record[primary_key], record] }
+      missing = [] #: Array[missing_record]
       # @type var pairs: Array[[ActiveRecord::Base, Float]]
       pairs = rows.filter_map do |row|
         record = indexed[row.fetch(primary_key)]
-        next unless record
+        unless record
+          missing << { id: row.fetch(primary_key).to_s, model: @query.model }
+          next
+        end
 
         score = row.fetch("_tinkick_score") #: Float | BigDecimal
         [record, score.to_f]
       end
       preload_records(pairs.map(&:first))
+      @missing_records = missing
       pairs
     end
 
