@@ -970,8 +970,15 @@ ranked page even when the callback removes all its records.
 
 ### Multiple models and multi-search
 
-Global `Tinkick.search`, `models`, `indices_boost`, and `Tinkick.multi_search` are
-not implemented. Query each model explicitly, or design a SQL `UNION ALL` over
+Global search supports an explicitly registered model and uses its
+`tinkick_search` entry point, so an existing generic `search` method is preserved:
+
+```ruby
+Tinkick.search("coffee", model: Product, where: {in_stock: true}, limit: 20)
+```
+
+Combined `models`, `indices_boost`, and `Tinkick.multi_search` remain adapter
+work. Query each model explicitly, or design a SQL `UNION ALL` over
 compatible projected columns. Combining independently ranked lists requires a
 ranking policy; concatenating them is not a global relevance ranking. Batched
 error handling is also an application concern, especially inside transactions.
@@ -1288,7 +1295,8 @@ The following reference maps less common upstream options to their current statu
 | `body`, `body_options`, query-mutating blocks | Excluded Elasticsearch DSL; use reviewed native SQL. |
 | `search_index`/`searchkick_index` inspection | Not implemented; use PostgreSQL catalogs and TIN helpers. |
 | Index refresh, clean/promote/store/remove, queue inspection | Excluded external-index lifecycle. |
-| `multi_search`, global search, `models`, model boosts | Not implemented; separate queries or explicit SQL combination. |
+| Global search | Available with an explicit `model:`; preserves generic search-method ownership. |
+| `multi_search`, `models`, model boosts | Not implemented; separate queries or explicit SQL combination. |
 | Scroll/deep-paging configuration | Excluded backend APIs; use bounded column cursors or SQL batches. |
 | BigDecimal serialization rules | No JSON document conversion: PostgreSQL column types govern stored precision. |
 | Mongoid | Unsupported integration; Tinkick requires ActiveRecord with PostgreSQL. |
