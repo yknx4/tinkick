@@ -68,6 +68,25 @@ class FieldMatchingTest < TinkickIntegrationTest
     assert_raises(Tinkick::MissingFieldError) { search("apple", fields: [{ "name; SELECT 1" => :exact }]).to_a }
   end
 
+  def test_costly_matching_paths_warn_when_results_are_loaded
+    original_logger = SearchProduct.logger
+    output = StringIO.new
+    SearchProduct.logger = Logger.new(output)
+    mixed = search("Red Apple", fields: [{ name: :exact }, :description])
+    assert_empty(output.string)
+    mixed.to_a
+    assert_includes(output.string, "mixed TIN and SQL")
+    assert_includes(output.string, "group matching rows")
+
+    output.truncate(0)
+    output.rewind
+    search("apxl", match: :word_start, misspellings: true).to_a
+    assert_includes(output.string, "Fuzzy partial")
+    assert_includes(output.string, "dictionary")
+  ensure
+    SearchProduct.logger = original_logger
+  end
+
   private
 
   def search(term, **options)

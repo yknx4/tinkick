@@ -36,6 +36,7 @@ module Tinkick
       @after = after
       @scoring = "1.0"
       @mixed_matching = false
+      @fuzzy_partial = false
       raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(@operator)
       raise ArgumentError, "limit and offset must be nonnegative" if @limit.negative? || @offset.negative?
       raise InvalidQueryError, "countless pagination requires a positive limit" if @countless && @limit.zero?
@@ -122,6 +123,9 @@ module Tinkick
             exact << TextMatch.new(@model).predicate(quoted_column(field), @term, match: mode, misspellings: @misspellings)
           else
             compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: @misspellings)
+            if [:word_start, :word_middle, :word_end].include?(mode) && @misspellings != false && compiled.include?("MATCHES")
+              @fuzzy_partial = true
+            end
             native << ["#{quoted_column(field)} ==> ?", [compiled]] unless compiled.empty?
           end
         end
@@ -170,6 +174,9 @@ module Tinkick
       raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
 
       score = score_sql
+      if @fuzzy_partial
+        @model.logger&.warn("Tinkick: Fuzzy partial matching expands patterns in TIN's token dictionary. Broad prefixes or infixes can increase query cost; use misspellings: false when typo matching is unnecessary and inspect EXPLAIN ANALYZE with representative data.")
+      end
       if @mixed_matching
         @model.logger&.warn("Tinkick: mixed TIN and SQL match modes combine and group matching rows before sorting. This can be slower than native TIN top-k ranking; use a single native match mode where its semantics fit and check EXPLAIN ANALYZE for your workload.")
       end

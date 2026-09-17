@@ -22,6 +22,7 @@ module Tinkick
     @scope: ActiveRecord::Relation?
     @scoring: String
     @mixed_matching: bool
+    @fuzzy_partial: bool
     @countless: bool
     @keyset: bool
     @has_next_page: bool?
