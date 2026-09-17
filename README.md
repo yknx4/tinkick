@@ -864,8 +864,24 @@ when small numbers must mean milliseconds. Missing custom date components use
 1970-01-01 and midnight. Locale names, week/era tokens, optional pattern sections,
 and fractions beyond three custom digits remain adapter work.
 
-Date histograms, nested aggregations, and additional aggregate options remain
-adapter implementation work. Elasticsearch/Painless scripts are not SQL;
+UTC calendar date histograms count matching records independently of result
+pagination and fill intervening empty buckets by default:
+
+```ruby
+Product.search("coffee", aggs: {
+  months: {date_histogram: {field: :created_at, calendar_interval: :month}}
+})
+```
+
+Supported calendar units are second, minute, hour, day, week (Monday start),
+month, quarter, and year, including `1s`, `1m`, `1h`, `1d`, `1w`, `1M`, `1q`, and
+`1y` aliases. Buckets contain an epoch-millisecond `key`, ISO8601 `key_as_string`,
+and `doc_count`. Put `min_doc_count`, `order`, and `keyed` inside `date_histogram:`;
+only per-aggregation `where:` belongs alongside it. Set `min_doc_count: 1` to
+avoid generating empty buckets. The default logs a warning for small intervals
+over wide date ranges. Fixed intervals, explicit zones, offsets, bounds, custom
+formats, nested aggregations, and additional aggregate options remain adapter
+implementation work. Elasticsearch/Painless scripts are not SQL;
 use a reviewed persisted/generated column or an explicit application SQL query
 for scripted calculations. Check representative plans against TIN's
 [SQL shape guidance](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
