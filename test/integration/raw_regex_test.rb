@@ -59,6 +59,46 @@ class RawRegexTest < TinkickIntegrationTest
     assert_equal [6], matches('#{0,2}')
   end
 
+  def test_whole_value_intersection_and_grouped_complement_use_bound_native_predicates
+    SearchProduct.find(1).update!(name: "Moria\narchive 🧙")
+    SearchProduct.find(2).update!(name: "Moria and Balrog accounts")
+    SearchProduct.find(3).update!(name: "Balrog records")
+    pattern = ".*Moria.*&~(.*Balrog.*)"
+    sql, binds = compiler.predicate(column(:name), pattern)
+
+    assert_equal [1, 13, 14], matches(pattern)
+    refute_includes sql, "RECURSIVE"
+    assert_includes sql, " AND "
+    assert_includes sql, "NOT "
+    assert_equal 2, binds.length
+    refute_includes sql, "Moria"
+    refute_includes sql, "Balrog"
+  end
+
+  def test_native_boolean_structure_preserves_precedence_and_whole_group_nesting
+    { "abc|ac&~(abc)" => [1, 2], "((abc|ac)&~(abc))" => [2],
+      "~((abc|ac)&~(abc))" => (1..16).to_a - [2] }.each do |pattern, expected|
+      sql, = compiler.predicate(column(:name), pattern)
+      refute_includes sql, "RECURSIVE"
+      assert_equal expected, matches(pattern)
+    end
+  end
+
+  def test_any_string_atoms_keep_native_matching_in_concatenation_and_repetition
+    { "@" => (1..16).to_a, "a@c" => [1, 2, 3, 4, 5, 16], "(@)?" => (1..16).to_a }.each do |pattern, expected|
+      sql, = compiler.predicate(column(:name), pattern)
+      refute_includes sql, "RECURSIVE"
+      assert_equal expected, matches(pattern)
+    end
+  end
+
+  def test_embedded_boolean_operators_repetition_and_intervals_keep_the_automaton
+    ["a(~b)c", "(a&aa)*", "<1-12>", "~abc", "a|b(~c)"].each do |pattern|
+      sql, = compiler.predicate(column(:name), pattern)
+      assert_includes sql, "WITH RECURSIVE", pattern
+    end
+  end
+
   def test_empty_and_null_scalar_values_have_distinct_eligibility
     SearchProduct.find(1).update!(description: nil)
     SearchProduct.find(2).update!(description: "")
@@ -68,6 +108,7 @@ class RawRegexTest < TinkickIntegrationTest
     assert_equal [2, 3], matches("@", field: :description, scope: scope)
     assert_equal [2], matches("", field: :description, scope: scope)
     assert_equal [2], matches("~(abc)", field: :description, scope: scope)
+    assert_equal [2], matches("(@&~(abc))|nomatch", field: :description, scope: scope)
   end
 
   def test_newline_and_supplementary_characters_work_on_both_paths
@@ -88,6 +129,7 @@ class RawRegexTest < TinkickIntegrationTest
     SearchProduct.find(2).update!(tags: [nil, "ab"])
     SearchProduct.find(3).update!(tags: [])
     predicate, binds = compiler.predicate("candidate.value", "a.*&.*b")
+    refute_includes predicate, "RECURSIVE"
     scope = SearchProduct.where(id: [1, 2, 3]).where("description ==> ?", "archive")
     sql = "EXISTS (SELECT 1 FROM unnest(tags) AS candidate(value) WHERE #{predicate})"
 
@@ -99,6 +141,7 @@ class RawRegexTest < TinkickIntegrationTest
     SearchProduct.find(2).update!(metadata: { values: ["ab", 13, nil] })
     SearchProduct.find(3).update!(metadata: { values: [13, nil, true] })
     predicate, binds = compiler.predicate("candidate.value #>> '{}'", "a.*&.*b")
+    refute_includes predicate, "RECURSIVE"
     scope = SearchProduct.where(id: [1, 2, 3]).where("description ==> ?", "archive")
     sql = "EXISTS (SELECT 1 FROM jsonb_array_elements(metadata -> 'values') AS candidate(value) WHERE jsonb_typeof(candidate.value) = 'string' AND #{predicate})"
 
@@ -137,6 +180,13 @@ class RawRegexTest < TinkickIntegrationTest
     ["a{3,2}", "[z-a]", "<bad>", "a&", "(" * 300 + "a" + ")" * 300].each do |pattern|
       assert_raises(Tinkick::InvalidQueryError, pattern.inspect) { compiler.predicate(column(:name), pattern) }
     end
+  end
+
+  def test_boolean_decomposition_shares_one_compilation_work_budget
+    source = "(" * 250 + "a" * 4000 + "&b" + ")" * 250
+    error = assert_raises(Tinkick::InvalidQueryError) { compiler.predicate(column(:name), source) }
+
+    assert_includes error.message, "work budget"
   end
 
   private

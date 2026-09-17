@@ -3,6 +3,7 @@ module Tinkick
     @characters: Array[String]
     @position: Integer
     @casefold: bool
+    @raw: bool
 
     def initialize: (Regexp | String value) -> void
     def compile: () -> String

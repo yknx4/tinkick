@@ -6,6 +6,7 @@ module Tinkick
   # implicit substring matching and ASCII case folding.
   class RegexPattern
     def initialize(value)
+      @raw = value.is_a?(String)
       if value.is_a?(Regexp)
         source = value.source
         source = source.start_with?("\\A") ? source.delete_prefix("\\A") : ".*#{source}"
@@ -93,6 +94,8 @@ module Tinkick
         parts.join
       elsif consume(".")
         "."
+      elsif @raw && consume("@")
+        "(?:.)*"
       else
         predefined || literal(character)
       end

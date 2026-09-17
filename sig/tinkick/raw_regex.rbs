@@ -1,5 +1,7 @@
 module Tinkick
   class RawRegex
+    type structure = { optional: bool, unions: Array[Integer], intersections: Array[Integer], closing_group: Integer? }
+
     @model: singleton(ActiveRecord::Base)
 
     def initialize: (singleton(ActiveRecord::Base) model) -> void
@@ -7,7 +9,9 @@ module Tinkick
 
     private
 
-    def requires_automaton?: (String source) -> bool
+    def native_predicate: (String column, String source, RegexAutomaton::Work work) -> filter_predicate?
+    def combine: (String column, String source, Array[Integer] positions, String operator, RegexAutomaton::Work work) -> filter_predicate?
+    def structure: (String source, RegexAutomaton::Work work) -> structure
     def automaton_predicate: (String column, String source) -> filter_predicate
   end
 end

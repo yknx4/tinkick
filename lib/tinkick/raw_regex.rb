@@ -13,29 +13,69 @@ module Tinkick
     end
 
     def predicate(column, source)
-      if requires_automaton?(source)
+      result = native_predicate(column, source, RegexAutomaton::Work.new)
+      if result
+        @model.logger&.warn("Tinkick: regular expression filters can scan column values outside TIN. Use selective search/where conditions and inspect EXPLAIN; an optional pg_trgm expression index may help suitable patterns.")
+        result
+      else
         result = automaton_predicate(column, source)
         @model.logger&.warn("Tinkick: this Lucene regular expression performs a Unicode character walk per candidate value outside TIN. Long values can increase the cost substantially; use selective search/where conditions and inspect EXPLAIN.")
         result
-      else
-        pattern = RegexPattern.new(source).compile
-        @model.logger&.warn("Tinkick: regular expression filters can scan column values outside TIN. Use selective search/where conditions and inspect EXPLAIN; an optional pg_trgm expression index may help suitable patterns.")
-        ["(#{column})::text COLLATE \"C\" ~ ?", [pattern]]
       end
     end
 
     private
 
-    def requires_automaton?(source)
-      RegexAutomaton::Work.new.consume(source.length)
+    def native_predicate(column, source, work)
+      shape = structure(source, work)
+      unless shape[:optional]
+        return ["(#{column})::text COLLATE \"C\" ~ ?", [RegexPattern.new(source).compile]]
+      end
+
+      if !shape[:unions].empty?
+        combine(column, source, shape[:unions], "OR", work)
+      elsif !shape[:intersections].empty?
+        combine(column, source, shape[:intersections], "AND", work)
+      elsif source.start_with?("(") && shape[:closing_group] == source.length - 1
+        native_predicate(column, source[1...-1] || "", work)
+      elsif source.start_with?("~(") && shape[:closing_group] == source.length - 1
+        child = native_predicate(column, source[2...-1] || "", work)
+        child && ["((#{column}) IS NOT NULL AND NOT (#{child[0]}))", child[1]]
+      end
+    end
+
+    def combine(column, source, positions, operator, work)
+      parts = [] #: Array[String]
+      binds = [] #: Array[filter_scalar]
+      start = 0
+      (positions + [source.length]).each do |position|
+        return if start == position
+
+        child = native_predicate(column, source[start...position] || "", work)
+        return unless child
+
+        parts << "(#{child[0]})"
+        binds.concat(child[1])
+        start = position + 1
+      end
+      ["(#{parts.join(" #{operator} ")})", binds]
+    end
+
+    # Only separators outside quoted text, classes, escapes, and groups can
+    # combine whole-value SQL predicates. Embedded Boolean syntax stays a DFA.
+    def structure(source, work)
+      work.consume(source.length)
       optional = false
+      unions = [] #: Array[Integer]
+      intersections = [] #: Array[Integer]
+      closing_group = nil #: Integer?
       quoted = false
       escaped = false
       in_class = false
       # Before optional ^, after ^, or after the first class member.
       class_position = 0
       depth = 0
-      source.each_char do |character|
+      source.each_char.with_index do |character, index|
         if quoted
           quoted = false if character == '"'
         elsif escaped
@@ -62,12 +102,20 @@ module Tinkick
             raise InvalidQueryError, "Regular expression nesting exceeds the adapter nesting budget"
           end
         elsif character == ")"
-          depth -= 1 if depth.positive?
-        elsif ["&", "~", "@", "#", "<"].include?(character)
+          if depth.positive?
+            depth -= 1
+            closing_group ||= index if depth.zero?
+          end
+        elsif character == "|"
+          unions << index if depth.zero?
+        elsif character == "&"
+          optional = true
+          intersections << index if depth.zero?
+        elsif ["~", "#", "<"].include?(character)
           optional = true
         end
       end
-      optional
+      { optional: optional, unions: unions, intersections: intersections, closing_group: closing_group }
     end
 
     def automaton_predicate(column, source)
