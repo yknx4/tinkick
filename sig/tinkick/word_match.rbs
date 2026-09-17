@@ -1,0 +1,16 @@
+module Tinkick
+  class WordMatch
+    ANALYSIS_DEFAULTS: Hash[String, String]
+
+    @model: singleton(ActiveRecord::Base)
+
+    def initialize: (singleton(ActiveRecord::Base) model) -> void
+    def predicate: (String field_name, String term, misspellings: QueryText::misspellings, ?operator: String) -> filter_predicate
+
+    private
+
+    def prefix_length: (QueryText::misspellings options) -> Integer
+    def candidate: (String word, Integer prefix) -> String
+    def index_analysis: (String field_name, SearchField field) -> Hash[String, String]
+  end
+end
