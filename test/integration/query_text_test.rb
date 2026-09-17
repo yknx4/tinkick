@@ -14,6 +14,76 @@ class QueryTextTest < TinkickIntegrationTest
     assert_equal(["Green Pear", "Red Apple"], names("apple pear", operator: "or"))
   end
 
+  def test_word_start_matches_each_token_prefix
+    assert_equal(["Red Apple"], names("app re", match: :word_start))
+    assert_empty(names("ppl", match: :word_start))
+    assert_empty(names("red pea", match: :word_start))
+  end
+
+  def test_word_middle_matches_within_each_token
+    assert_equal(["Red Apple"], names("ppl ed", match: :word_middle))
+    assert_empty(names("dapp", match: :word_middle))
+    assert_empty(names("red pear", match: :word_middle))
+  end
+
+  def test_word_end_matches_each_token_suffix
+    assert_equal(["Red Apple"], names("ple ed", match: :word_end))
+    assert_empty(names("app", match: :word_end))
+    assert_empty(names("ed ear", match: :word_end))
+  end
+
+  def test_partial_words_support_or_and_zero_edit_distance
+    [:word_start, :word_middle, :word_end].each do |mode|
+      assert_equal(["Green Pear", "Red Apple"], names("apple pear", match: mode, operator: "or"))
+      assert_equal(["Red Apple"], names("apple", match: mode, misspellings: { edit_distance: 0 }))
+      assert_empty(names("aplpe", match: mode, misspellings: { edit_distance: 0 }))
+    end
+  end
+
+  def test_partial_words_preserve_the_fifty_character_gram_ceiling
+    term = "𐐨" * 60
+    tinkick_test_products(:red_apple).update!(name: term)
+
+    [:word_start, :word_middle, :word_end].each do |mode|
+      assert_equal([term], names("𐐨" * 50, match: mode))
+      assert_empty(names("𐐨" * 51, match: mode))
+      assert_empty(names("#{"𐐨" * 51} pear", match: mode))
+      assert_equal(["Green Pear"], names("#{"𐐨" * 51} pear", match: mode, operator: "or"))
+    end
+  end
+
+  def test_partial_words_use_normalized_unicode_tokens
+    tinkick_test_products(:red_apple).update!(name: "Jalapeño Wi-Fi foo_bar 😀")
+
+    assert_equal(["Jalapeño Wi-Fi foo_bar 😀"], names("JALA FOO_ 😀", match: :word_start))
+    assert_equal(["Jalapeño Wi-Fi foo_bar 😀"], names("LAP _BA 😀", match: :word_middle))
+    assert_equal(["Jalapeño Wi-Fi foo_bar 😀"], names("PEÑO _BAR 😀", match: :word_end))
+  end
+
+  def test_partial_word_input_cannot_supply_query_syntax
+    [:word_start, :word_middle, :word_end].each do |mode|
+      assert_empty(names("*\"", match: mode))
+      assert_empty(names("apple OR pear", match: mode))
+      assert_empty(names("apple) OR (pear", match: mode))
+      assert_empty(names("apple^10000", match: mode))
+      assert_empty(names("apple~10000", match: mode))
+      assert_empty(names("apple; SELECT * FROM tinkick_test_products --", match: mode))
+      assert_equal(["Red Apple"], names("apple*?\\\\[]", match: mode))
+    end
+  end
+
+  def test_partial_words_preserve_literal_keycaps
+    tinkick_test_products(:red_apple).update!(name: "*️⃣ apple")
+    tinkick_test_products(:green_pear).update!(name: "#️⃣ pear")
+
+    [:word_start, :word_middle, :word_end].each do |mode|
+      assert_equal(["*️⃣ apple"], names("*️⃣", match: mode))
+      assert_equal(["#️⃣ pear"], names("#️⃣", match: mode))
+      assert_equal(["#️⃣ pear", "*️⃣ apple"], names("*", match: mode).sort)
+      assert_empty(names("!!!", match: mode))
+    end
+  end
+
   def test_only_a_standalone_star_matches_everything
     assert_equal(["Green Pear", "Red Apple"], names("*"))
     assert_equal(["Red Apple"], names("apple *"))

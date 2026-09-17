@@ -10,7 +10,7 @@ module Tinkick
 
     def compile(term, operator: "and", match: :word, misspellings: false)
       raise ArgumentError, "operator must be and or or" unless ["and", "or"].include?(operator)
-      raise ArgumentError, "Unsupported match mode: #{match.inspect}" unless [:word, :phrase].include?(match)
+      raise ArgumentError, "Unsupported match mode: #{match.inspect}" unless [:word, :phrase, :word_start, :word_middle, :word_end].include?(match)
       settings = fuzzy_settings(misspellings)
 
       return "*" if term == "*"
@@ -20,6 +20,17 @@ module Tinkick
       return quote(term) if match == :phrase
 
       separator = " #{operator.upcase} "
+      if [:word_start, :word_middle, :word_end].include?(match)
+        if settings && settings.first.positive?
+          raise ArgumentError, "Fuzzy partial-word matching is not implemented yet; use misspellings: false"
+        end
+        # Searchkick indexes word ngrams from 1 through 50 Unicode characters.
+        return "" if operator == "and" && words.any? { |word| word.length > 50 }
+
+        words = words.reject { |word| word.length > 50 }
+        return words.map { |word| partial(word, match) }.join(separator)
+      end
+
       exact = words.map { |word| literal(word) }.join(separator)
       return exact unless settings
 
@@ -57,6 +68,19 @@ module Tinkick
       return "MATCHES #{Regexp.escape(word)}" if ["*", "#"].include?(word)
 
       quote(word)
+    end
+
+    def partial(word, match)
+      if ["*", "#"].include?(word)
+        prefix = match == :word_start ? "" : ".*"
+        suffix = match == :word_end ? "" : ".*"
+        return "MATCHES #{prefix}#{Regexp.escape(word)}#{suffix}"
+      end
+
+      escaped = word.gsub(/[\\*?]/) { |character| "\\#{character}" }
+      prefix = match == :word_start ? "" : "*"
+      suffix = match == :word_end ? "" : "*"
+      "#{prefix}#{escaped}#{suffix}"
     end
 
     def fuzzy(word, distance, prefix, transpositions)

@@ -16,6 +16,8 @@ module Tinkick
 
     def literal: (String word) -> String
 
+    def partial: (String word, Symbol match) -> String
+
     def fuzzy: (String word, Integer distance, Integer prefix, bool transpositions) -> String
 
     def fuzzy_settings: (misspellings options) -> [ Integer, Integer, bool ]?
