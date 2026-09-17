@@ -1,0 +1,106 @@
+# frozen_string_literal: true
+
+class InstallTinkickFunctions < ActiveRecord::Migration[8.0]
+  def up
+    create_schema "tinkick", if_not_exists: true
+
+    execute <<~SQL
+      CREATE OR REPLACE FUNCTION tinkick.osa_distance(source text, target text, max_distance integer)
+      RETURNS integer
+      LANGUAGE plpgsql
+      IMMUTABLE STRICT PARALLEL SAFE SECURITY INVOKER
+      AS $tinkick$
+      DECLARE
+        source_length integer := char_length(source);
+        target_length integer := char_length(target);
+        left_length integer;
+        right_length integer;
+        left_chars text[];
+        right_chars text[];
+        distance_limit integer;
+        outside_limit integer;
+        previous_previous_row integer[];
+        previous_row integer[];
+        current_row integer[];
+        lower_column integer;
+        upper_column integer;
+        row_number integer;
+        column_number integer;
+        substitution_cost integer;
+      BEGIN
+        IF max_distance < 0 THEN
+          RAISE EXCEPTION 'max_distance must be nonnegative' USING ERRCODE = '22023';
+        END IF;
+        IF source COLLATE "C" = target COLLATE "C" THEN
+          RETURN 0;
+        END IF;
+        IF abs(source_length - target_length) > max_distance THEN
+          RETURN max_distance + 1;
+        END IF;
+        IF source_length = 0 OR target_length = 0 THEN
+          RETURN greatest(source_length, target_length);
+        END IF;
+
+        -- Keep only three narrow DP rows. Callers own analysis and fixed prefixes.
+        left_length := greatest(source_length, target_length);
+        right_length := least(source_length, target_length);
+        IF source_length >= target_length THEN
+          left_chars := string_to_array(source, NULL);
+          right_chars := string_to_array(target, NULL);
+        ELSE
+          left_chars := string_to_array(target, NULL);
+          right_chars := string_to_array(source, NULL);
+        END IF;
+        distance_limit := least(max_distance, left_length);
+        outside_limit := distance_limit + 1;
+        upper_column := least(right_length, distance_limit);
+        previous_row := array_fill(outside_limit, ARRAY[upper_column + 1], ARRAY[0]);
+        FOR column_number IN 0..upper_column LOOP
+          previous_row[column_number] := column_number;
+        END LOOP;
+
+        FOR row_number IN 1..left_length LOOP
+          lower_column := greatest(0, row_number - distance_limit);
+          upper_column := least(right_length, row_number + distance_limit);
+          current_row := array_fill(outside_limit, ARRAY[upper_column - lower_column + 1], ARRAY[lower_column]);
+          IF lower_column = 0 THEN
+            current_row[0] := row_number;
+          END IF;
+
+          FOR column_number IN greatest(1, lower_column)..upper_column LOOP
+            substitution_cost := CASE
+              WHEN left_chars[row_number] COLLATE "C" = right_chars[column_number] COLLATE "C" THEN 0
+              ELSE 1
+            END;
+            current_row[column_number] := least(
+              coalesce(previous_row[column_number], outside_limit) + 1,
+              coalesce(current_row[column_number - 1], outside_limit) + 1,
+              coalesce(previous_row[column_number - 1], outside_limit) + substitution_cost,
+              outside_limit
+            );
+            -- Consuming both adjacent characters once gives OSA, not unrestricted Damerau distance.
+            IF row_number > 1 AND column_number > 1
+              AND left_chars[row_number] COLLATE "C" = right_chars[column_number - 1] COLLATE "C"
+              AND left_chars[row_number - 1] COLLATE "C" = right_chars[column_number] COLLATE "C"
+            THEN
+              current_row[column_number] := least(
+                current_row[column_number],
+                coalesce(previous_previous_row[column_number - 2], outside_limit) + 1
+              );
+            END IF;
+          END LOOP;
+
+          previous_previous_row := previous_row;
+          previous_row := current_row;
+        END LOOP;
+
+        RETURN least(previous_row[right_length], outside_limit);
+      END;
+      $tinkick$;
+    SQL
+  end
+
+  def down
+    execute "DROP FUNCTION IF EXISTS tinkick.osa_distance(text, text, integer)"
+  end
+end

@@ -1,0 +1,9 @@
+module Tinkick
+  module Generators
+    class FunctionsGenerator < Rails::Generators::Base
+      include ActiveRecord::Generators::Migration
+
+      def create_migration_file: () -> void
+    end
+  end
+end
