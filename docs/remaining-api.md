@@ -11,7 +11,7 @@ Baseline: Searchkick 6.1.2 / commit93e901a75b11a25101668a616e006b158251b16e, cur
 
 ## Dependency-ordered feasible adapter work
 
-1. **Finish core result metadata.** scope_results, missing_records, misspellings? with exact-first retry, and model_name/entry_name are implemented and tested. Remaining: measured took and error semantics. No native TIN gap here.
+1. **Core result metadata.** scope_results, missing_records, misspellings? with exact-first retry, model_name/entry_name, cached client page timing through took, and error success semantics are implemented and tested. Database failures continue to raise; page metadata does not invoke result scopes/preloads or request totals.
 
 2. **Projection and query option operations.** Top-level and nested JSON select/reselect source filtering, Enumerable block selection, hidden cursor-key preservation, only/except on options, explicit _score/compound ordering, and Searchkick-compatible wildcard search-field expansion are implemented. Wildcards expand known searchable fields and preserve per-field match/misspelling restrictions. Model results retain complete attributes according to pinned Searchkick behavior.
 

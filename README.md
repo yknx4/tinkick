@@ -394,9 +394,18 @@ different from `load(false)`.
 strings, in original page order. Calling it loads and caches that page without
 requesting a count or filling its gaps; ordinary and raw results return `[]`.
 
+`took` returns cached integer milliseconds of client elapsed time for resolving
+and fetching the bounded page. It includes query compilation, tokenization, and
+any required `misspellings: {below: ...}` decision count. It excludes separately
+requested totals/aggregations, association preloads, and `scope_results` loading;
+it is not a PostgreSQL server-only execution metric. `error` fetches the same page
+and returns `nil` on success. Database errors still raise normally. Neither
+metadata method adds a total-count query or invokes result scopes/preloads, and
+subsequent result loading reuses the page.
+
 ### Metadata still missing
 
-`took`, `response`, `hits`, `with_hit`, `error`,
+`response`, `hits`, `with_hit`,
 suggestions,
 and public highlight result methods are not implemented. Aggregation metadata
 is available through `aggs` and `aggregations`. Searchkick 6 removed
