@@ -66,7 +66,7 @@ The generated SQL combines one `==>` predicate per field with `OR`. A row
 matching either field qualifies, a row matching both appears once, and native
 `tin.score` adds the matching fields' relevance. Field weights use TINQL `^N`;
 zero keeps matches while removing that field's score contribution. Boosts from
-0 through 10000 stay native. See [boosting](../../README.md#boosting-conversions-and-personalization)
+0 through 10000 stay native. See [boosting](ranking.md#boosting-conversions-and-personalization)
 for larger factors and SQL ranking costs.
 
 The default `operator: "and"` requires all words in at least one selected field.
