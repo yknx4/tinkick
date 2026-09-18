@@ -62,6 +62,36 @@ class TinqlSearchTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) { search({ raw: "*" }, match: :exact).to_a }
   end
 
+  def test_proximity_distinguishes_order_and_extra_word_gaps
+    ordered = document(:phrase_ordered).id
+    reversed = document(:phrase_reversed).id
+    gap = document(:phrase_gap).id
+    assert_equal [ordered, reversed].sort, search({ near: ["Gondolin", "sentries"], distance: 0 }).map(&:id).sort
+    assert_equal [ordered], search({ then: ["Gondolin", "sentries"], distance: 0 }).map(&:id)
+    assert_equal [ordered, gap].sort, search({ then: ["Gondolin", "sentries"], distance: 1 }).map(&:id).sort
+    assert_equal [ordered, reversed, gap].sort, search({ near: ["Gondolin", "sentries"], distance: 1 }).map(&:id).sort
+    assert_empty search({ within: { near: ["Gondolin", "sentries"], distance: 1 }, words: 1 })
+  end
+
+  def test_phrase_gaps_alternatives_and_tolerance
+    assert_equal [document(:phrase_gap).id], search({ phrase: ["Gondolin", nil, "sentries"] }).map(&:id)
+    assert_equal [document(:phrase_gap).id], search({ phrase: ["Gondolin", ["young", "veteran"], "sentries"] }).map(&:id)
+    expected = [:phrase_ordered, :phrase_gap].map { |key| document(key).id }.sort
+    assert_equal expected, search({ phrase: "Gondolin sentries", slop: 1 }).map(&:id).sort
+    assert_equal [document(:phrase_ordered).id], search({ phrase: "Gondolin sentries", slop: 0 }).map(&:id)
+    # Literal punctuation cannot introduce phrase gaps or alternatives.
+    assert_empty search({ phrase: ["Gondolin", "[young veteran]", "sentries"] })
+  end
+
+  def test_proximity_configuration_rejects_misspelled_options_and_invalid_bounds
+    [{ near: ["a", "b"] }, { then: ["a", "b"], distance: -1 },
+      { near: ["a"], distance: 2 }, { near: ["a", "b"], distance: 1.5 },
+      { within: "a", words: 0 }, { phrase: "a", slop: -1 },
+      { phrase: ["a", []] }, { near: ["a", "b"], distance: 2, typo: 1 }].each do |expression|
+      assert_raises(ArgumentError, expression.inspect) { search(expression).to_a }
+    end
+  end
+
   private
 
   def search(expression = nil, **options)

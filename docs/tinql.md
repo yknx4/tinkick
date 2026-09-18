@@ -27,3 +27,27 @@ Whole-field SQL match modes (`exact`, `text_start`, `text_middle`, `text_end`)
 cannot be combined with `tinql:`. Existing highlighting analysis restrictions apply.
 
 See the [native language reference](https://planetscale.com/docs/postgres/search/tinql).
+
+## Phrases and proximity
+
+```ruby
+Product.search(tinql: { near: ["coffee", "beans"], distance: 2 })
+Product.search(tinql: { then: ["coffee", "beans"], distance: 0 })
+Product.search(tinql: { phrase: "fresh coffee beans", slop: 2 })
+Product.search(tinql: { phrase: ["fresh", nil, "beans"] })
+Product.search(tinql: { phrase: ["fresh", ["coffee", "cocoa"], "beans"] })
+```
+
+`near` accepts either word order; `then` preserves it. Both take exactly two
+expressions and require `distance`, the maximum extra words between them
+(`0` means adjacent). `slop` allows extra gaps in an ordered phrase. In phrase
+arrays, `nil` means one arbitrary word and an inner array gives alternatives
+at that position. Strings remain literal, including `_`, `[` and `]`.
+
+Limit the width of a matching span:
+
+```ruby
+Product.search(tinql: {
+  within: { near: ["coffee", "beans"], distance: 5 }, words: 4
+})
+```

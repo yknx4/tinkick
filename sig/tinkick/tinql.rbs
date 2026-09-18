@@ -2,12 +2,16 @@ module Tinkick
   type tinql_value = String | Integer | Float | bool | nil | Array[tinql_value] | Hash[Symbol, tinql_value]
 
   class Tinql
+    OPTIONS: Hash[Symbol, Array[Symbol]?]
     def compile: (tinql_value expression) -> String
 
     private
 
     def string: (tinql_value value) -> String
     def literal: (String value) -> String
+    def escape: (tinql_value value) -> String
+    def phrase_part: (tinql_value value) -> String
+    def integer: (tinql_value value, ?minimum: Integer) -> Integer
     def list: (tinql_value value) -> Array[tinql_value]
   end
 end
