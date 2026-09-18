@@ -6,6 +6,9 @@ module Tinkick
     OPTIONS = {
       raw: nil, and: nil, or: nil, and_not: nil,
       near: [:distance], then: [:distance], within: [:words], phrase: [:slop],
+      term: nil, all: nil, wildcard: nil, matches: nil, range: nil,
+      fuzzy: [:distance, :prefix], boost: [:factor],
+      any_of: nil, all_of: nil, at_least: [:count, :percent],
     }.freeze
 
     def compile(expression)
@@ -25,6 +28,43 @@ module Tinkick
       case operator
       when :raw
         string(value)
+      when :term
+        literal(string(value))
+      when :all
+        raise ArgumentError, "tinql all requires true" unless value == true
+
+        "*"
+      when :wildcard
+        "CONTAINS #{token(value)}"
+      when :matches
+        pattern = string(value)
+        if pattern.gsub(/\\./m, "").match?(/\s/)
+          raise ArgumentError, "tinql matches requires a native pattern with escaped whitespace"
+        end
+        "MATCHES #{pattern}"
+      when :range
+        bounds = list(value)
+        raise ArgumentError, "tinql range requires two bounds; use nil for an open bound" unless bounds.length == 2
+
+        bounds.map { |bound| bound.nil? ? "*" : token(bound) }.join(" TO ")
+      when :fuzzy
+        "CONTAINS #{token(value)}~#{integer(expression.fetch(:prefix, 1))}:#{integer(expression.fetch(:distance, 1))}"
+      when :boost
+        factor = expression[:factor]
+        unless (factor.is_a?(Integer) || factor.is_a?(Float)) && factor.finite? && factor.between?(0, 10_000)
+          raise ArgumentError, "tinql boost factor must be a finite number between 0 and 10000"
+        end
+        "(#{compile(value)})^#{factor}"
+      when :any_of, :all_of, :at_least
+        alternatives = list(value).map { |item| "(#{compile(item)})" }.join(" ")
+        prefix = if operator == :at_least
+          minimum_match(expression)
+        elsif operator == :all_of
+          "ALL OF "
+        else
+          ""
+        end
+        "#{prefix}[#{alternatives}]"
       when :near, :then
         operands = list(value)
         raise ArgumentError, "tinql #{operator} requires two expressions" unless operands.length == 2
@@ -54,6 +94,26 @@ module Tinkick
     end
 
     private
+
+    def minimum_match(expression)
+      if expression.key?(:count) == expression.key?(:percent)
+        raise ArgumentError, "tinql at_least requires exactly one of count or percent"
+      end
+      return "AT LEAST #{integer(expression[:count], minimum: 1)} OF " if expression.key?(:count)
+
+      percent = integer(expression[:percent], minimum: 1)
+      raise ArgumentError, "tinql percent cannot exceed 100" if percent > 100
+
+      "AT LEAST #{percent}% OF "
+    end
+
+    def token(value)
+      text = string(value)
+      if text.match?(/[\s()\[\]"~^]/)
+        raise ArgumentError, "tinql token patterns and range bounds must be single native terms without delimiters; use raw for explicit syntax"
+      end
+      text
+    end
 
     def string(value)
       raise ArgumentError, "tinql expects a nonempty string" unless value.is_a?(String) && !value.strip.empty?

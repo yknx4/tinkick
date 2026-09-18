@@ -51,3 +51,40 @@ Product.search(tinql: {
   within: { near: ["coffee", "beans"], distance: 5 }, words: 4
 })
 ```
+
+## Token patterns, ranges, and boosts
+
+| Expression | Meaning |
+| --- | --- |
+| `{ term: "coffee" }` | Literal term/phrase; equivalent to a plain string |
+| `{ all: true }` | Match all documents |
+| `{ wildcard: "cof?ee*" }` | Native token wildcard: `?` one character, `*` zero or more |
+| `{ matches: "cof+ee.*" }` | Native TINQL full-token regex, not Ruby or PostgreSQL regex |
+| `{ range: ["coffee", "tea"] }` | Inclusive dictionary range; `nil` opens either bound |
+| `{ fuzzy: "cofee", distance: 1, prefix: 1 }` | Native edit distance with a fixed prefix; both default to `1` |
+| `{ boost: "coffee", factor: 3 }` | Multiply the expression's relevance; factor must be `0..10000` |
+
+Patterns and ranges apply to **tokens**, not whole column values. Keep ordinary
+column comparisons and PostgreSQL regex filters in `where`. Regex patterns use
+the index's normalized dictionary spelling and native escaped whitespace.
+Wildcard patterns and range bounds must be single native terms without query
+delimiters; use `raw:` when writing more specialized native syntax.
+
+```ruby
+Product.search(tinql: { or: [
+  { boost: { phrase: "coffee beans" }, factor: 3 },
+  { fuzzy: "cofee", distance: 1, prefix: 0 }
+] })
+```
+
+## Minimum-match groups
+
+```ruby
+Product.search(tinql: { at_least: ["coffee", "beans", "roasted"], count: 2 })
+Product.search(tinql: { at_least: ["coffee", "beans", "roasted"], percent: 50 })
+Product.search(tinql: { any_of: ["coffee", { phrase: "hot chocolate" }] })
+Product.search(tinql: { all_of: ["coffee", "beans"] })
+```
+
+`at_least` requires either a positive integer `count` or an integer `percent`
+from 1 to 100. Groups accept nested expressions and must not be empty.

@@ -7,6 +7,8 @@ module Tinkick
 
     private
 
+    def minimum_match: (Hash[Symbol, tinql_value] expression) -> String
+    def token: (tinql_value value) -> String
     def string: (tinql_value value) -> String
     def literal: (String value) -> String
     def escape: (tinql_value value) -> String

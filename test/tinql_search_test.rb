@@ -92,6 +92,51 @@ class TinqlSearchTest < ActiveSupport::TestCase
     end
   end
 
+  def test_minimum_match_groups_and_nested_alternatives
+    terms = ["Gondolin", "sentries", "astrolabe"]
+    assert_equal 4, search({ at_least: terms, count: 2 }).total_count
+    assert_equal 4, search({ at_least: terms, percent: 50 }).total_count
+    assert_empty search({ at_least: terms, percent: 100 })
+    assert_equal 3, search({ all_of: ["Gondolin", "sentries"] }).total_count
+    assert_equal 2, search({ any_of: [{ phrase: "Gondolin sentries" }, "astrolabe"] }).total_count
+  end
+
+  def test_native_token_wildcards_regex_ranges_and_fuzzy_distance
+    expected = [document(:typo_exact).id]
+    assert_equal expected, search({ wildcard: "astro?abe" }).map(&:id)
+    assert_equal expected, search({ wildcard: "*rolabe" }).map(&:id)
+    assert_equal expected, search({ matches: "astro(labe|nomy)" }).map(&:id)
+    assert_equal expected, search({ range: ["astrolabe", "astrolabe"] }).map(&:id)
+    assert_equal expected, search({ fuzzy: "astrolbe", distance: 1, prefix: 3 }).map(&:id)
+    assert_empty search({ fuzzy: "astrolbe", distance: 0 })
+    assert_equal SearchDocument.count, search({ all: true }).total_count
+    assert_equal expected, search({ term: "astrolabe" }).map(&:id)
+    [[nil, "astrolabe"], ["sentries", nil]].each do |bounds|
+      native = "#{bounds[0] || '*'} TO #{bounds[1] || '*'}"
+      assert_equal SearchDocument.where("body ==> ?", native).order(:id).ids,
+        search({ range: bounds }).order(:id).map(&:id)
+    end
+  end
+
+  def test_expression_boosts_keep_native_scores_and_top_results
+    expression = { boost: { and: ["mithril", "lantern"] }, factor: 3 }
+    boosted = search(expression).with_score.to_h { |record, score| [record.id, score] }
+    plain = search(and: ["mithril", "lantern"]).with_score.to_h { |record, score| [record.id, score] }
+    assert_equal plain.keys.sort, boosted.keys.sort
+    plain.each { |id, score| assert_in_delta score * 3, boosted.fetch(id), 0.00001 }
+    assert_equal [:frequency_high, :length_short].map { |key| document(key).id }.sort,
+      search(expression).limit(2).map(&:id).sort
+  end
+
+  def test_token_patterns_and_groups_reject_ambiguous_input
+    [{ wildcard: "foo OR *" }, { matches: "foo OR *" }, { fuzzy: "two words", distance: 1 },
+      { fuzzy: "word", distance: -1 }, { range: ["a"] }, { all: false },
+      { at_least: ["a"], count: 1, percent: 50 }, { at_least: ["a"], percent: 101 },
+      { boost: "word", factor: Float::INFINITY }, { boost: "word", factor: 10_001 }].each do |expression|
+      assert_raises(ArgumentError, expression.inspect) { search(expression).to_a }
+    end
+  end
+
   private
 
   def search(expression = nil, **options)
