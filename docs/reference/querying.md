@@ -279,7 +279,7 @@ can provide another boundary where correctly configured; Tinkick does not instal
 policies or verify an Apartment integration.
 
 JSONB filter paths such as `store.city` are supported as described under
-[filtering](../../README.md#filtering). Text search also accepts dotted scalar paths:
+[filtering](filtering.md#filtering). Text search also accepts dotted scalar paths:
 
 ```sh
 bin/rails generate tinkick:index products metadata.title metadata.details.summary
