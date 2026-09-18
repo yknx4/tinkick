@@ -17,6 +17,7 @@ module Tinkick
 
   class Query
     @model: singleton(ActiveRecord::Base)
+    @query_block: result_scope?
     @base_scope: ActiveRecord::Relation
     @term: String
     @fields: Array[[ String, Symbol, Float? ]]
@@ -54,7 +55,7 @@ module Tinkick
     attr_reader after: String?
     attr_reader took: Integer?
 
-    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: search_fields, ?base_scope: ActiveRecord::Relation, ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String | nil, ?operator: String | Symbol, ?match: Symbol, ?misspellings: QueryText::misspellings, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?exclude: exclusion_phrases, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost, ?boost_by_recency: recency_boost_spec, ?conversions: conversion_fields, ?conversions_v2: conversion_v2, ?conversions_term: conversion_term) -> void
+    def initialize: (singleton(ActiveRecord::Base) model, Object? term, fields: search_fields, ?base_scope: ActiveRecord::Relation, ?where: filter_conditions, ?order: query_order?, ?limit: Integer | String, ?offset: Integer | String | nil, ?operator: String | Symbol, ?match: Symbol, ?misspellings: QueryText::misspellings, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?exclude: exclusion_phrases, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost, ?boost_by_recency: recency_boost_spec, ?conversions: conversion_fields, ?conversions_v2: conversion_v2, ?conversions_term: conversion_term, ?block: result_scope?) -> void
 
     def to_relation: () -> ActiveRecord::Relation
 
@@ -104,6 +105,11 @@ module Tinkick
     def matching_scope: (ActiveRecord::Relation relation, Array[filter_predicate] predicates) -> ActiveRecord::Relation
     def mixed_scope: (ActiveRecord::Relation relation, Array[filter_predicate] native, Array[filter_predicate] exact) -> ActiveRecord::Relation
     def scored_scope: (ActiveRecord::Relation relation, Array[[ Array[filter_predicate], String ]] scores) -> ActiveRecord::Relation
+
+    def ranked_scope: (ActiveRecord::Relation relation) -> ActiveRecord::Relation
+    def customized_scope: (ActiveRecord::Relation relation) -> ActiveRecord::Relation
+    def count_scope: (ActiveRecord::Relation relation) -> ActiveRecord::Relation
+    def projected_scope: (Array[Arel::Nodes::SqlLiteral | Arel::Nodes::BoundSqlLiteral] projection) -> ActiveRecord::Relation
 
     def record_scope: () -> ActiveRecord::Relation
 

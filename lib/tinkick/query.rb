@@ -14,11 +14,12 @@ module Tinkick
   class Query
     attr_reader :model, :limit, :after, :took
 
-    def initialize(model, term, base_scope: model.all, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil)
+    def initialize(model, term, base_scope: model.all, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil, block: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
       @base_scope = base_scope.spawn
+      @query_block = block
       @boost_by = BoostBy.new(model, boost_by, boost_where: boost_where, boost: boost, boost_by_recency: boost_by_recency)
       @term = term.to_s
       @conversions = normalize_conversions(conversions, conversions_v2, conversions_term)
@@ -83,7 +84,7 @@ module Tinkick
         fields = columns | [primary_key]
         cursor_fields = keyset? ? keyset_order.columns : [] #: Array[String]
         projection = (fields | cursor_fields).map { |field| Arel.sql(quoted_column(field)) }
-        relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
+        relation = projected_scope(projection)
         values = trim_page(read_rows(relation))
         @source_cursor_row = values.last
         values.map { |row| row.slice(*fields, "_tinkick_score") }
@@ -94,7 +95,7 @@ module Tinkick
       instrument(:search) do
         fields = columns.map { |field| field.to_s }
         projection = fields.map { |field| Arel.sql(quoted_column(field)) }
-        relation = record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
+        relation = projected_scope(projection)
         values = read_rows(relation)
         values = values.first(@limit) if countless?
         values.map { |row| row.slice(*fields) }
@@ -122,7 +123,7 @@ module Tinkick
     end
 
     def total_count
-      @total_count ||= instrument(:count) { scope.except(:order, :limit, :offset).count }
+      @total_count ||= instrument(:count) { count_scope(scope).count }
     end
 
     def misspellings?
@@ -146,6 +147,7 @@ module Tinkick
           spec
         end
         base = build_scope({})
+        base = count_scope(base) if @query_block
         output = {} #: Hash[String, aggregation_result]
         specifications.each do |name, options|
           conditions = options[:where] || {}
@@ -302,7 +304,7 @@ module Tinkick
       begin
         Tinkick.warn(@model, "Tinkick: misspellings: { below: #{threshold} } runs an extra bounded exact-match count before choosing the search mode. Omit below to use the native fuzzy search directly.")
         exact = build_scope(@where)
-        if exact.except(:order, :limit, :offset).limit(threshold).count < threshold
+        if count_scope(exact).limit(threshold).count < threshold
           @misspellings, @scoring, @mixed_matching = original
         else
           @scope = exact
@@ -491,8 +493,7 @@ module Tinkick
       SQL
     end
 
-    def record_scope
-      relation = scope
+    def ranked_scope(relation)
       primary_key = @model.primary_key
       raise InvalidQueryError, "#{@model.name} requires a single primary key for search pagination" unless primary_key.is_a?(String)
 
@@ -510,8 +511,6 @@ module Tinkick
       end
       order = @order
       ordering = if keyset?
-        after = @after
-        relation = keyset_order.apply(relation, after) if after
         [keyset_order.order_sql]
       else
         order.nil? ? ["_tinkick_score DESC"] : order_clauses(order)
@@ -521,8 +520,45 @@ module Tinkick
       end
 
       relation.reselect(Arel.sql("#{quoted_table}.*"), Arel.sql("#{score} AS _tinkick_score"))
-        .reorder(Arel.sql(ordering.join(", ")))
-        .limit(countless? ? @limit + 1 : @limit).offset(@offset.zero? ? nil : @offset)
+        .reorder(Arel.sql(ordering.join(", "))).except(:limit, :offset)
+    end
+
+    def customized_scope(relation)
+      ranked = ranked_scope(relation)
+      callback = @query_block
+      return ranked unless callback
+
+      transformed = callback.call(ranked)
+      unless transformed.is_a?(ActiveRecord::Relation) && transformed.klass == @model
+        raise ArgumentError, "Search block must return an Active Record relation for #{@model.name}"
+      end
+      transformed
+    end
+
+    def count_scope(relation)
+      return relation.except(:select, :order, :limit, :offset) unless @query_block
+
+      transformed = customized_scope(relation).except(:order, :limit, :offset)
+      @model.unscoped.from(transformed, @model.table_name)
+    end
+
+    def record_scope
+      relation = customized_scope(scope)
+      if keyset?
+        after = @after
+        relation = keyset_order.apply(relation, after) if after
+        relation = relation.reorder(Arel.sql(keyset_order.order_sql))
+      end
+      relation.limit(countless? ? @limit + 1 : @limit).offset(@offset.zero? ? nil : @offset)
+    end
+
+    def projected_scope(projection)
+      if @query_block
+        Tinkick.warn(@model, "Tinkick: select/pluck with a search block preserves the block's SQL projection and trims the returned page in Ruby. Use reselect in the block to reduce transferred columns while retaining the primary key and _tinkick_score.")
+        record_scope
+      else
+        record_scope.reselect(*projection, Arel.sql("#{score_sql} AS _tinkick_score"))
+      end
     end
 
     def order_clauses(value, array: false)

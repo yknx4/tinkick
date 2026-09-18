@@ -385,6 +385,28 @@ For SQL grouping before pagination, use `.except(:limit, :offset, :order)`.
 Native relations return models; Tinkick's raw-result wrappers, highlighting and
 pagination metadata apply only when executing the Tinkick search itself.
 
+Use `block:` (including a lambda in an options hash) or a Ruby block to change
+that relation **before pagination**:
+
+```ruby
+Product.tinkick_search("coffee", block: ->(query) { query.where(in_stock: true) })
+Product.tinkick_search("coffee") do |query|
+  query.where(Product.arel_table[:price].lt(20)).reorder(popularity: :desc)
+end
+```
+
+Return an Active Record relation for the same model. Keep its primary key and
+`_tinkick_score` projection; use `reselect` to replace the score for custom SQL
+ranking. Counts, typo thresholds and aggregations include the hook. It can run
+more than once, so keep it a query transformation without side effects. This
+also works with `Tinkick.search(model: Product, ...)`.
+
+Tinkick applies page limits/offsets after the hook. Keyset pagination reapplies
+its configured column order so the cursor remains valid. Unlike this hook,
+`scope_results` filters an already-selected page. With a hook, `select`/`pluck`
+preserve its SQL projection and trim columns in Ruby (with a disableable warning);
+put `reselect` inside the hook to reduce data transfer.
+
 ### Ordering and projection
 
 The default is native relevance descending. Explicit ordering accepts real
