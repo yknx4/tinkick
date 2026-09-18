@@ -15,7 +15,7 @@ CatalogEntry.where(collection_id: allowed_ids).tinkick_search(
 `id` and `_tinkick_score` when changing projections. Hooks may run again for
 counts, typo thresholds or aggregations: keep them free of side effects.
 Tinkick applies page limits afterward; keyset pagination also reapplies its
-configured column order. See the [hook contract](../README.md#active-record-sql-and-arel).
+configured column order. See the [hook contract](reference/querying.md#active-record-sql-and-arel).
 
 ## Tested building blocks
 
