@@ -139,4 +139,3 @@ Product.where("name ~ ?", "^Apple [[:alpha:]]+$")
 
 These require the shown column types and appropriate indexes. Check pattern
 syntax against PostgreSQL when migrating from Ruby or Lucene.
-

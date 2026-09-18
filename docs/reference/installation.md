@@ -215,4 +215,3 @@ and schema-qualified names. Duplicate fields and invalid identifiers are rejecte
 Review generated migrations through the application's normal deployment process.
 For custom names or specialized indexes, write an application Rails migration.
 The current model API requires valid, ready, nonpartial, direct-column TIN indexes.
-

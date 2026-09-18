@@ -233,4 +233,3 @@ populate an autocomplete widget.
 hits is not a compatible `suggestions` implementation. Autosuggest and client UI
 libraries can be integrated independently, but are not bundled or verified here.
 `load: false` does not provide the Searchkick external-document optimization.
-

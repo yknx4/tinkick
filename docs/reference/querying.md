@@ -308,4 +308,3 @@ column key, not dotted virtual keys. Use persisted or generated text columns whe
 you need custom normalization or a combined document. Flattened array-of-object
 filters do not preserve same-object correlation; use explicit `EXISTS`/joins or
 JSON predicates when that distinction matters.
-
