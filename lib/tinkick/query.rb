@@ -2,6 +2,7 @@
 
 require_relative "filter"
 require_relative "query_text"
+require_relative "tinql"
 require_relative "text_match"
 require_relative "keyset"
 require_relative "search_field"
@@ -14,7 +15,7 @@ module Tinkick
   class Query
     attr_reader :model, :limit, :after, :took
 
-    def initialize(model, term, base_scope: model.all, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil, block: nil)
+    def initialize(model, term, base_scope: model.all, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil, block: nil, tinql: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
@@ -22,6 +23,7 @@ module Tinkick
       @query_block = block
       @boost_by = BoostBy.new(model, boost_by, boost_where: boost_where, boost: boost, boost_by_recency: boost_by_recency)
       @term = term.to_s
+      @tinql = tinql.nil? ? nil : Tinql.new.compile(tinql)
       @conversions = normalize_conversions(conversions, conversions_v2, conversions_term)
       @fields = model.tinkick_expand_fields(fields, match: match).map do |field|
         if field.is_a?(Hash)
@@ -34,6 +36,9 @@ module Tinkick
           parts = field.to_s.split("^", 2)
           [parts.fetch(0), match, parts[1]&.to_f]
         end
+      end
+      if @tinql && @fields.any? { |_name, mode| [:exact, :text_start, :text_middle, :text_end].include?(mode) }
+        raise ArgumentError, "tinql requires native TIN search fields; SQL whole-field match modes cannot be combined with it"
       end
       @weighted_scoring = @fields.any? do |_name, mode, boost|
         boost && (boost > 10_000 || [:exact, :text_start, :text_middle, :text_end].include?(mode))
@@ -184,7 +189,7 @@ module Tinkick
 
     def highlight_query(name)
       resolve_misspellings
-      return "" if @term == "*"
+      return "" if @term == "*" && !@tinql
 
       @model.with_connection do |connection|
         compiler = QueryText.new(connection)
@@ -197,12 +202,22 @@ module Tinkick
             raise NotImplementedError, "Native TIN highlighting for #{name.inspect} does not support non-default index tokenization: implicit highlighting rejects this configuration and explicit highlighting uses default analysis. Omit highlighting for this field or select a default-analysis field."
           end
           misspellings = misspellings_for(name)
-          compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
+          compile_text(compiler, mode, misspellings, analysis)
         end.reject(&:empty?).map { |query| "(#{query})" }.join(" OR ")
       end
     end
 
     private
+
+    def compile_text(compiler, mode, misspellings, analysis)
+      expression = @tinql
+      return expression if expression && @term == "*"
+
+      text = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
+      return text if text.empty? || !expression
+
+      "(#{text}) AND (#{expression})"
+    end
 
     def normalize_conversions(legacy, modern, term)
       return [] if @term == "*"
@@ -368,7 +383,7 @@ module Tinkick
         relation = Filter.new(@model).apply(@base_scope, conditions)
         compiler = QueryText.new(connection)
         relation, excluded = excluding_scope(relation, fields, compiler)
-        next relation if @term == "*"
+        next relation if @term == "*" && !@tinql
 
         native = [] #: Array[filter_predicate]
         exact = [] #: Array[filter_predicate]
@@ -386,7 +401,7 @@ module Tinkick
           else
             analysis = @model.tinkick_index_analysis(name, field)
             native_boost = boost && boost > 10_000 ? 1.0 : boost
-            compiled = compiler.compile(@term, operator: @operator, match: mode, misspellings: misspellings, analysis: analysis)
+            compiled = compile_text(compiler, mode, misspellings, analysis)
             next if compiled.empty?
 
             compiled = "(#{compiled})^#{native_boost}" if native_boost
@@ -437,7 +452,7 @@ module Tinkick
         next if phrases.empty?
 
         excluded = phrases.map { |phrase| "(#{phrase})" }.join(" OR ")
-        if fields.length == 1 && @term != "*"
+        if fields.length == 1 && (@term != "*" || @tinql)
           combined = excluded
           next
         end

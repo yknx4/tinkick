@@ -24,7 +24,7 @@ module Tinkick
     def search(term = "*", model:, fields: nil, misspellings: true, where: {}, order: nil,
       limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: nil,
       operator: "and", load: true, total_entries: nil, countless: false, keyset: false,
-      after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, exclude: nil, select: nil, highlight: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil, conversions_v1: Relation::NO_DEFAULT_VALUE, block: nil, &query_block)
+      after: nil, aggs: nil, smart_aggs: true, includes: nil, model_includes: nil, scope_results: nil, exclude: nil, select: nil, highlight: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil, conversions_v1: Relation::NO_DEFAULT_VALUE, block: nil, tinql: nil, &query_block)
       # @type var conversions_v1: conversion_fields | Relation::DefaultValue
       raise ArgumentError, "Pass either block: or a Ruby block, not both" if block && query_block
       block ||= query_block
@@ -32,7 +32,7 @@ module Tinkick
       model.tinkick_search(term, fields: fields, misspellings: misspellings, where: where, order: order,
         limit: limit, offset: offset, page: page, per_page: per_page, padding: padding, match: match,
         operator: operator, load: load, total_entries: total_entries, countless: countless, keyset: keyset,
-        after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results, exclude: exclude, select: select, highlight: highlight, boost_by: boost_by, boost_where: boost_where, boost: boost, boost_by_recency: boost_by_recency, conversions: conversions, conversions_v2: conversions_v2, conversions_term: conversions_term, block: block)
+        after: after, aggs: aggs, smart_aggs: smart_aggs, includes: includes, model_includes: model_includes, scope_results: scope_results, exclude: exclude, select: select, highlight: highlight, boost_by: boost_by, boost_where: boost_where, boost: boost, boost_by_recency: boost_by_recency, conversions: conversions, conversions_v2: conversions_v2, conversions_term: conversions_term, block: block, tinql: tinql)
     end
   end
 

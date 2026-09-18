@@ -1,0 +1,13 @@
+module Tinkick
+  type tinql_value = String | Integer | Float | bool | nil | Array[tinql_value] | Hash[Symbol, tinql_value]
+
+  class Tinql
+    def compile: (tinql_value expression) -> String
+
+    private
+
+    def string: (tinql_value value) -> String
+    def literal: (String value) -> String
+    def list: (tinql_value value) -> Array[tinql_value]
+  end
+end
