@@ -29,6 +29,19 @@ class JsonSearchTest < TinkickIntegrationTest
     assert_equal(["Red Apple"], search("elixir").map(&:name))
   end
 
+  def test_tinql_proximity_uses_the_indexed_jsonb_scalar_path
+    first = tinkick_test_products(:red_apple)
+    second = tinkick_test_products(:green_pear)
+    first.update!(metadata: { title: "Gondolin sentries", other: "unrelated" })
+    second.update!(metadata: { title: "Sentries guard Gondolin", other: "Gondolin sentries" })
+    expression = { then: ["Gondolin", "sentries"], distance: 0 }
+
+    assert_equal [first.id], search("*", tinql: expression).map(&:id)
+    assert_empty search("*", tinql: expression, where: { id: second.id })
+    second.update!(metadata: { title: ["Gondolin sentries"] })
+    assert_equal [first.id], search("*", tinql: expression).map(&:id)
+  end
+
   def test_null_missing_and_nonscalar_paths_do_not_match
     apple = tinkick_test_products(:red_apple)
     pear = tinkick_test_products(:green_pear)

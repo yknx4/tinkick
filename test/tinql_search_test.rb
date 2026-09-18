@@ -187,7 +187,56 @@ class TinqlSearchTest < ActiveSupport::TestCase
     end
   end
 
+  def test_native_expressions_keep_countless_and_cursor_pagination
+    expression = { and: ["mithril", "lantern"] }
+    page = search(expression, countless: true, limit: 2)
+    statements = capture_queries do
+      assert_equal 2, page.size
+      assert page.has_next_page?
+    end
+    refute statements.any? { |sql| sql.match?(/COUNT\(/i) }
+    cursor_search = search(expression).order(:id).limit(2)
+    first = cursor_search.keyset
+    second = cursor_search.keyset(after: first.next_cursor)
+    assert_equal search(expression).order(:id).map(&:id), (first.to_a + second.to_a).map(&:id)
+    refute second.has_next_page?
+  end
+
+  def test_expressions_apply_to_multiple_fields_and_native_field_weights
+    target = document(:typo_exact)
+    target.update!(title: "Zirconworkshop")
+    assert_equal [target.id], search({ term: "Zirconworkshop" }, fields: [:title, :body]).map(&:id)
+    assert_empty search({ term: "Zirconworkshop" }, fields: [:body]).map(&:id)
+    plain = search({ term: "astrolabe" }, fields: [:body]).with_score.first.last
+    weighted = search({ term: "astrolabe" }, fields: ["body^3"]).with_score.first.last
+    assert_in_delta plain * 3, weighted, 0.00001
+  end
+
+  def test_phrase_literal_escaping_matches_the_existing_literal_search_path
+    ['Gondolin "sentries"', 'Gondolin \\ sentries', 'Gondolin _ sentries', 'Gondolin [sentries]', 'Gondolin \\" OR *'].each do |text|
+      expected = SearchDocument.tinkick_search(text, match: :phrase).map(&:id).sort
+      assert_equal expected, search({ phrase: text }).map(&:id).sort, text
+    end
+  end
+
+  def test_native_expression_retains_the_production_top_k_plan
+    result = search({ boost: { near: ["mithril", "lantern"], distance: 1 }, factor: 2 }, limit: 2, countless: true)
+    assert_equal [:frequency_high, :length_short].map { |key| document(key).id }.sort, result.map(&:id).sort
+    require_production_tin_plan!
+    plan = SearchDocument.connection.select_value("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) #{result.to_relation.to_sql}")
+    assert_includes plan, '"Custom Plan Provider": "Text Search Scan"'
+    assert_includes plan, '"Top K": "2"'
+    refute_includes plan, '"Node Type": "Sort"'
+  end
+
   private
+
+  def capture_queries
+    statements = []
+    callback = ->(*arguments) { statements << arguments.last.fetch(:sql) }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    statements
+  end
 
   def positional_documents
     ["quartz cedar harbor amber", "cedar quartz amber harbor",
