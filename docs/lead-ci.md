@@ -81,12 +81,18 @@ reasons are in [`test/support/lead_failures.rb`](../test/support/lead_failures.r
 No class, feature, or future test is excluded by pattern.
 
 The multi-column recheck added two reproduced failures under the existing
-single-field score-binding limitation, bringing the current exact exclusions to
+single-field score-binding limitation, bringing the exact exclusions at that point to
 **33**. Lead gave the both-column hit the same score as one single-column hit
 (`6.101565` each), and returned `0.0` where a title boost required `7.467025`.
 These are the two named `MultiColumnSearchTest` ranking methods in the list;
 matching, counts, highlights and cursor tests remain enabled. Both ranking
 checks pass on real TIN. No gem execution path changes to accommodate Lead.
+
+The scoped-relation and catalog recipe checks reproduced nine additional
+`tin.score() requires a tin index scan` errors, for **42 exact exclusions**
+currently. All nine pass on PlanetScale TIN. The new HTTP, timeout, cache,
+native matching/filtering and other block tests pass on Lead. The precise
+planner rewrite behind these nine failures has not been isolated.
 
 | Verified difference at the pinned Lead revision | Exact tests excluded |
 | --- | ---: |
@@ -94,6 +100,7 @@ checks pass on real TIN. No gem execution path changes to accommodate Lead.
 | Multi-field scores bind only one indexed field expression | 7 |
 | Fuzzy score collection uses the input token rather than its matching expansion | 1 |
 | `tin.full_score()` fails to bind in the single-branch weighted CTE query shapes | 6 |
+| `tin.score()` fails to bind in nine scoped/CTE composition and catalog ranking/grouping tests | 9 |
 | Lead's common-term elision returns zero for the small visible-row corpus used by three raw-result score tests | 3 |
 
 Source evidence is in Lead's pinned

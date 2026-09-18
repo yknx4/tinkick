@@ -47,6 +47,17 @@ module TinkickLeadFailures
       HitsTest#test_hits_expose_durable_identity_and_native_scores_without_counting
       RawValuesTest#test_raw_results_deserialize_postgresql_arrays_and_json_without_model_instantiation
     ],
+    "Lead cannot bind tin.score in these scoped and CTE query shapes" => %w[
+      ActiveRecordCompositionTest#test_native_relation_supports_sql_arel_joins_and_ctes
+      CatalogCollapseTest#test_collapse_precedes_pagination_and_keeps_complete_pages
+      CatalogCollapseTest#test_enriched_and_cover_filters_apply_before_edition_selection
+      CatalogCollapseTest#test_preferred_enriched_edition_retains_best_group_score_and_tenant_filter
+      CatalogCollapseTest#test_without_enriched_the_best_scoring_edition_is_returned
+      CatalogRankingTest#test_exact_title_bonus_is_added_after_capped_sum_and_logarithmic_popularity
+      CatalogRankingTest#test_exact_title_parameter_is_bound_and_metadata_only_omits_its_own_boost
+      CatalogRankingTest#test_multiplicative_flags_and_popularity_keep_native_relevance
+      QueryBlockTest#test_cte_hook_counts_rows_after_grouping_and_before_pagination
+    ],
   }.freeze
 
   def after_setup
