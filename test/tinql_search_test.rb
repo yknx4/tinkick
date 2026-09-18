@@ -137,7 +137,64 @@ class TinqlSearchTest < ActiveSupport::TestCase
     end
   end
 
+  def test_span_relations_select_the_expected_documents
+    records = positional_documents
+    outer = { near: ["quartz", "harbor"], distance: 2 }
+    crossing = { near: ["cedar", "amber"], distance: 2 }
+    cases = {
+      encloses: [[outer, "cedar"], [0, 2]],
+      not_encloses: [[outer, "cedar"], [1, 3]],
+      enclosed_by: [["cedar", outer], [0, 2]],
+      not_enclosed_by: [["cedar", outer], [1, 3]],
+      overlapping: [[outer, crossing], [0, 1, 2]],
+      not_overlapping: [[outer, crossing], [3]],
+      before: [["quartz", "cedar"], [0, 3]],
+      after: [["quartz", "cedar"], [1, 2]],
+    }
+    cases.each do |operator, (operands, positions)|
+      assert_equal positions.map { |i| records.fetch(i).id }.sort,
+        search({ operator => operands }).map(&:id).sort, operator.to_s
+    end
+  end
+
+  def test_word_and_percentage_positions
+    records = positional_documents
+    cases = [
+      [{ in_first: "quartz", words: 1 }, [0, 3]],
+      [{ in_last: "quartz", words: 1 }, [2]],
+      [{ in_first: "quartz", percent: 50 }, [0, 1, 3]],
+      [{ in_last: "quartz", percent: 50 }, [2]],
+      [{ in_middle: "quartz", percent: 50 }, [1]],
+      [{ in_words: "quartz", from: 0, to: 0 }, []],
+      [{ in_words: "quartz", from: 1, to: 1 }, [0, 3]],
+      [{ in_words: "quartz", from: 2, to: 2 }, [1]],
+    ]
+    cases.each do |expression, positions|
+      assert_equal positions.map { |i| records.fetch(i).id }.sort,
+        search(expression).map(&:id).sort, expression.inspect
+    end
+    # Verified on TIN 1.0.2 and pinned Lead: IN WORDS is one-based, despite
+    # the public documentation describing zero-based positions. Pass it through.
+    native = SearchDocument.where("body ==> ?", "quartz IN WORDS 2 TO 2").ids
+    assert_equal native, search({ in_words: "quartz", from: 2, to: 2 }).map(&:id)
+  end
+
+  def test_span_and_position_validation
+    [{ before: ["a"] }, { in_first: "a", words: 1, percent: 50 },
+      { in_last: "a" }, { in_middle: "a", words: 2 },
+      { in_middle: "a", percent: 101 }, { in_words: "a", from: 3, to: 1 }].each do |expression|
+      assert_raises(ArgumentError, expression.inspect) { search(expression).to_a }
+    end
+  end
+
   private
+
+  def positional_documents
+    ["quartz cedar harbor amber", "cedar quartz amber harbor",
+      "amber harbor cedar quartz", "quartz harbor amber cedar"].map do |body|
+      SearchDocument.create!(title: "Navigation signals", body: body, category: "navigation")
+    end
+  end
 
   def search(expression = nil, **options)
     # Allow concise expression hashes while keeping search options explicit.

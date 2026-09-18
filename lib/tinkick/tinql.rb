@@ -9,6 +9,10 @@ module Tinkick
       term: nil, all: nil, wildcard: nil, matches: nil, range: nil,
       fuzzy: [:distance, :prefix], boost: [:factor],
       any_of: nil, all_of: nil, at_least: [:count, :percent],
+      encloses: nil, not_encloses: nil, enclosed_by: nil, not_enclosed_by: nil,
+      overlapping: nil, not_overlapping: nil, before: nil, after: nil,
+      in_first: [:words, :percent], in_last: [:words, :percent],
+      in_middle: [:percent], in_words: [:from, :to],
     }.freeze
 
     def compile(expression)
@@ -28,6 +32,18 @@ module Tinkick
       case operator
       when :raw
         string(value)
+      when :encloses, :not_encloses, :enclosed_by, :not_enclosed_by,
+        :overlapping, :not_overlapping, :before, :after
+        operands = list(value)
+        raise ArgumentError, "tinql #{operator} requires two expressions" unless operands.length == 2
+
+        "(#{compile(operands.fetch(0))}) #{operator.to_s.tr('_', ' ').upcase} (#{compile(operands.fetch(1))})"
+      when :in_first, :in_last, :in_middle
+        "(#{compile(value)}) #{operator.to_s.tr('_', ' ').upcase} #{position_size(expression)}"
+      when :in_words
+        first = integer(expression[:from])
+        last = integer(expression[:to], minimum: first)
+        "(#{compile(value)}) IN WORDS #{first} TO #{last}"
       when :term
         literal(string(value))
       when :all
@@ -94,6 +110,18 @@ module Tinkick
     end
 
     private
+
+    def position_size(expression)
+      if expression.key?(:words) == expression.key?(:percent)
+        raise ArgumentError, "tinql position requires exactly one of words or percent"
+      end
+      return "#{integer(expression[:words], minimum: 1)} WORDS" if expression.key?(:words)
+
+      percent = integer(expression[:percent], minimum: 1)
+      raise ArgumentError, "tinql percent cannot exceed 100" if percent > 100
+
+      "#{percent}%"
+    end
 
     def minimum_match(expression)
       if expression.key?(:count) == expression.key?(:percent)

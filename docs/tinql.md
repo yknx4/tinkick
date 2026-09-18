@@ -88,3 +88,36 @@ Product.search(tinql: { all_of: ["coffee", "beans"] })
 
 `at_least` requires either a positive integer `count` or an integer `percent`
 from 1 to 100. Groups accept nested expressions and must not be empty.
+
+## Span relations and positions
+
+Compare where two expressions match inside the same field:
+
+```ruby
+Product.search(tinql: {
+  encloses: [{ near: ["coffee", "beans"], distance: 5 }, "roasted"]
+})
+Product.search(tinql: { before: ["ingredients", "instructions"] })
+```
+
+Each operator takes two expressions: `encloses`, `not_encloses`, `enclosed_by`,
+`not_enclosed_by`, `overlapping`, `not_overlapping`, `before`, and `after`.
+They retain matching spans from the left expression. `encloses` retains the
+outer spans; `enclosed_by` retains the inner spans. This matters when nesting
+expressions or highlighting. Negated span relations do not mean SQL row negation.
+
+```ruby
+Product.search(tinql: { in_first: "coffee", words: 20 })
+Product.search(tinql: { in_last: "coffee", percent: 25 })
+Product.search(tinql: { in_middle: "coffee", percent: 50 })
+Product.search(tinql: { in_words: "coffee", from: 5, to: 15 })
+```
+
+`in_first` and `in_last` accept either a positive word count or an integer
+percentage from 1 to 100. `in_middle` accepts only a percentage. `in_words`
+passes inclusive positions directly to the backend. **Version difference:** the
+public docs describe zero-based positions, but direct SQL against TIN 1.0.2 and
+the pinned Lead backend both treat `IN WORDS 1 TO 1` as the first token and
+`0 TO 0` as no match. Prefer `in_first` / `in_last` for portable word counts;
+Tinkick does not adjust native coordinates. Each positional constraint accepts
+any nested expression in place of the literal string.
