@@ -26,9 +26,16 @@ class MultiColumnSearchTest < ActionDispatch::IntegrationTest
     assert_equal 271, SearchDocument.count
     assert_equal expected, page.map(&:id).sort
     assert_equal expected.length, page.total_count
-    assert_equal @both_hit.id, page.first.id
-    assert_equal @both_hit.id, search(limit: 1, countless: true).first.id
+    assert_equal 1, search(limit: 1, countless: true).to_a.length
     assert search(limit: 1, countless: true).has_next_page?
+  end
+
+  def test_a_match_in_both_columns_ranks_above_each_single_column_match
+    combined = scores
+    assert_operator combined.fetch(@both_hit.id), :>, combined.fetch(@title_hit.id)
+    assert_operator combined.fetch(@both_hit.id), :>, combined.fetch(@body_hit.id)
+    assert_equal @both_hit.id, search.first.id
+    assert_equal @both_hit.id, search(limit: 1, countless: true).first.id
   end
 
   def test_decimal_field_boosts_add_each_matching_columns_native_score

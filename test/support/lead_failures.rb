@@ -23,6 +23,8 @@ module TinkickLeadFailures
       NativeHighlightBoundaryTest#test_changed_token_policy_highlighting_does_not_retokenize_prefixes
     ],
     "Lead scores only one selected field expression" => %w[
+      MultiColumnSearchTest#test_a_match_in_both_columns_ranks_above_each_single_column_match
+      MultiColumnSearchTest#test_decimal_field_boosts_add_each_matching_columns_native_score
       FieldBoostTest#test_wildcard_boost_does_not_leak_into_an_independently_requested_concrete_field
       FieldBoostTest#test_field_weights_reverse_ranking_in_a_varied_corpus
       FieldBoostTest#test_fluent_fields_apply_boosts_without_mutating_the_original_relation

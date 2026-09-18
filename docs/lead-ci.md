@@ -80,10 +80,18 @@ gem behavior to accommodate Lead. The complete method names and per-test
 reasons are in [`test/support/lead_failures.rb`](../test/support/lead_failures.rb).
 No class, feature, or future test is excluded by pattern.
 
+The multi-column recheck added two reproduced failures under the existing
+single-field score-binding limitation, bringing the current exact exclusions to
+**33**. Lead gave the both-column hit the same score as one single-column hit
+(`6.101565` each), and returned `0.0` where a title boost required `7.467025`.
+These are the two named `MultiColumnSearchTest` ranking methods in the list;
+matching, counts, highlights and cursor tests remain enabled. Both ranking
+checks pass on real TIN. No gem execution path changes to accommodate Lead.
+
 | Verified difference at the pinned Lead revision | Exact tests excluded |
 | --- | ---: |
 | Operator heap rechecks use default analysis instead of custom index case/accent/tokenizer/long-token settings; this also prevents a truncated-token highlight test from finding its row | 16 |
-| Multi-field scores bind only one indexed field expression | 5 |
+| Multi-field scores bind only one indexed field expression | 7 |
 | Fuzzy score collection uses the input token rather than its matching expansion | 1 |
 | `tin.full_score()` fails to bind in the single-branch weighted CTE query shapes | 6 |
 | Lead's common-term elision returns zero for the small visible-row corpus used by three raw-result score tests | 3 |
