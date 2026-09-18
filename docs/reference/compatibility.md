@@ -4,19 +4,34 @@
 
 - [Reference and unsupported options](#reference-and-unsupported-options)
 
+These references cover the feature surface of the [Searchkick 6.1.2 README](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/README.md), including unimplemented APIs and native alternatives.
+
+Status terms used in these references:
+
+- **Available** means implemented in Tinkick. Examples without another label use
+  the current API.
+- **Not implemented** means the Searchkick option or return interface is missing
+  from Tinkick. It does not mean PostgreSQL or TIN cannot do it.
+- **Excluded** means an Elasticsearch/OpenSearch transport, document import, or
+  index lifecycle API has no direct role in this backend.
+- **Native difference** identifies a documented or tested engine behavior.
+- **Recipe** means application-owned SQL or ActiveRecord code, with its own
+  return shape and behavior. A recipe is not a compatible Tinkick API.
+
 ## Reference and unsupported options
 
 The current model declaration accepts `searchable`, `default_fields`, `match`,
 the `word_start`/`word_middle`/`word_end` and `text_start`/`text_middle`/`text_end`
-field declarations, and `stem: false`.
+field declarations, `case_sensitive`, `special_characters`, `filterable`, `highlight`, and `stem: false`.
 It also accepts `conversions`/`conversions_v1`, `conversions_v2`, and
 `stem_conversions: false` for native JSONB conversion ranking.
 The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
 `per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
 `countless`, `keyset`, `after`, `aggs`, `smart_aggs`, `includes`,
 `model_includes`, `scope_results`, `block`, `exclude`, `select`, `highlight`,
+`boost_by`, `boost_where`, `boost`, `boost_by_recency`,
 `conversions`, `conversions_v1`, `conversions_v2`, and `conversions_term`.
-Use the detailed sections above for their limits.
+Use the [guide and topic references](../../README.md#reference) for their limits.
 Unknown keywords or methods are not compatibility no-ops.
 Features proven unsupported by TIN raise `Tinkick::NotImplementedError` with an
 explanation naming the backend limitation. Unfinished Tinkick features must not
@@ -54,6 +69,7 @@ The following reference maps less common upstream options to their current statu
 | `search_index`/`searchkick_index` inspection | Not implemented; use PostgreSQL catalogs and TIN helpers. |
 | Index refresh, clean/promote/store/remove, queue inspection | Excluded external-index lifecycle. |
 | Global search | Available with an explicit `model:`; preserves generic search-method ownership. |
+| `Tinkick::Reranking.rrf` | Available for bounded ordered lists; see [rank fusion](../reranking.md). |
 | `multi_search`, `models`, model boosts | Not implemented; separate queries or explicit SQL combination. |
 | Scroll/deep-paging configuration | Excluded backend APIs; use bounded column cursors or SQL batches. |
 | BigDecimal serialization rules | No JSON document conversion: PostgreSQL column types govern stored precision. |

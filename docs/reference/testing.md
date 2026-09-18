@@ -77,7 +77,7 @@ reproduction uses Apple's `container` tool. PostgreSQL comes from a pinned
 prebuilt image. Intermediate Rust/Lead layers use the GitHub Actions cache with
 `mode=max`; a warm local build reported all layers `CACHED`.
 
-Exactly 31 observed failing tests are temporarily excluded on Lead
+Only individually reproduced failing tests are temporarily excluded on Lead,
 pending upstream fixes. Production-only plan assertions are gated separately;
 both remain active against PlanetScale TIN. See [Lead CI](../../docs/lead-ci.md) for
 the limitations and reproduction steps, and [the workflow](../../.github/workflows/ci.yml)

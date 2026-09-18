@@ -325,8 +325,8 @@ is not a substitute for accurate radius or polygon semantics.
 ### KNN, semantic, and hybrid search
 
 `knn`, dimensions/distance configuration, HNSW `m`/`ef_construction`/`ef_search`,
-semantic embedding generation, `multi_search`, and `Reranking.rrf` are not Tinkick
-APIs yet. This is adapter work rather than evidence that PostgreSQL cannot serve
+semantic embedding generation, and `multi_search` are not Tinkick APIs yet. This
+is adapter work rather than evidence that PostgreSQL cannot serve
 vector search. PlanetScale documents [TIN combined with pgvector](https://planetscale.com/docs/postgres/search#hybrid-search-with-pgvector).
 
 Recipe architecture: add a vector column and index through migrations, generate

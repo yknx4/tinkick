@@ -210,8 +210,11 @@ Its rollback refuses to remove a shared extension. Re-running the generator
 preserves existing or edited installation migrations.
 
 `tinkick:index TABLE FIELD...` adds separate reversible indexes for existing
-columns. It does not create columns, infer Ruby methods, or accept expressions
+columns or supported dotted JSONB paths. It does not create columns, infer Ruby
+methods, or accept arbitrary expressions
 and schema-qualified names. Duplicate fields and invalid identifiers are rejected.
 Review generated migrations through the application's normal deployment process.
 For custom names or specialized indexes, write an application Rails migration.
-The current model API requires valid, ready, nonpartial, direct-column TIN indexes.
+TIN indexes must be valid, ready and nonpartial: direct-column indexes for text
+fields, or matching expression indexes for dotted JSONB paths. See
+[JSONB search](querying.md#tenants-and-nested-data).
