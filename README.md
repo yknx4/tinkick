@@ -1,148 +1,360 @@
 # Tinkick
 
-Searchkick-style search for Ruby and Rails, backed by
-[PlanetScale TIN](https://planetscale.com/docs/postgres/search). Your model's
-PostgreSQL table is the datasource. PostgreSQL maintains the search indexes when
-rows change; there is no second document store to synchronize.
+Searchkick-style search for **Ruby 4+ and Rails 8+**, powered by
+[PlanetScale TIN](https://planetscale.com/docs/postgres/search).
+Search your PostgreSQL tables directly. Writes update the search indexes—no
+separate document store, reindex jobs, or Elasticsearch client.
 
-**Status: alpha.** Core search includes word, phrase, partial and exact matching,
-native typo tolerance, SQL/JSONB filters, relevance boosts, highlighting, facets,
-model/raw-row results, and page, keyset and countless pagination. The priority is
-practical Rails search with native TIN performance, not complete Searchkick API
-parity. This guide covers the feature surface of
-the [Searchkick 6.1.2 reference README](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a616e006b158251b16e/README.md),
-including features that still need native integration or a different application design.
+**Alpha:** full-text, phrase and partial matching, typo tolerance, filters,
+boosts, highlighting, facets, and cursor pagination are available. Tinkick favors
+native TIN performance over identical Elasticsearch scores. Both gems can run
+[side by side](#migrating-from-searchkick).
 
-Implementation stays within TIN, PostgreSQL, and available extensions. Backend
-differences are part of the API contract: unsupported explicit controls raise
-clear errors instead of invoking custom Lucene or Elasticsearch emulation.
-
-Throughout this guide:
-
-- **Available** means implemented in Tinkick. Examples without another label use
-  the current API.
-- **Not implemented** means the Searchkick option or return interface is missing
-  from Tinkick. It does not mean PostgreSQL or TIN cannot do it.
-- **Excluded** means an Elasticsearch/OpenSearch transport, document import, or
-  index lifecycle API has no direct role in this backend.
-- **Native difference** identifies a documented or tested engine behavior.
-- **Recipe** means application-owned SQL or ActiveRecord code, with its own
-  return shape and behavior. A recipe is not a compatible Tinkick API.
-
-## Contents
-
-- [Requirements and installation](docs/reference/installation.md#requirements-and-installation)
-- [Getting started](docs/reference/installation.md#getting-started)
-- [Migrating alongside Searchkick](docs/reference/installation.md#migrating-alongside-searchkick)
-- [Datasource and migrations](docs/reference/installation.md#datasource-and-migrations)
-- [Querying](docs/reference/querying.md#querying)
-- [Results and metadata](docs/reference/results.md#results-and-metadata)
-- [Filtering](docs/reference/filtering.md#filtering)
-- [Matching and analysis](docs/reference/matching.md#matching-and-analysis)
-- [Boosting, conversions, and personalization](docs/reference/ranking.md#boosting-conversions-and-personalization)
-- [Autocomplete and suggestions](docs/reference/matching.md#autocomplete-and-suggestions)
-- [Aggregations and facets](docs/reference/aggregations.md#aggregations-and-facets)
-- [Highlighting](docs/reference/results.md#highlighting)
-- [Similar items, geospatial, and vector search](docs/reference/ranking.md#similar-items-geospatial-and-vector-search)
-- [Pagination and large result sets](docs/reference/results.md#pagination-and-large-result-sets)
-- [Models, scopes, and tenancy](docs/reference/querying.md#models-scopes-and-tenancy)
-- [Indexing and synchronization](docs/reference/operations.md#indexing-and-synchronization)
-- [Advanced SQL and debugging](docs/reference/operations.md#advanced-sql-and-debugging)
-- [Performance and consistency](docs/reference/operations.md#performance-and-consistency)
-- [Deployment and operations](docs/reference/operations.md#deployment-and-operations)
-- [Testing](docs/reference/testing.md#testing)
-- [Reference and unsupported options](docs/reference/compatibility.md#reference-and-unsupported-options)
-- [Development, upgrades, and contributing](docs/reference/testing.md#development-upgrades-and-contributing)
-- [License](#license)
-
-## Requirements and installation
-
-See the [requirements and installation reference](docs/reference/installation.md#requirements-and-installation).
+[Get started](#getting-started) · [Search](#searching) · [Filter](#filtering) ·
+[Rank](#ranking) · [Paginate](#pagination) · [SQL](#active-record-and-sql) ·
+[Reference](#reference)
 
 ## Getting started
 
-See the [getting started reference](docs/reference/installation.md#getting-started).
+You need PostgreSQL with TIN installed on the server; standard PostgreSQL does
+not include it. For local testing, see [Lead setup](docs/lead-ci.md).
 
-## Migrating alongside Searchkick
+Add your checkout to the application's Gemfile, then run `bundle install`:
 
-See the [migrating alongside searchkick reference](docs/reference/installation.md#migrating-alongside-searchkick).
+```ruby
+gem "tinkick", path: "../tinkick"
+gem "json", "< 3" # Required by the verified Rails 8.0.5.1 / 8.1.3.1 versions
+```
 
-## Datasource and migrations
+Enable TIN and index your existing `text` or `citext` columns:
 
-See the [datasource and migrations reference](docs/reference/installation.md#datasource-and-migrations).
+```sh
+bin/rails generate tinkick:install
+bin/rails db:migrate
+bin/rails generate tinkick:index products name description
+bin/rails db:migrate
+```
 
-## Querying
+Declare the searchable fields:
 
-See the [querying reference](docs/reference/querying.md#querying).
+```ruby
+class Product < ApplicationRecord
+  tinkick searchable: [:name, :description], default_fields: [:name]
+end
+```
 
-## Results and metadata
+Then search the rows already in your database:
 
-See the [results and metadata reference](docs/reference/results.md#results-and-metadata).
+```ruby
+products = Product.search("coffee").where(in_stock: true).limit(20)
+products.each { |product| puts product.name }
+```
+
+Examples below assume `Product` also has `in_stock` (boolean), `price` (numeric),
+`category` (text), `orders_count` (numeric), and `created_at` (timestamp).
+Use Rails migrations to add any missing columns. The first search validates
+fields and indexes; declaring `tinkick` does not connect or change the schema.
+
+No `reindex` call is needed. Optional extensions are required only by features
+that use them. [Installation, generators, and computed fields →](docs/reference/installation.md)
+
+## Searching
+
+Match all words, any word, or an ordered phrase:
+
+```ruby
+Product.search("coffee beans", misspellings: false)
+Product.search("coffee tea", operator: "or", misspellings: false)
+Product.search("coffee beans", match: :phrase)
+```
+
+Search selected fields, or all rows:
+
+```ruby
+Product.search("coffee", fields: [:name, :description])
+Product.search("*").where(in_stock: true).limit(20)
+```
+
+With multiple fields, **all words must match within one field** by default.
+A stored/generated combined column lets words match across the original columns.
+Matching several fields returns each row once and adds their relevance scores.
+
+Search text is literal, not raw TINQL. Only a standalone `*` means “all rows”;
+empty or punctuation-only input matches nothing. Queries are lazy, and fluent
+modifiers return independent searches. The default limit is 10,000—set a smaller
+limit for pages. [Fields, scopes, modifiers, and ordering →](docs/reference/querying.md)
+
+### Misspellings
+
+Native typo tolerance is on by default. Disable it or enable it only when too
+few exact matches exist:
+
+```ruby
+Product.search("cofee")
+Product.search("coffee", misspellings: false)
+Product.search("cofee", misspellings: { below: 5 }, limit: 20)
+```
+
+`below` adds a bounded count query. Native defaults may find more typo matches
+than Searchkick; expansion caps and single-edit transpositions are unsupported.
+[Distances, prefixes, and per-field controls →](docs/reference/matching.md#misspellings)
+
+### Partial matches and autocomplete
+
+```ruby
+Product.search("cof", match: :word_start, misspellings: false, limit: 10).pluck(:name)
+Product.search("off", match: :word_middle, misspellings: false)
+Product.search("fee", match: :word_end, misspellings: false)
+Product.search("Coffee Beans", match: :exact)
+```
+
+Token partial matching uses TIN wildcards and requires misspellings off.
+`:exact` is case-sensitive whole-field equality. Whole-field prefixes/substrings
+use `:text_start`, `:text_middle`, or `:text_end`; these use SQL and may need
+`unaccent`. [All match modes and analysis settings →](docs/reference/matching.md)
 
 ## Filtering
 
-See the [filtering reference](docs/reference/filtering.md#filtering).
+Combine filters with a search. Keyword and fluent forms are equivalent:
 
-## Matching and analysis
+```ruby
+Product.search("coffee", where: { in_stock: true, price: { lte: 25 } })
+Product.search("coffee").where(in_stock: true).where(price: 10..25)
+```
 
-See the [matching and analysis reference](docs/reference/matching.md#matching-and-analysis).
+| Filter | Example |
+| --- | --- |
+| Equal / missing | `.where(category: "drinks")`, `.where(category: nil)` |
+| Not equal | `.where.not(category: "equipment")` |
+| Any listed value | `.where(category: ["drinks", "equipment"])` |
+| Comparisons | `.where(price: { gt: 10, lte: 25 })` |
+| Range | `.where(price: 10...25)` |
+| Exists | `.where(category: { exists: true })` |
+| Case-insensitive pattern | `.where(name: { ilike: "%coffee%" })` |
+| Native PostgreSQL regex | `.where(name: { regexp: "(?i)^organic" })` |
+| OR | `.where(_or: [{ in_stock: true }, { price: { lt: 10 } }])` |
 
-## Boosting, conversions, and personalization
+Filters also support enums, PostgreSQL arrays and dotted JSONB paths. Regex
+patterns are PostgreSQL strings; Ruby `Regexp` objects are not supported.
+Add ordinary PostgreSQL indexes for frequently used filters.
+[Complete filter semantics and examples →](docs/reference/filtering.md)
 
-See the [boosting, conversions, and personalization reference](docs/reference/ranking.md#boosting-conversions-and-personalization).
+## Ranking
 
-## Autocomplete and suggestions
+Results are ordered by relevance. Give a field more weight:
 
-See the [autocomplete and suggestions reference](docs/reference/matching.md#autocomplete-and-suggestions).
+```ruby
+Product.search("coffee", fields: ["name^5", :description])
+```
 
-## Aggregations and facets
+Boost popular, matching, or recent records:
 
-See the [aggregations and facets reference](docs/reference/aggregations.md#aggregations-and-facets).
+```ruby
+Product.search("coffee", boost_by: { orders_count: { factor: 2 } })
+Product.search("coffee", boost_where: { in_stock: { value: true, factor: 3 } })
+Product.search("coffee", boost_by_recency: { created_at: { scale: "7d" } })
+```
 
-## Highlighting
+Use explicit ordering when relevance is not the primary sort:
 
-See the [highlighting reference](docs/reference/results.md#highlighting).
+```ruby
+Product.search("coffee").order(price: :asc, id: :asc)
+```
 
-## Similar items, geospatial, and vector search
+Field weights up to 10,000 use native TIN boosts. Numeric, conditional, recency,
+and custom SQL ranking may sort all matches and log cost warnings. Scores and
+tied ordering can differ from Elasticsearch.
+[Formulas, JSONB conversions, personalization, and rank fusion →](docs/reference/ranking.md)
 
-See the [similar items, geospatial, and vector search reference](docs/reference/ranking.md#similar-items-geospatial-and-vector-search).
+## Results
 
-## Pagination and large result sets
+Searches return a lazy `Tinkick::Relation` containing Active Record models:
 
-See the [pagination and large result sets reference](docs/reference/results.md#pagination-and-large-result-sets).
+```ruby
+results = Product.search("coffee", limit: 20, countless: true)
+results.each { |product| puts product.name }
+results.size         # Records on this page
+results.total_count  # All matching rows; runs a count query
+results.pluck(:id, :name)
+results.with_score.each { |product, score| puts "#{product.name}: #{score}" }
+```
 
-## Models, scopes, and tenancy
+`load: false` returns hash-style rows for compatibility. It still queries through
+Active Record and is not a performance shortcut; Tinkick logs a migration warning.
+[Projection, hits, and response metadata →](docs/reference/results.md)
 
-See the [models, scopes, and tenancy reference](docs/reference/querying.md#models-scopes-and-tenancy).
+### Highlighting
 
-## Indexing and synchronization
+```ruby
+results = Product.search("coffee", limit: 20,
+  highlight: { encoder: "html", fields: [:name] })
+results.highlights # [{ name: "Organic <em>Coffee</em>" }, ...]
+```
 
-See the [indexing and synchronization reference](docs/reference/operations.md#indexing-and-synchronization).
+`encoder: "html"` escapes stored text separately from highlight tags. Results
+are not marked HTML-safe. Native highlighting requires default index analysis;
+custom-tokenizer searches remain available without it.
+[Fragments, per-field options, and highlight metadata →](docs/reference/results.md#highlighting)
 
-## Advanced SQL and debugging
+## Pagination
 
-See the [advanced sql and debugging reference](docs/reference/operations.md#advanced-sql-and-debugging).
+Use **keyset pagination** for deep browsing with a stable column order:
 
-## Performance and consistency
+```ruby
+search = Product.search("coffee", order: { id: :asc }, limit: 20)
+first_page = search.keyset
 
-See the [performance and consistency reference](docs/reference/operations.md#performance-and-consistency).
+if (cursor = first_page.next_cursor)
+  next_page = search.keyset(after: cursor)
+end
+```
 
-## Deployment and operations
+Keyset pages avoid offsets and automatic counts. Sort columns must be supported,
+nonnullable scalars; relevance scores cannot be cursor keys. Reapply the same
+query, filters, authorization and order on every request. A cursor is not a snapshot.
 
-See the [deployment and operations reference](docs/reference/operations.md#deployment-and-operations).
+Keep relevance ordering with **countless pagination**:
 
-## Testing
+```ruby
+page = Product.search("coffee", limit: 20, countless: true)
+page.has_next_page? # Uses one extra row, without counting all matches
+page.next_page
+```
 
-See the [testing reference](docs/reference/testing.md#testing).
+Traditional pages remain available:
 
-## Reference and unsupported options
+```ruby
+Product.search("coffee").page(2).per_page(20)
+```
 
-See the [reference and unsupported options reference](docs/reference/compatibility.md#reference-and-unsupported-options).
+Later numbered pages still pay offset costs, even with `countless: true`.
+Requesting a total adds a count query unless `total_entries:` is supplied.
+[Cursor rules, metadata, offsets, and exports →](docs/reference/results.md#pagination-and-large-result-sets)
 
-## Development, upgrades, and contributing
+## Aggregations
 
-See the [development, upgrades, and contributing reference](docs/reference/testing.md#development-upgrades-and-contributing).
+Request facets and metrics over matching rows, independently of the result page:
 
-## License
+```ruby
+results = Product.search("coffee", limit: 20, aggs: {
+  category: { limit: 10 },
+  average_price: { avg: { field: :price } }
+})
 
-[MIT](LICENSE.txt), copyright 2026 yknx4.
+results.aggs["category"]["buckets"]
+results.aggs["average_price"]["value"]
+```
+
+Smart facets ignore their own top-level filter by default. Keep authorization
+in the starting model scope so a facet cannot remove it. Aggregations run in
+PostgreSQL without loading every matching model.
+[Smart facets, arrays, missing values, ranges, and histograms →](docs/reference/aggregations.md)
+
+## Active Record and SQL
+
+Start from a scope, merge another scope, or get the native relation:
+
+```ruby
+search = Product.where(in_stock: true).tinkick_search("coffee", limit: 20)
+search.merge(Product.where(price: 10..25))
+search.to_relation.where("price < ?", 20)
+```
+
+Use a Ruby block—or `block: ->(query) { ... }`—to change the scored relation
+**before pagination**:
+
+```ruby
+Product.tinkick_search("coffee", limit: 20) do |query|
+  query.where("price < ?", 20).reorder(orders_count: :desc)
+end
+```
+
+Return a relation for the same model, retaining its primary key and
+`_tinkick_score`. Counts, typo thresholds and aggregations include the hook;
+it may run more than once, so keep it free of side effects. Arel, joins, CTEs
+and SQL window functions remain available through Active Record.
+[Hook contract](docs/reference/querying.md#active-record-sql-and-arel) ·
+[Tested custom ranking and grouping recipes](docs/custom-search.md)
+
+## Migrating from Searchkick
+
+Keep both declarations and choose the backend explicitly:
+
+```ruby
+class Product < ApplicationRecord
+  searchkick searchable: [:name]
+  tinkick searchable: [:name]
+end
+
+Product.searchkick_search("coffee")
+Product.tinkick_search("coffee")
+```
+
+Tinkick defines `search` only if it is free. `tinkick_search` is always available;
+use it during migration regardless of declaration order.
+
+The table is the datasource. Move computed search values into persisted or
+[generated columns](docs/reference/installation.md#computed-fields-and-generated-columns).
+The optional `tinkick_search_data` hook validates column names on a new, unsaved
+instance; its values are never indexed. With Searchkick installed, Tinkick leaves
+`search_data` to Searchkick. There are no replacement reindex jobs or callbacks.
+
+| Difference | Replacement |
+| --- | --- |
+| Raw Elasticsearch bodies, mappings, scripts and routing | SQL/Arel, relation hooks, Rails migrations and tenant scopes |
+| Stemming and Elasticsearch fuzzy controls | Native TIN matching or application-normalized columns; unsupported TIN features raise `Tinkick::NotImplementedError` |
+| Synonyms, suggestions and similar-item API | Application-owned normalization/query expansion or similarity queries; these APIs are not implemented |
+| Geospatial, KNN and multi-model search APIs | Explicit PostGIS/pgvector/SQL queries where available; these integrations are not implemented |
+| Search synchronization and index lifecycle APIs | Ordinary writes, data backfills and PostgreSQL index maintenance |
+
+Missing Tinkick APIs do not imply that PostgreSQL cannot implement the behavior.
+[Migration guide](docs/migrating-from-searchkick.md) ·
+[Full API status and alternatives](docs/reference/compatibility.md)
+
+## Performance and operations
+
+Bound pages, index filters, and inspect `EXPLAIN (ANALYZE, BUFFERS)` on representative
+data. Native single-field relevance can use TIN top-k; multi-field search, custom
+ranking, grouping and offsets may need extra work. [Measured plans →](docs/query-plans.md)
+
+Warnings describe migration and performance tradeoffs. Disable them after
+accepting those tradeoffs:
+
+```ruby
+Tinkick.warnings = false
+```
+
+This does not suppress errors or application logs. Normal transaction visibility
+and replica lag apply; scores can change as TIN statistics change. Deploy schema
+changes before code that uses them, and configure connections, timeouts and
+retries through Rails/PostgreSQL.
+[Debugging, instrumentation, deployment, and maintenance →](docs/reference/operations.md)
+
+## Reference
+
+All detailed API contracts, edge cases, backend differences and recipes live here:
+
+| Topic | Details |
+| --- | --- |
+| [Installation and schema](docs/reference/installation.md) | Requirements, generators, aliases, defaults, schema checks, computed fields |
+| [Queries and models](docs/reference/querying.md) | Field selection, modifiers, SQL hooks, projections, preloads, STI, tenancy, JSONB search |
+| [Filters](docs/reference/filtering.md) | NULLs, negation, enums, arrays, JSONB, native patterns |
+| [Matching](docs/reference/matching.md) | Phrases, typos, partial/exact modes, analysis, exclusions, autocomplete |
+| [Ranking](docs/reference/ranking.md) | Field/numeric/conditional/recency boosts, conversions, similarity, vectors |
+| [Results and pagination](docs/reference/results.md) | Raw rows, hits, timings, highlights, totals, cursors, exports |
+| [Aggregations](docs/reference/aggregations.md) | Terms, metrics, ranges, histograms, time zones, bounds |
+| [Operations](docs/reference/operations.md) | Writes, native SQL, diagnostics, notifications, performance, deployment |
+| [Compatibility](docs/reference/compatibility.md) | Supported options, unsupported features, replacements |
+| [Testing and contributing](docs/reference/testing.md) | Real database tests, datasets, CI, checks, upgrades |
+
+## Contributing
+
+Use real PostgreSQL/TIN tests and varied data. The test Rails app covers HTTP
+requests, ranking and filters; CI uses isolated, cached Lead containers with
+[explicit limitations](docs/lead-ci.md). Production-plan checks use real TIN.
+
+See [development setup and checks](docs/development.md), the
+[implementation plan](docs/plan.md), and [changelog](CHANGELOG.md).
+
+Thanks to Searchkick for the API inspiration and PlanetScale for TIN.
+[MIT license](LICENSE.txt) © 2026 yknx4.
