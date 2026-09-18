@@ -1,0 +1,178 @@
+{
+  "captured_at": "2026-09-18T04:42:05Z",
+  "database": "tinkick_test",
+  "entries": 136,
+  "postgres": "18.6 (Debian 18.6-1.pgdg13+2)",
+  "tin": "1.0.2",
+  "command": "direnv exec . bundle exec ruby script/explain_catalog.rb",
+  "method": "Read-only queries on synthetic fixtures; one warm plan per shape, not a production benchmark.",
+  "cases": [
+    {
+      "name": "native",
+      "sql": "SELECT \"tinkick_test_catalog_entries\".*, tin.score(\"tinkick_test_catalog_entries\".ctid) AS _tinkick_score FROM \"tinkick_test_catalog_entries\" WHERE \"tinkick_test_catalog_entries\".\"collection_id\" = 1 AND (TRUE) AND ((\"tinkick_test_catalog_entries\".\"title\" ==> '\"hobbit\"')) ORDER BY _tinkick_score DESC LIMIT 2",
+      "results": [
+        {
+          "id": 1001,
+          "title": "The Hobbit",
+          "group_key": "hobbit",
+          "has_extended_metadata": false,
+          "_tinkick_score": 3.359508
+        },
+        {
+          "id": 1005,
+          "title": "The Hobbit parody",
+          "group_key": "parody",
+          "has_extended_metadata": false,
+          "_tinkick_score": 2.861327
+        }
+      ],
+      "explain": [
+        "Limit  (cost=8.53..10.20 rows=2 width=173) (actual time=0.043..0.047 rows=2.00 loops=1)",
+        "  Buffers: shared hit=17",
+        "  ->  Custom Scan (Projector)  (cost=8.53..10.20 rows=2 width=173) (actual time=0.042..0.045 rows=2.00 loops=1)",
+        "        Buffers: shared hit=17",
+        "        ->  Custom Scan (Projector)  (cost=8.53..8.53 rows=2 width=173) (actual time=0.039..0.040 rows=2.00 loops=1)",
+        "              Filter: (collection_id = 1)",
+        "              Purpose: Branch Verification",
+        "              Buffers: shared hit=16",
+        "              ->  Custom Scan (Text Search Scan) on tinkick_test_catalog_entries  (cost=4.40..4.40 rows=2 width=173) (actual time=0.037..0.038 rows=2.00 loops=1)",
+        "                    Index: index_tinkick_test_catalog_entries_on_title",
+        "                    Query: hobbit",
+        "                    Scoring: dense-term elision",
+        "                    Top K: 2",
+        "                    Candidate Filter: Parent Projector",
+        "                    Page Touches:",
+        "                      Total: 7, ~0.1 MiB",
+        "                      Metadata: 7",
+        "                    Mutable Adapter:",
+        "                      Storage Page Touches: 29",
+        "                      Storage Approx MiB: 0.2",
+        "                    Buffers: shared hit=15",
+        "Planning:",
+        "  Buffers: shared hit=36",
+        "Planning Time: 0.464 ms",
+        "Execution Time: 0.190 ms"
+      ]
+    },
+    {
+      "name": "capped_exact",
+      "sql": "WITH \"catalog_matches\" AS (SELECT \"tinkick_test_catalog_entries\".*, tin.score(\"tinkick_test_catalog_entries\".ctid) AS _tinkick_score FROM \"tinkick_test_catalog_entries\" WHERE \"tinkick_test_catalog_entries\".\"collection_id\" = 1 AND (TRUE) AND ((\"tinkick_test_catalog_entries\".\"title\" ==> '\"hobbit\"'))) SELECT tinkick_test_catalog_entries.\"id\", tinkick_test_catalog_entries.\"title\", tinkick_test_catalog_entries.\"creator_name\", tinkick_test_catalog_entries.\"search_text\", tinkick_test_catalog_entries.\"normalized_title\", tinkick_test_catalog_entries.\"group_key\", tinkick_test_catalog_entries.\"collection_id\", tinkick_test_catalog_entries.\"status\", tinkick_test_catalog_entries.\"approved_levels\", tinkick_test_catalog_entries.\"rejected_levels\", tinkick_test_catalog_entries.\"pending_levels\", tinkick_test_catalog_entries.\"restricted_content\", tinkick_test_catalog_entries.\"has_image\", tinkick_test_catalog_entries.\"has_verified_identifier\", tinkick_test_catalog_entries.\"has_creator\", tinkick_test_catalog_entries.\"has_extended_metadata\", tinkick_test_catalog_entries.\"minimum_age\", tinkick_test_catalog_entries.\"popularity\", _tinkick_score * LEAST(10, CASE WHEN has_verified_identifier THEN 5.0 ELSE 0 END + CASE WHEN has_image THEN 3.0 ELSE 0 END + CASE WHEN has_creator THEN 1.5 ELSE 0 END + CASE WHEN has_extended_metadata THEN 0.5 ELSE 0 END + LOG(1 + popularity * 0.01)) + CASE WHEN normalized_title = 'the hobbit' THEN 1000 ELSE 0 END AS _tinkick_score FROM catalog_matches AS tinkick_test_catalog_entries ORDER BY _tinkick_score DESC, id ASC LIMIT 2",
+      "results": [
+        {
+          "id": 1001,
+          "title": "The Hobbit",
+          "group_key": "hobbit",
+          "has_extended_metadata": false,
+          "_tinkick_score": 1032.0806746996413
+        },
+        {
+          "id": 1002,
+          "title": "The Hobbit illustrated edition",
+          "group_key": "hobbit",
+          "has_extended_metadata": true,
+          "_tinkick_score": 1001.2459079027176
+        }
+      ],
+      "explain": [
+        "Limit  (cost=11.92..11.93 rows=2 width=177) (actual time=0.131..0.132 rows=2.00 loops=1)",
+        "  Buffers: shared hit=16",
+        "  ->  Sort  (cost=11.92..11.93 rows=3 width=177) (actual time=0.130..0.131 rows=2.00 loops=1)",
+        "        Sort Key: ((((tin.score(tinkick_test_catalog_entries.ctid, '0.1'::real, NULL::real, NULL::real, NULL::text[], NULL::text[])) * (LEAST('10'::numeric, ((((CASE WHEN tinkick_test_catalog_entries.has_verified_identifier THEN 5.0 ELSE '0'::numeric END + CASE WHEN tinkick_test_catalog_entries.has_image THEN 3.0 ELSE '0'::numeric END) + CASE WHEN tinkick_test_catalog_entries.has_creator THEN 1.5 ELSE '0'::numeric END) + CASE WHEN tinkick_test_catalog_entries.has_extended_metadata THEN 0.5 ELSE '0'::numeric END) + log('10'::numeric, ('1'::numeric + ((tinkick_test_catalog_entries.popularity)::numeric * 0.01))))))::double precision) + (CASE WHEN (tinkick_test_catalog_entries.normalized_title = 'the hobbit'::text) THEN 1000 ELSE 0 END)::double precision)) DESC, tinkick_test_catalog_entries.id",
+        "        Sort Method: top-N heapsort  Memory: 25kB",
+        "        Buffers: shared hit=16",
+        "        ->  Custom Scan (Projector)  (cost=2.00..11.89 rows=3 width=177) (actual time=0.062..0.121 rows=5.00 loops=1)",
+        "              Buffers: shared hit=16",
+        "              ->  Custom Scan (Projector)  (cost=2.00..9.40 rows=3 width=173) (actual time=0.031..0.041 rows=5.00 loops=1)",
+        "                    Filter: (collection_id = 1)",
+        "                    Rows Removed by Filter: 1",
+        "                    Purpose: Branch Verification",
+        "                    Buffers: shared hit=15",
+        "                    ->  Custom Scan (Text Search Scan) on tinkick_test_catalog_entries  (cost=2.00..5.00 rows=19 width=173) (actual time=0.026..0.032 rows=6.00 loops=1)",
+        "                          Index: index_tinkick_test_catalog_entries_on_title",
+        "                          Query: hobbit",
+        "                          Scoring: dense-term elision",
+        "                          Page Touches:",
+        "                            Total: 7, ~0.1 MiB",
+        "                            Metadata: 7",
+        "                          Mutable Adapter:",
+        "                            Storage Page Touches: 29",
+        "                            Storage Approx MiB: 0.2",
+        "                          Buffers: shared hit=14",
+        "Planning:",
+        "  Buffers: shared hit=31",
+        "Planning Time: 0.579 ms",
+        "Execution Time: 0.304 ms"
+      ]
+    },
+    {
+      "name": "grouped_metadata",
+      "sql": "WITH \"catalog_editions\" AS (WITH \"ranked_entries\" AS (WITH \"catalog_matches\" AS (SELECT \"tinkick_test_catalog_entries\".*, tin.score(\"tinkick_test_catalog_entries\".ctid) AS _tinkick_score FROM \"tinkick_test_catalog_entries\" WHERE \"tinkick_test_catalog_entries\".\"collection_id\" = 1 AND (TRUE) AND ((\"tinkick_test_catalog_entries\".\"title\" ==> '\"hobbit\"'))) SELECT tinkick_test_catalog_entries.\"id\", tinkick_test_catalog_entries.\"title\", tinkick_test_catalog_entries.\"creator_name\", tinkick_test_catalog_entries.\"search_text\", tinkick_test_catalog_entries.\"normalized_title\", tinkick_test_catalog_entries.\"group_key\", tinkick_test_catalog_entries.\"collection_id\", tinkick_test_catalog_entries.\"status\", tinkick_test_catalog_entries.\"approved_levels\", tinkick_test_catalog_entries.\"rejected_levels\", tinkick_test_catalog_entries.\"pending_levels\", tinkick_test_catalog_entries.\"restricted_content\", tinkick_test_catalog_entries.\"has_image\", tinkick_test_catalog_entries.\"has_verified_identifier\", tinkick_test_catalog_entries.\"has_creator\", tinkick_test_catalog_entries.\"has_extended_metadata\", tinkick_test_catalog_entries.\"minimum_age\", tinkick_test_catalog_entries.\"popularity\", _tinkick_score * CASE WHEN has_verified_identifier THEN 50 ELSE 1 END * CASE WHEN has_image THEN 30 ELSE 1 END * CASE WHEN has_creator THEN 15 ELSE 1 END * CASE WHEN has_extended_metadata THEN 5 ELSE 1 END * LN(2 + popularity * 100.0) AS _tinkick_score FROM catalog_matches AS tinkick_test_catalog_entries) SELECT tinkick_test_catalog_entries.*, MAX(_tinkick_score) OVER (PARTITION BY collection_id, group_key) AS group_score,\nROW_NUMBER() OVER (\n  PARTITION BY collection_id, group_key\n  ORDER BY has_extended_metadata DESC, _tinkick_score DESC, id ASC\n) AS edition_rank\n FROM ranked_entries AS tinkick_test_catalog_entries) SELECT tinkick_test_catalog_entries.\"id\", tinkick_test_catalog_entries.\"title\", tinkick_test_catalog_entries.\"creator_name\", tinkick_test_catalog_entries.\"search_text\", tinkick_test_catalog_entries.\"normalized_title\", tinkick_test_catalog_entries.\"group_key\", tinkick_test_catalog_entries.\"collection_id\", tinkick_test_catalog_entries.\"status\", tinkick_test_catalog_entries.\"approved_levels\", tinkick_test_catalog_entries.\"rejected_levels\", tinkick_test_catalog_entries.\"pending_levels\", tinkick_test_catalog_entries.\"restricted_content\", tinkick_test_catalog_entries.\"has_image\", tinkick_test_catalog_entries.\"has_verified_identifier\", tinkick_test_catalog_entries.\"has_creator\", tinkick_test_catalog_entries.\"has_extended_metadata\", tinkick_test_catalog_entries.\"minimum_age\", tinkick_test_catalog_entries.\"popularity\", group_score AS _tinkick_score FROM catalog_editions AS tinkick_test_catalog_entries WHERE \"tinkick_test_catalog_entries\".\"edition_rank\" = 1 ORDER BY _tinkick_score DESC, id ASC LIMIT 2",
+      "results": [
+        {
+          "id": 1002,
+          "title": "The Hobbit illustrated edition",
+          "group_key": "hobbit",
+          "has_extended_metadata": true,
+          "_tinkick_score": 536057.2043103498
+        },
+        {
+          "id": 1004,
+          "title": "The Hobbit reading guide",
+          "group_key": "guide",
+          "has_extended_metadata": false,
+          "_tinkick_score": 1204.8997798481132
+        }
+      ],
+      "explain": [
+        "Limit  (cost=12.10..12.11 rows=1 width=177) (actual time=0.166..0.169 rows=2.00 loops=1)",
+        "  Buffers: shared hit=16",
+        "  ->  Sort  (cost=12.10..12.11 rows=1 width=177) (actual time=0.165..0.167 rows=2.00 loops=1)",
+        "        Sort Key: tinkick_test_catalog_entries.group_score DESC, tinkick_test_catalog_entries.id",
+        "        Sort Method: quicksort  Memory: 26kB",
+        "        Buffers: shared hit=16",
+        "        ->  Subquery Scan on tinkick_test_catalog_entries  (cost=11.92..12.09 rows=1 width=177) (actual time=0.149..0.159 rows=4.00 loops=1)",
+        "              Filter: (tinkick_test_catalog_entries.edition_rank = 1)",
+        "              Buffers: shared hit=16",
+        "              ->  WindowAgg  (cost=11.92..12.05 rows=3 width=193) (actual time=0.148..0.157 rows=4.00 loops=1)",
+        "                    Window: w2 AS (PARTITION BY tinkick_test_catalog_entries_1.collection_id, tinkick_test_catalog_entries_1.group_key)",
+        "                    Filter: ((row_number() OVER w1) <= 1)",
+        "                    Rows Removed by Filter: 1",
+        "                    Storage: Memory  Maximum Storage: 17kB",
+        "                    Buffers: shared hit=16",
+        "                    ->  WindowAgg  (cost=11.92..12.00 rows=3 width=185) (actual time=0.137..0.144 rows=5.00 loops=1)",
+        "                          Window: w1 AS (PARTITION BY tinkick_test_catalog_entries_1.collection_id, tinkick_test_catalog_entries_1.group_key ORDER BY tinkick_test_catalog_entries_1.has_extended_metadata, tinkick_test_catalog_entries_1._tinkick_score, tinkick_test_catalog_entries_1.id ROWS UNBOUNDED PRECEDING)",
+        "                          Run Condition: (row_number() OVER w1 <= 1)",
+        "                          Storage: Memory  Maximum Storage: 17kB",
+        "                          Buffers: shared hit=16",
+        "                          ->  Sort  (cost=11.92..11.93 rows=3 width=177) (actual time=0.119..0.120 rows=5.00 loops=1)",
+        "                                Sort Key: tinkick_test_catalog_entries_1.collection_id, tinkick_test_catalog_entries_1.group_key, tinkick_test_catalog_entries_1.has_extended_metadata DESC, tinkick_test_catalog_entries_1._tinkick_score DESC, tinkick_test_catalog_entries_1.id",
+        "                                Sort Method: quicksort  Memory: 26kB",
+        "                                Buffers: shared hit=16",
+        "                                ->  Subquery Scan on tinkick_test_catalog_entries_1  (cost=2.00..11.89 rows=3 width=177) (actual time=0.058..0.096 rows=5.00 loops=1)",
+        "                                      Buffers: shared hit=16",
+        "                                      ->  Custom Scan (Projector)  (cost=2.00..11.89 rows=3 width=177) (actual time=0.057..0.094 rows=5.00 loops=1)",
+        "                                            Buffers: shared hit=16",
+        "                                            ->  Custom Scan (Projector)  (cost=2.00..9.40 rows=3 width=173) (actual time=0.034..0.046 rows=5.00 loops=1)",
+        "                                                  Filter: (collection_id = 1)",
+        "                                                  Rows Removed by Filter: 1",
+        "                                                  Purpose: Branch Verification",
+        "                                                  Buffers: shared hit=15",
+        "                                                  ->  Custom Scan (Text Search Scan) on tinkick_test_catalog_entries tinkick_test_catalog_entries_2  (cost=2.00..5.00 rows=19 width=173) (actual time=0.029..0.036 rows=6.00 loops=1)",
+        "                                                        Index: index_tinkick_test_catalog_entries_on_title",
+        "                                                        Query: hobbit",
+        "                                                        Scoring: dense-term elision",
+        "                                                        Page Touches:",
+        "                                                          Total: 7, ~0.1 MiB",
+        "                                                          Metadata: 7",
+        "                                                        Mutable Adapter:",
+        "                                                          Storage Page Touches: 29",
+        "                                                          Storage Approx MiB: 0.2",
+        "                                                        Buffers: shared hit=14",
+        "Planning:",
+        "  Buffers: shared hit=37",
+        "Planning Time: 0.776 ms",
+        "Execution Time: 0.467 ms"
+      ]
+    }
+  ]
+}
