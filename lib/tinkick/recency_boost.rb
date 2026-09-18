@@ -32,7 +32,7 @@ module Tinkick
 
     def functions
       unless empty? || @warned
-        @model.logger&.warn("Tinkick: boost_by_recency scoring evaluates fields for matching rows and can sort results instead of using native TIN top-k. Date and numeric arrays also inspect values per row. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets.")
+        Tinkick.warn(@model, "Tinkick: boost_by_recency scoring evaluates fields for matching rows and can sort results instead of using native TIN top-k. Date and numeric arrays also inspect values per row. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets.")
         @warned = true
       end
       @functions

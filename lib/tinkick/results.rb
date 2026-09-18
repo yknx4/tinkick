@@ -32,7 +32,7 @@ module Tinkick
       @missing_records = []
       @hit_pairs = []
       unless load
-        @query.model.logger&.warn("Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
+        Tinkick.warn(@query.model, "Tinkick: load: false is supported for Searchkick compatibility. Migrate to model results when possible; both modes query PostgreSQL through Active Record.")
       end
     end
 
@@ -262,7 +262,7 @@ module Tinkick
       unless primary_key.is_a?(String)
         raise InvalidQueryError, "scope_results requires a single model primary key"
       end
-      @query.model.logger&.warn("Tinkick: scope_results runs a second, page-bounded Active Record query after search pagination. It can remove page results without changing total_count; prefer where: for filters that should affect search totals or pagination.")
+      Tinkick.warn(@query.model, "Tinkick: scope_results runs a second, page-bounded Active Record query after search pagination. It can remove page results without changing total_count; prefer where: for filters that should affect search totals or pagination.")
       identifiers = rows.map { |row| row.fetch(primary_key) }
       loaded = scope.call(@query.model.all).where(primary_key => identifiers).to_a #: Array[ActiveRecord::Base]
       indexed = loaded.to_h { |record| [record[primary_key], record] }
@@ -293,7 +293,7 @@ module Tinkick
       filter = source_filter
       definitions = @query.model.columns_hash
       if filter.nested?(definitions)
-        @query.model.logger&.warn("Tinkick: nested source selection reads each selected JSON column for the bounded result page, then prunes properties in Ruby. Large JSON values can increase transfer and memory costs; use dedicated stored or generated columns for frequent narrow projections.")
+        Tinkick.warn(@query.model, "Tinkick: nested source selection reads each selected JSON column for the bounded result page, then prunes properties in Ruby. Large JSON values can increase transfer and memory costs; use dedicated stored or generated columns for frequent narrow projections.")
       end
       rows = @query.source_rows(filter.columns(definitions) | (@highlighter&.columns || []))
       @highlight_rows = rows if @highlighter

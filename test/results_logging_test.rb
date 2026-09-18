@@ -10,6 +10,7 @@ class ResultsLoggingTest < Minitest::Test
   end
 
   def setup
+    @original_warnings = Tinkick.warnings
     @original_logger = Product.logger
     @output = StringIO.new
     Product.logger = Logger.new(@output)
@@ -17,6 +18,7 @@ class ResultsLoggingTest < Minitest::Test
   end
 
   def teardown
+    Tinkick.warnings = @original_warnings
     Product.logger = @original_logger
   end
 
@@ -38,6 +40,19 @@ class ResultsLoggingTest < Minitest::Test
     Tinkick::Results.new(@query)
 
     assert_empty @output.string
+  end
+
+  def test_warnings_can_be_disabled_and_reenabled_without_muting_the_application_logger
+    Tinkick.warnings = false
+    Tinkick::Results.new(@query, load: false)
+    assert_empty @output.string
+
+    Product.logger.warn("Application warning")
+    assert_match "Application warning", @output.string
+
+    Tinkick.warnings = true
+    Tinkick::Results.new(@query, load: false)
+    assert_match "load: false", @output.string
   end
 
   def test_a_missing_model_logger_is_supported

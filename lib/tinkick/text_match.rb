@@ -49,7 +49,7 @@ module Tinkick
       normalized = @model.with_connection { |connection| connection.select_value(Arel.sql("SELECT #{query}", term)) } #: String
       return ["FALSE", []] if normalized.empty?
 
-      @model.logger&.warn("Tinkick: #{match} uses whole-field SQL normalization and can scan rows outside TIN. Prefer word_start, word_middle, or word_end when token matching is suitable; inspect EXPLAIN for this query.")
+      Tinkick.warn(@model, "Tinkick: #{match} uses whole-field SQL normalization and can scan rows outside TIN. Prefer word_start, word_middle, or word_end when token matching is suitable; inspect EXPLAIN for this query.")
       pattern = @model.sanitize_sql_like(normalized)
       pattern = "%#{pattern}" unless match == :text_start
       pattern = "#{pattern}%" unless match == :text_end

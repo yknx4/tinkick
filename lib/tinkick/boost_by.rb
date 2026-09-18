@@ -72,7 +72,7 @@ module Tinkick
         else
           "Tinkick: numeric boost_by scoring evaluates numeric fields for matching rows and can sort results instead of using native TIN top-k. Numeric arrays and JSONB paths also inspect values per row. Inspect EXPLAIN ANALYZE with representative data before using this on large result sets."
         end
-        @model.logger&.warn(message)
+        Tinkick.warn(@model, message)
         @warned = true
       end
       "((#{base_score})::double precision * #{group(@sums, '+')} * #{group(@multipliers, '*')})"

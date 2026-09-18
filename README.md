@@ -1818,6 +1818,17 @@ also adds work; uncapped defaults avoid a separate
 candidate-enumeration pipeline but are not free. Disable misspellings when the
 product requires exact lexical matching.
 
+Warnings are enabled by default. Once you understand and accept the tradeoffs,
+disable Tinkick's migration and performance warnings in an initializer:
+
+```ruby
+# config/initializers/tinkick.rb
+Tinkick.warnings = false
+```
+
+Set it back to `true` to re-enable them. This setting only controls Tinkick's
+warnings; application/Active Record logging and raised errors are unaffected.
+
 See [measured query plans](docs/query-plans.md) for `EXPLAIN ANALYZE` evidence from
 the real varied document corpus, including the generated SQL and machine-readable
 plans. Small test-corpus timings are evidence about those plans, not throughput

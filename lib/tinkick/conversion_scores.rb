@@ -25,7 +25,7 @@ module Tinkick
       unless @warned
         message = "Tinkick: conversion scoring can sort matching rows instead of using native TIN top-k."
         message += " Case-insensitive matching iterates JSONB entries per row." unless @case_sensitive
-        @model.logger&.warn(message)
+        Tinkick.warn(@model, message)
         @warned = true
       end
       "((#{base_score})::double precision + ((#{counts}) * #{@factor})::double precision)"

@@ -15,7 +15,11 @@ require "active_support/lazy_load_hooks"
 
 module Tinkick
   class << self
-    attr_accessor :search_method_name, :model_options, :models
+    attr_accessor :search_method_name, :model_options, :models, :warnings
+
+    def warn(model, message)
+      model.logger&.warn(message) if warnings
+    end
 
     def search(term = "*", model:, fields: nil, misspellings: true, where: {}, order: nil,
       limit: nil, offset: nil, page: nil, per_page: nil, padding: nil, match: nil,
@@ -33,6 +37,7 @@ module Tinkick
   self.search_method_name = :search
   self.model_options = {}
   self.models = []
+  self.warnings = true
 end
 
 ActiveSupport.on_load(:active_record) do

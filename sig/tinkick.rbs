@@ -1,6 +1,14 @@
 module Tinkick
   VERSION: String
 
+  self.@warnings: bool
+
+  def self.warnings: () -> bool
+
+  def self.warnings=: (bool) -> bool
+
+  def self.warn: (singleton(ActiveRecord::Base) model, String message) -> void
+
   self.@search_method_name: String | Symbol | nil
 
   def self.search_method_name: () -> (String | Symbol | nil)

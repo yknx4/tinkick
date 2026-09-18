@@ -165,7 +165,7 @@ module Tinkick
     end
 
     def json_values(column, path, descendants: false)
-      @model.logger&.warn("Tinkick: JSONB filters verify recursive array paths per candidate row. A jsonb_ops GIN index can narrow equality candidates; jsonb_path_ops cannot index recursive descent. Consider indexed persisted or generated scalar columns for frequent filters.")
+      Tinkick.warn(@model, "Tinkick: JSONB filters verify recursive array paths per candidate row. A jsonb_ops GIN index can narrow equality candidates; jsonb_path_ops cannot index recursive descent. Consider indexed persisted or generated scalar columns for frequent filters.")
       keys = path.map { "?" }.join(", ")
       object_values = "WHEN jsonb_typeof(parent.value) = 'object' THEN jsonb_path_query_array(parent.value, '$.*')" if descendants
       # Arrays retain their path depth; only the requested object key advances it.
@@ -193,7 +193,7 @@ module Tinkick
     end
 
     def warn_json_scan(column)
-      @model.logger&.warn("Tinkick: this JSONB filter scans values in #{column}; ordinary GIN indexes cannot extract selective equality keys for range, pattern, or missing-value checks. Consider an indexed persisted or generated scalar column for frequent filters.")
+      Tinkick.warn(@model, "Tinkick: this JSONB filter scans values in #{column}; ordinary GIN indexes cannot extract selective equality keys for range, pattern, or missing-value checks. Consider an indexed persisted or generated scalar column for frequent filters.")
     end
 
     def field_predicates(column, value, array_type: nil, enum_values: nil)
@@ -276,7 +276,7 @@ module Tinkick
     def element_predicate(column, predicate, array_type)
       return predicate unless array_type
 
-      @model.logger&.warn("Tinkick: this filter scans array elements for #{column}; ordinary GIN array indexes cannot accelerate range, pattern, or missing-value checks. Consider a persisted or generated scalar column with an appropriate index for frequent filters.")
+      Tinkick.warn(@model, "Tinkick: this filter scans array elements for #{column}; ordinary GIN array indexes cannot accelerate range, pattern, or missing-value checks. Consider a persisted or generated scalar column with an appropriate index for frequent filters.")
       sql, binds = predicate
       ["EXISTS (SELECT 1 FROM unnest(#{column}) AS tinkick_filter_element(value) WHERE #{sql})", binds]
     end
@@ -289,7 +289,7 @@ module Tinkick
         end
         raise TypeError, "regexp requires a PostgreSQL pattern string" unless value.is_a?(String)
 
-        @model.logger&.warn("Tinkick: regular expression filters can scan column values outside TIN. Use selective search/where conditions and inspect EXPLAIN; an optional pg_trgm expression index may help suitable patterns.")
+        Tinkick.warn(@model, "Tinkick: regular expression filters can scan column values outside TIN. Use selective search/where conditions and inspect EXPLAIN; an optional pg_trgm expression index may help suitable patterns.")
         return ["(#{column})::text ~ ?", [value]]
       end
       raise TypeError, "#{operator} requires a string" unless value.is_a?(String)
@@ -325,7 +325,7 @@ module Tinkick
     def enum_label_expression(column, enum_values)
       return column unless enum_values
 
-      @model.logger&.warn("Tinkick: filtering enum labels with ranges or patterns evaluates a CASE expression per row; an ordinary backing-column index cannot accelerate this expression. Use selective search/where conditions and inspect EXPLAIN, or add an appropriate expression index.")
+      Tinkick.warn(@model, "Tinkick: filtering enum labels with ranges or patterns evaluates a CASE expression per row; an ordinary backing-column index cannot accelerate this expression. Use selective search/where conditions and inspect EXPLAIN, or add an appropriate expression index.")
       @model.with_connection do |connection|
         branches = enum_values.map do |label, stored|
           "WHEN #{column} IS NOT DISTINCT FROM #{connection.quote(stored)} THEN #{connection.quote(label)}::text"

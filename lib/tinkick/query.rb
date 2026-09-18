@@ -295,7 +295,7 @@ module Tinkick
       original = [@misspellings, @scoring, @mixed_matching] #: [QueryText::misspellings, String, bool]
       @misspellings = false
       begin
-        @model.logger&.warn("Tinkick: misspellings: { below: #{threshold} } runs an extra bounded exact-match count before choosing the search mode. Omit below to use the native fuzzy search directly.")
+        Tinkick.warn(@model, "Tinkick: misspellings: { below: #{threshold} } runs an extra bounded exact-match count before choosing the search mode. Omit below to use the native fuzzy search directly.")
         exact = build_scope(@where)
         if exact.except(:order, :limit, :offset).limit(threshold).count < threshold
           @misspellings, @scoring, @mixed_matching = original
@@ -441,7 +441,7 @@ module Tinkick
         sql, binds = field_predicate(field, ["#{field.text_sql} ==> ?", [excluded]])
         identifiers = base.where(Arel.sql(sql, *binds)).select(primary_key)
         relation = relation.where.not(primary_key => identifiers)
-        @model.logger&.warn("Tinkick: phrase exclusions across fields or match-all searches use TIN matching-ID subqueries to preserve null values. These extra index queries can increase cost; inspect EXPLAIN ANALYZE for your workload.")
+        Tinkick.warn(@model, "Tinkick: phrase exclusions across fields or match-all searches use TIN matching-ID subqueries to preserve null values. These extra index queries can increase cost; inspect EXPLAIN ANALYZE for your workload.")
       end
       [relation, combined]
     end
@@ -493,15 +493,15 @@ module Tinkick
 
       score = score_sql
       if @weighted_scoring && @mixed_matching
-        @model.logger&.warn("Tinkick: weighted SQL scoring combines field queries, then can group and sort matching rows. Explicit SQL field weights and native field boosts above 10000 require this path; native-only field boosts up to 10000 keep TIN scoring. Inspect EXPLAIN ANALYZE for your workload.")
+        Tinkick.warn(@model, "Tinkick: weighted SQL scoring combines field queries, then can group and sort matching rows. Explicit SQL field weights and native field boosts above 10000 require this path; native-only field boosts up to 10000 keep TIN scoring. Inspect EXPLAIN ANALYZE for your workload.")
       elsif @mixed_matching
-        @model.logger&.warn("Tinkick: mixed TIN and SQL match modes combine and group matching rows before sorting. This can be slower than native TIN top-k ranking; use a single native match mode where its semantics fit and check EXPLAIN ANALYZE for your workload.")
+        Tinkick.warn(@model, "Tinkick: mixed TIN and SQL match modes combine and group matching rows before sorting. This can be slower than native TIN top-k ranking; use a single native match mode where its semantics fit and check EXPLAIN ANALYZE for your workload.")
       end
       if @offset.positive? && score != "1.0"
-        @model.logger&.warn("Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Consider keyset pagination on stable indexed columns to avoid large offsets. Countless pagination avoids automatic counts but does not remove offset costs.")
+        Tinkick.warn(@model, "Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Consider keyset pagination on stable indexed columns to avoid large offsets. Countless pagination avoids automatic counts but does not remove offset costs.")
       end
       if @fields.length > 1 && score != "1.0" && !@mixed_matching
-        @model.logger&.warn("Tinkick: ranking across multiple fields uses full scoring to preserve matching rows and can sort matches instead of using TIN's native top-k path. Consider a stored or generated combined text column with one TIN index when ranking performance matters.")
+        Tinkick.warn(@model, "Tinkick: ranking across multiple fields uses full scoring to preserve matching rows and can sort matches instead of using TIN's native top-k path. Consider a stored or generated combined text column with one TIN index when ranking performance matters.")
       end
       order = @order
       ordering = if keyset?
@@ -512,7 +512,7 @@ module Tinkick
         order.nil? ? ["_tinkick_score DESC"] : order_clauses(order)
       end
       if ordering != ["_tinkick_score DESC"] && score != "1.0"
-        @model.logger&.warn("Tinkick: lexical search with column order or ascending relevance can sort matching rows instead of using TIN's relevance top-k path. Use stable indexed columns for keyset pagination and check the query plan for your workload.")
+        Tinkick.warn(@model, "Tinkick: lexical search with column order or ascending relevance can sort matching rows instead of using TIN's relevance top-k path. Use stable indexed columns for keyset pagination and check the query plan for your workload.")
       end
 
       relation.reselect(Arel.sql("#{quoted_table}.*"), Arel.sql("#{score} AS _tinkick_score"))

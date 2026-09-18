@@ -154,7 +154,7 @@ module Tinkick
       counts = counts.where(Arel.sql("_tinkick_date >= ?::timestamptz - ?::interval", hard_lower, adjustment)) if hard_lower
       counts = counts.where(Arel.sql("_tinkick_date < ?::timestamptz - ?::interval", hard_upper, adjustment)) if hard_upper
       query = if minimum.zero?
-        @model.logger&.warn("Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
+        Tinkick.warn(@model, "Tinkick: date_histogram min_doc_count: 0 generates empty buckets across the date range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
         bounds = @unscoped.from("tinkick_date_counts")
           .select(Arel.sql("LEAST(MIN(_tinkick_date), ?::timestamptz) AS lower, GREATEST(MAX(_tinkick_date), ?::timestamptz) AS upper", lower_date, upper_date))
         grid_join = @model.sanitize_sql_array([<<~SQL, step, binds.fetch(:series_zone)])
@@ -307,7 +307,7 @@ module Tinkick
       counts = counts.where(Arel.sql("_tinkick_ordinal * ? >= ?", interval, hard_min)) if hard_min
       counts = counts.where(Arel.sql("_tinkick_ordinal * ? <= ?", interval, hard_max)) if hard_max
       query = if minimum.zero?
-        @model.logger&.warn("Tinkick: histogram min_doc_count: 0 generates empty buckets across the matching numeric range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
+        Tinkick.warn(@model, "Tinkick: histogram min_doc_count: 0 generates empty buckets across the matching numeric range. Small intervals over wide ranges can produce many buckets; use min_doc_count: 1 when empty buckets are unnecessary.")
         lower = extended_min && ((extended_min - offset) / interval).floor
         upper = extended_max && ((extended_max - offset) / interval).floor
         bounds = @unscoped.from("tinkick_histogram_counts")
@@ -360,7 +360,7 @@ module Tinkick
         .group(Arel.sql("_tinkick_value"))
         .select(Arel.sql("_tinkick_value AS _tinkick_key, COUNT(*) AS _tinkick_count"))
       if minimum.zero?
-        @model.logger&.warn("Tinkick: min_doc_count: 0 reads the model's scoped term dictionary in addition to matching documents. This can cost more for many distinct values.")
+        Tinkick.warn(@model, "Tinkick: min_doc_count: 0 reads the model's scoped term dictionary in addition to matching documents. This can cost more for many distinct values.")
         dictionary = @unscoped.from(values_relation(@dictionary_scope, field, missing: options[:missing]), :tinkick_values)
           .where(Arel.sql("_tinkick_value IS NOT NULL"))
           .select(Arel.sql("_tinkick_value AS _tinkick_key")).distinct
@@ -390,7 +390,7 @@ module Tinkick
     def term_filter(query, value, exclude:)
       case value
       when String
-        @model.logger&.warn("Tinkick: PostgreSQL regex aggregation include/exclude evaluates term values before selecting buckets. Use exact-value arrays when possible and inspect EXPLAIN ANALYZE for large dictionaries.")
+        Tinkick.warn(@model, "Tinkick: PostgreSQL regex aggregation include/exclude evaluates term values before selecting buckets. Use exact-value arrays when possible and inspect EXPLAIN ANALYZE for large dictionaries.")
         query.where(Arel.sql("_tinkick_key::text #{exclude ? "!~" : "~"} ?", value))
       when Array
         unless value.all? { |entry| entry.nil? || entry.is_a?(String) || entry.is_a?(Symbol) || entry.is_a?(Numeric) || entry.is_a?(Date) || entry.is_a?(Time) || entry == true || entry == false }
@@ -418,7 +418,7 @@ module Tinkick
       end
 
       if metric == :cardinality
-        @model.logger&.warn("Tinkick: cardinality uses exact SQL COUNT(DISTINCT), which can cost more than an approximate estimate for many distinct values.")
+        Tinkick.warn(@model, "Tinkick: cardinality uses exact SQL COUNT(DISTINCT), which can cost more than an approximate estimate for many distinct values.")
         expression = "COUNT(DISTINCT _tinkick_value)"
       else
         expression = "#{metric.to_s.upcase}(_tinkick_value)"
@@ -554,7 +554,7 @@ module Tinkick
         value = "#{table}.#{connection.quote_column_name(field)}"
         documents = scope.select(Arel.sql("#{identifier} AS _tinkick_document_id, #{value} AS _tinkick_value")).distinct
         if column.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::Column) && column.array?
-          @model.logger&.warn("Tinkick: array aggregations expand matching array values in PostgreSQL before calculating buckets or metrics. Use selective filters for frequent facets.")
+          Tinkick.warn(@model, "Tinkick: array aggregations expand matching array values in PostgreSQL before calculating buckets or metrics. Use selective filters for frequent facets.")
           join = "LATERAL unnest(tinkick_documents._tinkick_value) AS tinkick_elements(value)"
           elements = if missing.nil?
             @unscoped.from(documents, :tinkick_documents).joins(Arel.sql("CROSS JOIN #{join}"))
