@@ -3,4 +3,5 @@
 Rails.application.routes.draw do
   root "characters#index"
   resources :characters, only: :index
+  get "catalog", to: "catalog#index"
 end
