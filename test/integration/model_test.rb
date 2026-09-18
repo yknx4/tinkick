@@ -153,10 +153,9 @@ class ModelTest < TinkickIntegrationTest
     end
   end
 
-  def test_search_called_on_an_active_record_relation_is_rejected
+  def test_search_called_on_an_active_record_relation_preserves_its_scope
     model = search_model(searchable: [:name])
-    error = assert_raises(Tinkick::Error) { model.where(name: "Red Apple").search("apple", misspellings: false) }
-    assert_equal("search must be called on model, not relation", error.message)
+    assert_empty model.where(name: "Green Pear").tinkick_search("apple", misspellings: false)
   end
 
   def test_declaration_rejects_unknown_options_and_duplicate_registration

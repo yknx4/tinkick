@@ -14,10 +14,11 @@ module Tinkick
   class Query
     attr_reader :model, :limit, :after, :took
 
-    def initialize(model, term, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil)
+    def initialize(model, term, base_scope: model.all, fields:, where: {}, order: nil, limit: 10_000, offset: nil, operator: "and", match: :word, misspellings: false, countless: false, keyset: false, after: nil, aggs: nil, smart_aggs: true, exclude: nil, boost_by: nil, boost_where: nil, boost: nil, boost_by_recency: nil, conversions: nil, conversions_v2: nil, conversions_term: nil)
       raise ArgumentError, "fields must contain at least one column" if fields.empty?
 
       @model = model
+      @base_scope = base_scope.spawn
       @boost_by = BoostBy.new(model, boost_by, boost_where: boost_where, boost: boost, boost_by_recency: boost_by_recency)
       @term = term.to_s
       @conversions = normalize_conversions(conversions, conversions_v2, conversions_term)
@@ -63,6 +64,10 @@ module Tinkick
 
     def records
       @records ||= measure_page { trim_page(record_scope.to_a) }
+    end
+
+    def to_relation
+      record_scope.limit(@limit)
     end
 
     def rows
@@ -358,7 +363,7 @@ module Tinkick
       @model.with_connection do |connection|
         fields = @fields.map { |name, mode, boost| [name, SearchField.new(@model, name, match: mode), mode, boost] } #: Array[[String, SearchField, Symbol, Float?]]
 
-        relation = Filter.new(@model).apply(@model.all, conditions)
+        relation = Filter.new(@model).apply(@base_scope, conditions)
         compiler = QueryText.new(connection)
         relation, excluded = excluding_scope(relation, fields, compiler)
         next relation if @term == "*"
@@ -478,7 +483,7 @@ module Tinkick
       end
       @scoring = "_tinkick_ranked.score"
       @mixed_matching = true
-      @model.all.with(_tinkick_matches: branches).joins(<<~SQL)
+      @base_scope.with(_tinkick_matches: branches).joins(<<~SQL)
         INNER JOIN (
           SELECT _tinkick_id, SUM(_tinkick_branch_score) AS score
           FROM _tinkick_matches GROUP BY _tinkick_id

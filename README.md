@@ -366,6 +366,25 @@ and reject mutation after loading. Repeated `where` calls combine constraints;
 `rewhere` replaces them. `order` appends sort terms; `reorder` replaces them.
 `clone` and `dup` produce independent, unloaded relations.
 
+### Active Record, SQL and Arel
+
+Start from an Active Record scope, or merge one into a search. Its filters apply
+to matching, typo fallback, counts and aggregations:
+
+```ruby
+search = Product.where("price >= ?", 10).tinkick_search("coffee")
+search = search.merge(Product.where(Product.arel_table[:in_stock].eq(true)))
+rows = search.to_relation.where("price < ?", 50).includes(:category)
+```
+
+`to_relation` returns a normal, lazy `ActiveRecord::Relation`, with the search
+score selected as `_tinkick_score`. It supports SQL/Arel, joins, CTEs and normal
+Active Record methods. Tinkick controls its initial projection, ordering and page;
+use `reselect`, `reorder` or `limit` on the native relation to replace them.
+For SQL grouping before pagination, use `.except(:limit, :offset, :order)`.
+Native relations return models; Tinkick's raw-result wrappers, highlighting and
+pagination metadata apply only when executing the Tinkick search itself.
+
 ### Ordering and projection
 
 The default is native relevance descending. Explicit ordering accepts real
@@ -1639,13 +1658,14 @@ terms/dictionaries, metrics, ranges, and histograms keep those STI restrictions.
 Searchkick's `inheritance:` and query `type` options are not implemented; these
 native model queries do not claim Elasticsearch document-type parity.
 
-Call search on the model, not an ActiveRecord relation or association:
+Use model filters or an Active Record scope:
 
 ```ruby
 Product.search("apple", where: { store_id: store.id })
+Product.where(store_id: store.id).tinkick_search("apple")
 ```
 
-`store.products.search(...)` and `Product.where(...).search(...)` are rejected.
+Use `tinkick_search` explicitly when Searchkick also owns the `search` alias.
 `includes` and `model_includes` preload real ActiveRecord associations only for
 the visible model results. Nested associations are supported. The extra probe
 row used by countless/keyset pagination is not preloaded.

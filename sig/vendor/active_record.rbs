@@ -1,5 +1,9 @@
 # Rails 8 interfaces missing from the collection's generated signatures.
 module ActiveRecord
+  class Relation
+    def with: (**Relation | Array[Relation] queries) -> Relation
+  end
+
   module Sanitization
     module ClassMethods
       def sanitize_sql_array: (Array[Tinkick::filter_scalar] ary) -> String

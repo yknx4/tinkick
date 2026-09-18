@@ -89,7 +89,6 @@ module Tinkick
       conversions = conversions_v1 unless conversions_v1.is_a?(Relation::DefaultValue)
       options = tinkick_options
       raise Error, "Declare tinkick on #{name} before calling tinkick_search" unless options
-      raise Error, "search must be called on model, not relation" if current_scope
 
       schema = tinkick_schema
       (options[:highlight] || []).each { |field| SearchField.new(self, field.to_s, match: :exact) }
@@ -101,7 +100,7 @@ module Tinkick
       declared = (options[:searchable] || []).reject { |field| selected_names.include?(field.to_s) }
       tinkick_validate_fields(schema, declared + selected, match)
 
-      Relation.new(self, term, fields: fields, misspellings: misspellings,
+      Relation.new(self, term, base_scope: all, fields: fields, misspellings: misspellings,
         where: where, order: order, limit: limit, offset: offset, page: page,
         per_page: per_page, padding: padding, match: match,
         operator: operator, load: load, total_entries: total_entries,
