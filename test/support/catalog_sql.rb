@@ -23,6 +23,21 @@ module CatalogSql
       .order(Arel.sql("_tinkick_score DESC, id ASC"))
   end
 
+  def collapse(relation)
+    Tinkick.warn(CatalogEntry, "Catalog edition grouping sorts matching rows before pagination; inspect EXPLAIN ANALYZE before rollout.")
+    editions = CatalogEntry.unscoped.with(ranked_entries: relation.except(:order))
+      .from("ranked_entries AS tinkick_test_catalog_entries").select("tinkick_test_catalog_entries.*", Arel.sql(<<~SQL))
+        MAX(_tinkick_score) OVER (PARTITION BY collection_id, group_key) AS group_score,
+        ROW_NUMBER() OVER (
+          PARTITION BY collection_id, group_key
+          ORDER BY has_extended_metadata DESC, _tinkick_score DESC, id ASC
+        ) AS edition_rank
+      SQL
+    CatalogEntry.unscoped.with(catalog_editions: editions).from("catalog_editions AS tinkick_test_catalog_entries")
+      .where(edition_rank: 1).reselect(*columns, "group_score AS _tinkick_score")
+      .order(Arel.sql("_tinkick_score DESC, id ASC"))
+  end
+
   def columns
     CatalogEntry.column_names.map { |name| "tinkick_test_catalog_entries.#{CatalogEntry.connection.quote_column_name(name)}" }
   end
