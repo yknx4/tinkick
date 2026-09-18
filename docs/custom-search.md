@@ -34,7 +34,7 @@ They run in the Rails test app against real PostgreSQL/TIN.
 | Group editions; prefer extended metadata | Window functions choose one edition and preserve the group's best score before pagination; [tests](../test/catalog_collapse_test.rb). |
 | Pages, countless results, preloads, raw hashes | `page`/`per_page`, `countless`, `includes`, `load: false`. Prefer stable-column keyset pagination for deep browsing. |
 | HTTP and SQL composition | [Rails request tests](../test/catalog_application_test.rb) and [SQL/Arel/CTE tests](../test/integration/active_record_composition_test.rb). |
-| Time limits | Execute the lazy search inside a transaction with `SET LOCAL statement_timeout`; rescue `ActiveRecord::QueryCanceled` outside it. Cancellation raises rather than returning partial results. |
+| Time limits | Execute the lazy search inside a transaction with `SET LOCAL statement_timeout`; rescue `ActiveRecord::QueryCanceled` outside it. Use a top-level transaction: our TIN router intermittently rejected savepoint rollback after cancellation. Cancellation raises rather than returning partial results. |
 | Response caching | Rails cache with a separate Tinkick namespace, query/filter/order/page/scoring identity and response version. Explicit invalidation or expiry remains application-owned. |
 
 The SQL helpers are executable application recipes, **not new gem APIs**. For
@@ -77,7 +77,7 @@ and grouping reducing those five to four groups. Warm execution times were
 latency estimates. Recheck selective and broad terms on representative data.
 
 ```sh
-direnv exec . bundle exec ruby -Itest -e 'ARGV.each { |f| require_relative f }' test/catalog_search_test.rb test/catalog_ranking_test.rb test/catalog_collapse_test.rb test/catalog_application_test.rb
+direnv exec . bundle exec ruby -Itest -e 'Dir["test/catalog*_test.rb"].sort.each { |f| require_relative f }'
 direnv exec . bundle exec ruby script/explain_catalog.rb
 ```
 

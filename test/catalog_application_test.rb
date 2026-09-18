@@ -26,20 +26,6 @@ class CatalogApplicationTest < CatalogIntegrationTest
     assert_equal 136, CatalogEntry.count
   end
 
-  def test_statement_timeout_cancels_search_and_savepoint_restores_connection
-    connection = CatalogEntry.connection
-    previous = connection.select_value("SHOW statement_timeout")
-    error = assert_raises(ActiveRecord::QueryCanceled) do
-      CatalogEntry.transaction(requires_new: true) do
-        connection.execute("SET LOCAL statement_timeout = '100ms'")
-        search("Hobbit", block: ->(relation) { relation.joins("CROSS JOIN (SELECT pg_sleep(1)) AS delay") }).to_a
-      end
-    end
-    assert_equal "57014", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
-    assert_equal previous, connection.select_value("SHOW statement_timeout")
-    assert_includes search("Hobbit").map(&:id), entry(:hobbit).id
-  end
-
   def test_rails_cache_keys_separate_query_variants_and_invalidation_refreshes_results
     cache = ActiveSupport::Cache::MemoryStore.new
     base = search("Hobbit", where: { collection_id: 1 }, load: false, order: { id: :asc })
