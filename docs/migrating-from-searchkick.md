@@ -87,10 +87,11 @@ to disable Tinkick's warnings. This does not suppress errors or application logs
 TIN's native ranking is preferred over matching Elasticsearch's scores and tie
 ordering exactly. Single-field lexical queries use `tin.score` and dense-term
 elision; default relevance ordering without an offset preserves the tested top-k
-path. Multi-field lexical queries use `tin.full_score` to avoid an observed
-endpoint regression that dropped matching rows. This fallback logs its extra
-scoring and sorting cost. See the [regression evidence](tin-api.md#multi-field-scoring-regression-and-fallback)
-and [executed query plans](query-plans.md).
+path. Multi-field lexical queries also use native `tin.score` with TINQL field
+boosts; multi-index plans may still sort and emit a cost warning. The earlier
+missing-row observation no longer reproduces in current regression checks, so
+the full-scoring workaround was removed. See the [historical evidence](tin-api.md#multi-field-scoring-regression-and-fallback)
+and [current executed query plans](query-plans.md#multi-column-recheck).
 
 Applications that require a deterministic tie order can request explicit sorting,
 which may require a sort over matching rows. Supported features with known slow

@@ -31,7 +31,7 @@ Baseline: Searchkick 6.1.2 / commit93e901a75b11a25101668a616e006b158251b16e, cur
 
 - Documented native stemming/language-analysis absence is the currently evidenced search capability difference; the model raises a migration-oriented NotImplementedError. Persisted normalized columns or another explicitly designed SQL analysis path remain possible application strategies.
 - TIN normalization, dense-term scoring, native fuzzy expansion and tie order differ from Lucene. The user approved native default scores and extra typo eligibility. Do not call these unfinished score-parity work unless an explicit option requests stronger semantics.
-- Observed router helper-call shapes and the multi-field tin.score plan issue are verified restrictions with implemented SQL shapes/full-score workarounds, not missing whole feature families.
+- Observed router helper-call restrictions have implemented SQL alternatives. The historical multi-field tin.score issue no longer reproduces in current regression checks; native multi-column scoring is restored. See [current plan evidence](query-plans.md#multi-column-recheck).
 - External document import/reindex, synchronization callbacks/queues, Elasticsearch body/mappings/settings/HTTP transport, alias/index promotion, scroll IDs, and non-ActiveRecord/Mongoid backends are intentional exclusions or out-of-scope integrations. They must not masquerade as TIN limitations. Timers, SQL routing, and index inspection may still have useful adapter replacements.
 
 ## Deterministic completion criterion

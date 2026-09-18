@@ -38,7 +38,7 @@ class RailsAppTest < ActionDispatch::IntegrationTest
     row = response.parsed_body.fetch("characters").find { |entry| entry.fetch("id") == character.id }
     assert_equal character.name, row.fetch("name")
     assert_equal character.location, row.fetch("location")
-    assert statements.any? { |sql| sql.include?("==>") && sql.include?("tin.full_score(") }
+    assert statements.any? { |sql| sql.include?("==>") && sql.include?("tin.score(") }
   end
 
   def test_filters_and_page_limits_apply_through_the_controller

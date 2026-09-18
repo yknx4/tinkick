@@ -237,11 +237,11 @@ returned no rows, with or without an explicit order. Selecting
 with the `Stripe Solve` strategy. This is an observed regression in this query
 shape and endpoint state, not evidence that TIN lacks multi-field search.
 
-Tinkick therefore uses full scoring for multi-field lexical searches and warns
-about full-scoring and sorting costs. Single-field queries keep native
-`tin.score`; default relevance ordering without an offset preserves the tested
-top-k path. A stored/generated combined column with one TIN
-index is the recommended option when its matching semantics fit the application.
-The varied-corpus tests exercise a positive multi-field query and exclude terms
-split between fields; they do not weaken matching assertions to accommodate this
-endpoint behavior.
+This initially led to a full-scoring workaround. A later real-endpoint recheck
+on 2026-09-17 did not reproduce the dropped rows with `tin.score`, including
+multi-index OR/AND queries, dense terms and explicit column ordering. The
+regression suite now checks native multi-column scoring, additive decimal boosts,
+matching/count consistency, highlights and Rails HTTP results. Tinkick uses
+native `tin.score` again; the multi-index sorting warning remains. This preserves
+the original observation as history rather than treating it as a permanent TIN
+limitation. See [current plan evidence](query-plans.md#multi-column-recheck).

@@ -396,7 +396,7 @@ module Tinkick
         elsif native.empty?
           matching_scope(relation, exact)
         elsif exact.empty?
-          @scoring = native.length > 1 ? "tin.full_score(#{quoted_table}.ctid)" : "tin.score(#{quoted_table}.ctid)"
+          @scoring = "tin.score(#{quoted_table}.ctid)"
           matching_scope(relation, native)
         else
           mixed_scope(relation, native, exact)
@@ -501,7 +501,7 @@ module Tinkick
         Tinkick.warn(@model, "Tinkick: offset pagination can bypass TIN's native top-k path and sort matching rows. Consider keyset pagination on stable indexed columns to avoid large offsets. Countless pagination avoids automatic counts but does not remove offset costs.")
       end
       if @fields.length > 1 && score != "1.0" && !@mixed_matching
-        Tinkick.warn(@model, "Tinkick: ranking across multiple fields uses full scoring to preserve matching rows and can sort matches instead of using TIN's native top-k path. Consider a stored or generated combined text column with one TIN index when ranking performance matters.")
+        Tinkick.warn(@model, "Tinkick: ranking across multiple fields combines TIN indexes and can require an additional sort. Inspect EXPLAIN ANALYZE for your workload. Consider a stored or generated combined text column with one TIN index when ranking performance matters.")
       end
       order = @order
       ordering = if keyset?
