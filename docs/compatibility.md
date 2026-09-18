@@ -46,7 +46,8 @@ and [query.rb](https://github.com/ankane/searchkick/blob/93e901a75b11a25101668a6
 | Bang modifiers, `loaded?`, `load`, `first`, `pluck`, Enumerable | Match lazy execution, mutation after loading, and projection semantics. |
 | `includes`, `model_includes`, `scope_results` | Load only the selected page; preserve ranking through association loading. |
 | `models`, `index_name`, `indices_boost` | Later cross-model/tenant work; do not conflate a SQL table with an Elasticsearch alias. |
-| `body`, `body_options`, body-mutating block, `request_params`, `routing`, `scroll`, `type` | Raw backend DSL/transport features excluded or require an explicitly documented replacement. |
+| `block:` / Ruby block | Receives the scored Active Record relation before pagination; return a relation for the same model. Counts and typo thresholds include its changes. |
+| `body`, `body_options`, `request_params`, `routing`, `scroll`, `type` | Raw backend DSL/transport excluded; use the relation hook and [SQL recipes](custom-search.md). |
 
 Source-level defaults to capture in tests: `search` defaults to `"*"`; terms
 become strings; operator is AND; misspellings are enabled; prefix length is zero;

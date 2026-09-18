@@ -368,6 +368,8 @@ and reject mutation after loading. Repeated `where` calls combine constraints;
 
 ### Active Record, SQL and Arel
 
+For tested custom ranking and grouping recipes, see [Custom search](docs/custom-search.md).
+
 Start from an Active Record scope, or merge one into a search. Its filters apply
 to matching, typo fallback, counts and aggregations:
 
@@ -2057,7 +2059,7 @@ It also accepts `conversions`/`conversions_v1`, `conversions_v2`, and
 The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
 `per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
 `countless`, `keyset`, `after`, `aggs`, `smart_aggs`, `includes`,
-`model_includes`, `scope_results`, `exclude`, `select`, `highlight`,
+`model_includes`, `scope_results`, `block`, `exclude`, `select`, `highlight`,
 `conversions`, `conversions_v1`, `conversions_v2`, and `conversions_term`.
 Use the detailed sections above for their limits.
 Unknown keywords or methods are not compatibility no-ops.
@@ -2093,7 +2095,7 @@ The following reference maps less common upstream options to their current statu
 | `scope_results` | Available; filters the ranked page with an extra query and warning. |
 | `select`, source filtering, `reselect` | Available for top-level columns and nested JSON source filtering; model loading remains complete. |
 | `only`, `except` | Available for query-option selection/removal; these do not select model columns. |
-| `body`, `body_options`, query-mutating blocks | Excluded Elasticsearch DSL; use reviewed native SQL. |
+| `body`, `body_options`, body-mutating blocks | Elasticsearch DSL is excluded. Use `block:` or a Ruby block to transform the Active Record relation with SQL/Arel. |
 | `search_index`/`searchkick_index` inspection | Not implemented; use PostgreSQL catalogs and TIN helpers. |
 | Index refresh, clean/promote/store/remove, queue inspection | Excluded external-index lifecycle. |
 | Global search | Available with an explicit `model:`; preserves generic search-method ownership. |
