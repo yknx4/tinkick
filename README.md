@@ -293,7 +293,7 @@ Product.search("apple", fields: [:name]).fields(:description)
 
 The fluent `fields` method **appends** fields. Use the keyword form to replace the
 model's defaults. Per-field match hashes and dotted JSONB scalar paths are
-available. Boosted names such as `"name^5"` remain implementation work.
+available. Boosted names such as `"name^5"` weight that field's native relevance.
 
 `fields: ["*"]` searches declared `searchable` fields, or eligible text columns
 when none are declared. Leading `*.` patterns also expand known dotted paths:
@@ -303,6 +303,49 @@ mode; exact-mode `"*"` and patterns such as `"na*"` remain literal field names,
 matching Searchkick's field handling. An unmatched pattern has no lexical hits.
 Per-field misspelling restrictions must use the original selector, for example
 `fields: ["*"], misspellings: {fields: ["*"]}`.
+
+### Search across columns
+
+Index each searched column separately, then pass them in `fields`:
+
+```ruby
+# Migration: one TIN index per text column
+add_index :products, :name, using: :tin
+add_index :products, :description, using: :tin
+
+# Search: a name match contributes 1.5 times its unboosted relevance
+products = Product.tinkick_search("fuji apple",
+  fields: ["name^1.5", :description], misspellings: false,
+  where: { in_stock: true }, highlight: true, limit: 20, countless: true)
+products.with_score.each { |product, score| puts [product.name, score].inspect }
+products.highlights
+```
+
+The generated SQL combines one `==>` predicate per field with `OR`. A row
+matching either field qualifies, a row matching both appears once, and native
+`tin.score` adds the matching fields' relevance. Field weights use TINQL `^N`;
+zero keeps matches while removing that field's score contribution. Boosts from
+0 through 10000 stay native. See [boosting](#boosting-conversions-and-personalization)
+for larger factors and SQL ranking costs.
+
+The default `operator: "and"` requires all words in at least one selected field.
+It does not split required words across fields. Use a stored/generated combined
+column for that behavior, or `operator: "or"` if any query word is sufficient.
+Phrases likewise stay within a field. Filters, explicit `total_count`, highlights,
+countless pages, and column-based keyset cursors work with multiple fields.
+
+PlanetScale also shows **different queries required in different columns**.
+For that SQL `AND` shape, use ordinary Active Record with bound native TINQL:
+
+```ruby
+Product.where("name ==> ? AND description ==> ?", "fuji^1.5", "citrus")
+  .select("products.*, tin.score(products.ctid) AS relevance")
+  .order(Arel.sql("relevance DESC")).limit(20)
+```
+
+This is native TINQL; `tinkick_search` continues to treat search text literally.
+See [PlanetScale's multi-column guide](https://planetscale.com/docs/postgres/search/get-started#search-across-columns)
+and our [executed multi-column checks](docs/query-plans.md#multi-column-recheck).
 
 ### Laziness and modifiers
 
@@ -1809,12 +1852,13 @@ inspect native top-k plans. TIN's dense-term elision can give common words zero
 score without removing matches. Scores and ties will differ from Elasticsearch;
 inspect relevance on representative documents rather than asserting exact numbers.
 
-**Multi-field compatibility cost:** on the tested TIN 1.0.2 endpoint, a particular
-multi-index plan returned no scored rows despite a positive match count. Tinkick
-uses full scoring for multi-field retrieval to preserve those matches, and logs
-its extra scoring/sort cost. This is an observed endpoint/plan issue, not a claim
-that TIN lacks multi-field search. A stored or generated combined column can
-provide a single-index path if its matching semantics fit the application.
+**Multi-field cost:** Tinkick uses native `tin.score` to combine field relevance.
+The current multi-index plans can still include an extra sort, so Tinkick logs
+that potential cost. A historical missing-row observation led to a full-scoring
+workaround; current real-TIN regression checks no longer reproduce it, so that
+workaround has been removed. See the [multi-column recheck](docs/query-plans.md#multi-column-recheck).
+A stored or generated combined column can provide a single-index path if its
+matching semantics fit the application.
 
 Explicit boosts, full scoring, custom SQL ranking, multiple fields, and offset
 pagination can cost more than the native single-field top-k shape. Log warnings

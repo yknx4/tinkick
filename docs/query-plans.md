@@ -125,19 +125,73 @@ Countless avoids automatic counts; it does not remove the cost of a requested
 offset. Existing page/offset calls keep their behavior and receive actionable
 warnings on potentially expensive ranked paths.
 
-### Multiple fields require a documented fallback
+### Historical multi-column full-scoring plan
 
 The captured two-field query combines a title scan with a body scan and sorts
 by `tin.full_score`. The body scan finds the expected one record, and the title
-scan finds none. The separate
+scan finds none. This is the original captured plan, not the current default.
+The separate
 [multi-field regression record](tin-api.md#multi-field-scoring-regression-and-fallback)
-explains why this endpoint requires full scoring to avoid dropping matches.
+records why that workaround was introduced. The recheck below supersedes it.
 
-Full scoring and sorting can cost more on larger corpora. Tinkick warns when
-using this path. A combined persisted/generated text column with one TIN index
+Full scoring and sorting can cost more on larger corpora. A combined
+persisted/generated text column with one TIN index
 can preserve single-field top-k when that datasource suits the application.
 Combining columns also allows query terms to span the original columns, so it
 changes the matching boundary and should be an intentional model design.
+
+### Multi-column recheck
+
+Captured **2026-09-18 at 04:11 UTC** (September 17 locally), PostgreSQL 18.6,
+TIN 1.0.2. The [new artifact](benchmarks/2026-09-17-multi-column-plans.json)
+contains complete SQL, results, binds and text-format `EXPLAIN (ANALYZE, BUFFERS)`
+plans. Reproduce after loading the existing test fixtures:
+
+```sh
+direnv exec . bundle exec ruby script/explain_multi_column.rb
+```
+
+| Native shape | Matching rows / returned rows | Observed strategy | Execution ms |
+| --- | --- | --- | ---: |
+| Title `(Moria AND Balrog)^1.5` OR body `Moria AND Balrog` | 1 / 1 | Global Top-K plus sort | 1.327 |
+| Title `Moria^1.5` AND body `Balrog` | 1 / 1 | Sparse Drive plus sort | 0.738 |
+| Name OR description `apple OR ripe` | 2 / 2, including one score of zero | Stripe Solve plus sort | 0.930 |
+| Tinkick `fields: ["title^1.5", :body]`, `Moria Balrog` | 1 / 1 | Global Top-K plus sort | 1.306 |
+
+All use `tin.score`. The matching-row baseline comes from the same unscored
+predicate. Repeating the direct SQL shapes with `tin.full_score` preserved row
+membership; it changed scores for the dense-term example. Additional live checks
+with no ordering, column ordering and all-zero dense-term scores also kept matches.
+The earlier dropped-row observation did not recur. Tinkick therefore returns to
+native multi-column scoring, with its dense-term optimization, rather than
+unconditionally scoring every term. Mixed SQL/native ranking and large SQL
+weights retain their separate full-scoring branches.
+
+These small, warm-cache timings do **not** establish a speedup. Multi-column
+plans still included a sort, even when their TIN strategy was Global Top-K; the
+configurable cost warning remains. Single-column search keeps its existing
+sort-free top-k checks.
+
+The new [multi-column tests](../test/multi_column_search_test.rb) add three
+controlled documents to the 268-document Tolkien corpus. They verify title-only,
+body-only and both-column hits, no duplicate records/counts, additive `1.5`
+boosts, the both-column top result, filters, per-column highlights, and cursor
+traversal. Existing boost tests also verify ranking reversal, zero weights,
+wildcards, per-field modes and native limits. The focused native-TIN run passed
+**83 tests / 426 assertions**, including actual Rails HTTP requests, JSONB search
+and highlighting. After splitting ranking assertions from portable membership
+checks, the five multi-column tests passed again on real TIN (25 assertions).
+The updated focused suite also passed locally on Lead: 84 tests, 383 assertions,
+12 documented skips, including the two newly reproduced multi-column ranking
+failures. See [Lead exclusions](lead-ci.md#temporary-lead-exclusions).
+Run the focused suite with:
+
+```sh
+direnv exec . bundle exec ruby -Itest -e 'ARGV.each { |path| require_relative path }; ARGV.replace(["--fail-fast"])' \
+  test/relevance_test.rb test/field_boost_test.rb test/integration/query_test.rb \
+  test/multi_column_search_test.rb test/rails_app_test.rb test/integration/warnings_test.rb \
+  test/integration/json_search_test.rb test/integration/public_highlight_test.rb
+```
 
 ## Actual Rails response
 
