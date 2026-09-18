@@ -106,10 +106,10 @@ class JsonSearchTest < TinkickIntegrationTest
     end
   end
 
-  def test_search_data_still_validates_physical_columns_on_a_new_instance
+  def test_tinkick_search_data_still_validates_physical_columns_on_a_new_instance
     invalid = Class.new(SearchProduct) do
       tinkick searchable: ["metadata.title"]
-      def search_data
+      def tinkick_search_data
         { "metadata.title" => nil }
       end
     end
@@ -117,7 +117,7 @@ class JsonSearchTest < TinkickIntegrationTest
     tinkick_test_products(:red_apple).update!(metadata: { title: "Orchard" })
     valid = Class.new(SearchProduct) do
       tinkick searchable: ["metadata.title"]
-      def search_data
+      def tinkick_search_data
         { metadata: metadata }
       end
     end

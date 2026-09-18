@@ -13,12 +13,20 @@ class ModelTest < TinkickIntegrationTest
   end
 
   class SearchkickFirstProduct < SearchProduct
+    def search_data
+      { computed_name: name.upcase }
+    end
+
     searchkick(searchable: [:name], callbacks: false)
     extend Tinkick::Model
     tinkick(searchable: [:name])
   end
 
   class TinkickFirstProduct < SearchProduct
+    def search_data
+      { computed_name: name.upcase }
+    end
+
     extend Tinkick::Model
     tinkick(searchable: [:name])
     searchkick(searchable: [:name], callbacks: false)
@@ -84,6 +92,50 @@ class ModelTest < TinkickIntegrationTest
     end
   end
 
+  def test_prefixed_schema_hook_takes_precedence_over_searchkick_data
+    model = search_model do
+      define_method(:search_data) { { computed_name: name.upcase } }
+      define_method(:tinkick_search_data) { { name: name } }
+    end
+
+    assert_equal(["Red Apple"], model.tinkick_search("apple", misspellings: false).map(&:name))
+    assert_equal(["name"], model.send(:tinkick_schema)[:data_fields])
+  end
+
+  def test_legacy_hook_depends_on_bundle_membership_not_searchkick_load_order
+    [true, false].each do |bundled|
+      script = <<~RUBY
+        require "active_record"
+        require "tinkick"
+        abort "Unexpected Searchkick load" if defined?(Searchkick)
+        abort "Unexpected bundle" unless Gem.loaded_specs.key?("searchkick") == #{bundled}
+        ActiveRecord::Base.establish_connection(adapter: "postgresql", database: "tinkick_test")
+        abort "Wrong database" unless ActiveRecord::Base.connection.select_value("SELECT current_database()") == "tinkick_test"
+        class HookProduct < ActiveRecord::Base
+          self.table_name = "tinkick_test_products"
+          tinkick searchable: [:name]
+          def search_data
+            { name: name }
+          end
+        end
+        expected = #{bundled} ? HookProduct.column_names : ["name"]
+        abort "Wrong schema hook" unless HookProduct.send(:tinkick_schema)[:data_fields] == expected
+        class HookProduct
+          def tinkick_search_data
+            { description: description }
+          end
+        end
+        HookProduct.reset_column_information
+        abort "Prefixed hook ignored" unless HookProduct.send(:tinkick_schema)[:data_fields] == ["description"]
+      RUBY
+      # CI installs gems under Bundler's cached path, outside RubyGems' default paths.
+      gem_paths = Gem.loaded_specs.values.map(&:base_dir).uniq.join(File::PATH_SEPARATOR)
+      run = -> { Open3.capture2e({ "GEM_PATH" => gem_paths }, RbConfig.ruby, "-Ilib", "-e", script) }
+      output, status = bundled ? run.call : Bundler.with_unbundled_env(&run)
+      assert_predicate(status, :success?, output)
+    end
+  end
+
   def test_subclasses_inherit_registration
     parent = search_model(searchable: [:name])
     child = Class.new(parent)
@@ -97,6 +149,7 @@ class ModelTest < TinkickIntegrationTest
       assert_instance_of(Searchkick::Relation, model.search("apple"))
       assert_instance_of(Searchkick::Relation, model.searchkick_search("apple"))
       assert_equal(["Red Apple"], model.tinkick_search("apple", misspellings: false).map(&:name))
+      assert_equal({ computed_name: "RED APPLE" }, model.find_by!(name: "Red Apple").search_data)
     end
   end
 
@@ -139,9 +192,9 @@ class ModelTest < TinkickIntegrationTest
     assert_equal(["Red Apple"], model.search("apple red", match: :word, misspellings: false).map(&:name))
   end
 
-  def test_search_data_validates_symbol_and_string_keys_without_serializing_values
+  def test_tinkick_search_data_validates_symbol_and_string_keys_without_serializing_values
     model = search_model do
-      define_method(:search_data) do
+      define_method(:tinkick_search_data) do
         { id: id, name: "a value that is never written", "description" => "also ignored" }
       end
     end
@@ -158,18 +211,18 @@ class ModelTest < TinkickIntegrationTest
     assert_empty(model.search("orchards", misspellings: false))
   end
 
-  def test_search_data_works_for_an_empty_table
+  def test_tinkick_search_data_works_for_an_empty_table
     SearchProduct.delete_all
     model = search_model do
-      define_method(:search_data) { { name: name } }
+      define_method(:tinkick_search_data) { { name: name } }
     end
 
     assert_empty(model.search("apple", misspellings: false))
   end
 
-  def test_missing_search_data_fields_explain_required_migrations
+  def test_missing_tinkick_search_data_fields_explain_required_migrations
     model = search_model(searchable: [:name]) do
-      define_method(:search_data) { { name: name, missing_computed_name: "computed", other_missing_field: nil } }
+      define_method(:tinkick_search_data) { { name: name, missing_computed_name: "computed", other_missing_field: nil } }
     end
 
     error = assert_raises(Tinkick::MissingFieldError) { model.search("apple", misspellings: false) }
@@ -180,42 +233,42 @@ class ModelTest < TinkickIntegrationTest
     assert_match(/not persisted/, error.message)
   end
 
-  def test_generated_column_is_used_instead_of_ruby_search_data_value
+  def test_generated_column_is_used_instead_of_ruby_tinkick_search_data_value
     model = search_model do
-      define_method(:search_data) { { display_name: "ignored Ruby value" } }
+      define_method(:tinkick_search_data) { { display_name: "ignored Ruby value" } }
     end
 
     assert_equal(["Red Apple"], model.search("apple orchard", misspellings: false).map(&:name))
     assert_empty(model.search("ignored Ruby", misspellings: false))
   end
 
-  def test_search_data_requiring_persisted_values_fails_clearly
+  def test_tinkick_search_data_requiring_persisted_values_fails_clearly
     model = search_model do
-      define_method(:search_data) { { name: name.upcase } }
+      define_method(:tinkick_search_data) { { name: name.upcase } }
     end
 
     error = assert_raises(Tinkick::Error) { model.search("apple", misspellings: false) }
-    assert_match(/search_data.*new instance/, error.message)
+    assert_match(/tinkick_search_data.*new instance/, error.message)
     assert_match(/persisted or generated columns/, error.message)
   end
 
-  def test_search_data_requiring_an_association_fails_clearly
+  def test_tinkick_search_data_requiring_an_association_fails_clearly
     model = search_model do
       belongs_to :linked_product, class_name: "SearchProduct", foreign_key: :id, optional: true
-      define_method(:search_data) { { name: linked_product.name } }
+      define_method(:tinkick_search_data) { { name: linked_product.name } }
     end
 
     error = assert_raises(Tinkick::Error) { model.search("apple", misspellings: false) }
-    assert_match(/search_data.*new instance/, error.message)
+    assert_match(/tinkick_search_data.*new instance/, error.message)
   end
 
-  def test_search_data_must_return_a_hash
+  def test_tinkick_search_data_must_return_a_hash
     model = search_model do
-      define_method(:search_data) { nil }
+      define_method(:tinkick_search_data) { nil }
     end
 
     error = assert_raises(Tinkick::Error) { model.search("apple", misspellings: false) }
-    assert_match(/search_data must return a Hash/, error.message)
+    assert_match(/tinkick_search_data must return a Hash/, error.message)
   end
 
   def test_query_fields_must_exist_and_have_searchable_types
@@ -229,7 +282,7 @@ class ModelTest < TinkickIntegrationTest
   def test_validation_is_cached_until_active_record_schema_refresh
     model = search_model(searchable: [:name]) do
       class_attribute :validated_records, default: []
-      define_method(:search_data) do
+      define_method(:tinkick_search_data) do
         self.class.validated_records << new_record?
         { name: name }
       end

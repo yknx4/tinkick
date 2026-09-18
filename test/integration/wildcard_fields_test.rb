@@ -27,10 +27,10 @@ class WildcardFieldsTest < TinkickIntegrationTest
     refute_same(original, expanded)
   end
 
-  def test_inferred_star_respects_search_data_column_keys
+  def test_inferred_star_respects_tinkick_search_data_column_keys
     model = Class.new(SearchProduct) do
       tinkick default_fields: [:name]
-      def search_data
+      def tinkick_search_data
         { name: name, description: description }
       end
     end

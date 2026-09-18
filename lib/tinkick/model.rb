@@ -264,7 +264,7 @@ module Tinkick
         data_fields = tinkick_data_fields(columns)
         missing = data_fields - columns.keys
         unless missing.empty?
-          raise MissingFieldError, "#{name} has no columns #{missing.join(", ")}; add persisted or generated columns with a Rails migration. Ruby search_data values are not persisted by Tinkick"
+          raise MissingFieldError, "#{name} has no columns #{missing.join(", ")}; add persisted or generated columns with a Rails migration. Ruby schema-check values are not persisted by Tinkick"
         end
 
         indexes = connection.select_all(Arel.sql(<<~SQL, table_name)).to_a
@@ -308,14 +308,19 @@ module Tinkick
 
     def tinkick_data_fields(columns)
       # @type self: singleton(ActiveRecord::Base)
-      return columns.keys unless method_defined?(:search_data)
+      hook = if method_defined?(:tinkick_search_data)
+        :tinkick_search_data
+      elsif !Gem.loaded_specs.key?("searchkick") && method_defined?(:search_data)
+        :search_data
+      end
+      return columns.keys unless hook
 
       begin
-        data = new.public_send(:search_data)
+        data = new.public_send(hook)
       rescue StandardError => error
-        raise Error, "#{name}#search_data must run safely on a new instance (#{error.class}). Move derived data to persisted or generated columns with Rails migrations and return their keys without requiring saved records or associations"
+        raise Error, "#{name}##{hook} must run safely on a new instance (#{error.class}). Move derived data to persisted or generated columns with Rails migrations and return their keys without requiring saved records or associations"
       end
-      raise Error, "#{name}#search_data must return a Hash of column names" unless data.is_a?(Hash)
+      raise Error, "#{name}##{hook} must return a Hash of column names" unless data.is_a?(Hash)
 
       data.keys.map(&:to_s)
     end

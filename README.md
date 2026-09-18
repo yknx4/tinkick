@@ -196,9 +196,9 @@ them when the old backend is no longer needed. See the
 
 ## Datasource and migrations
 
-### `search_data` is a schema check
+### `tinkick_search_data` is a schema check
 
-Tinkick calls `search_data` on a **new, unsaved model instance** and checks that
+Tinkick calls `tinkick_search_data` on a **new, unsaved model instance** and checks that
 its keys are column names. It never serializes the returned values or copies
 them to another index.
 
@@ -206,7 +206,7 @@ them to another index.
 class Product < ApplicationRecord
   tinkick searchable: [:display_name]
 
-  def search_data
+  def tinkick_search_data
     { display_name: self[:display_name], in_stock: self[:in_stock] }
   end
 end
@@ -216,7 +216,12 @@ Every key must exist, including fields used only for filtering. A value calculat
 by Ruby does not override its stored column. A missing column raises an error
 instructing you to add a migration. Methods that require a saved ID, an associated
 record, or existing rows must be changed to run safely on a new instance.
-Without `search_data`, the model's columns supply the field inventory.
+The prefixed hook always takes precedence. When Searchkick is in the application
+bundle (including `require: false`), Tinkick leaves `search_data` entirely to
+Searchkick. Keep that method for Elasticsearch and add `tinkick_search_data`
+only if you need Tinkick's explicit schema check; otherwise model columns supply
+the field inventory. With no Searchkick in the bundle, `search_data` remains a
+fallback when `tinkick_search_data` is absent.
 
 ### Computed fields and generated columns
 
@@ -1676,7 +1681,7 @@ missing paths, and JSON null do not match scalar text search. Exact and whole-fi
 SQL match modes do not require a TIN index. Updating JSONB updates its expression
 indexes within the same transaction.
 
-`search_data` continues to validate physical column names: return the `metadata`
+`tinkick_search_data` validates physical column names: return the `metadata`
 column key, not dotted virtual keys. Use persisted or generated text columns when
 you need custom normalization or a combined document. Flattened array-of-object
 filters do not preserve same-object correlation; use explicit `EXISTS`/joins or

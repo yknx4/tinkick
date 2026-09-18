@@ -33,7 +33,13 @@ Tinkick reads the model's PostgreSQL table. PostgreSQL maintains its TIN indexes
 as rows change. Once the old backend is retired, remove its data-import/reindex
 jobs; Tinkick needs no replacement synchronization pipeline.
 
-`search_data` validates field names on a new model instance against the model schema. It does not
+Use `tinkick_search_data` for Tinkick's optional schema check while leaving
+Searchkick's `search_data` unchanged. Tinkick ignores the legacy method whenever
+Searchkick is in the application bundle, even with `require: false`. Without
+Searchkick, `search_data` remains a fallback; the prefixed hook takes precedence
+in either configuration. With neither applicable hook, Tinkick uses model columns.
+
+`tinkick_search_data` validates field names on a new model instance against the model schema. It does not
 copy its returned values anywhere. If an existing method returns
 `{display_name: computed_name}`, the table must contain a `display_name` column
 whose persisted value is the desired searchable text. Missing columns must
@@ -75,6 +81,8 @@ database mechanism. The gem will not translate arbitrary Ruby methods into SQL.
 `load: false` keeps the hash-style result interface for older callers and logs
 a warning recommending migration to normal model results. Both modes execute
 through Active Record; do not treat it as a query-performance option.
+After accepting the tradeoffs, set `Tinkick.warnings = false` in an initializer
+to disable Tinkick's warnings. This does not suppress errors or application logs.
 
 TIN's native ranking is preferred over matching Elasticsearch's scores and tie
 ordering exactly. Single-field lexical queries use `tin.score` and dense-term

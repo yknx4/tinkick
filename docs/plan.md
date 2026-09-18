@@ -8,9 +8,11 @@
   Both gems must coexist during a transition; never alias the Searchkick constant.
 - Query the model's own PostgreSQL table. No document table, copied JSON
   datasource, importer, synchronization callbacks/jobs, or data reindexing.
-- Use `search_data` as a schema sanity check. Every declared field must exist
+- Use `tinkick_search_data` as a schema sanity check. Every declared field must exist
   in the model table; otherwise fail with the missing names and migration
-  guidance. Do not use the returned Ruby values as the search datasource.
+  guidance. Do not use the returned Ruby values as the search datasource. The
+  legacy `search_data` fallback applies only without Searchkick in the application
+  bundle; otherwise leave it to Searchkick. The prefixed hook always wins.
 - Computed search fields belong in application-owned persisted columns or
   PostgreSQL generated columns. Schema/index changes happen in migrations.
   Supply Rails migrations that consuming applications can import.
@@ -47,15 +49,15 @@ Add the Active Record integration and `tinkick` declaration using failing
 Minitest coverage first. Validate field existence/types, the PostgreSQL adapter,
 and required extension/index prerequisites with actionable errors. Keep model
 declaration usable during migration/bootstrap commands; perform schema checks
-at first use after migrations. Evaluate `search_data` on a new model instance;
+at first use after migrations. Evaluate `tinkick_search_data` on a new model instance;
 explain failures that require persisted records or associations.
 
-`search_data` validation tests must cover existing and missing columns, string
+`tinkick_search_data` validation tests must cover existing and missing columns, string
 and symbol keys, generated columns, an empty table, and a method requiring real
 association data. Never invent missing fields, read every record, or infer a
 stable schema from a random first row. Missing-field errors should name the
 model and columns, recommend the appropriate migrations, and explain that Ruby
-values returned by `search_data` are not persisted by Tinkick.
+values returned by `tinkick_search_data` are not persisted by Tinkick.
 
 Exit evidence: migration instructions resolve a failing validation case; schema
 refresh after a migration clears stale validation state; model reloads do not
@@ -127,7 +129,7 @@ be necessary operationally; Tinkick will not implement the latter as data copy.
 
 ## Settled decisions
 
-1. **Field schema:** validate `search_data` keys on a new instance, including an
+1. **Field schema:** validate `tinkick_search_data` keys on a new instance, including an
    empty table. The user approved this policy. Methods that cannot run on a new
    instance must raise migration/configuration guidance. Never sample a saved row.
 2. **Coexistence:** use distinct Tinkick names and preserve existing `search`
