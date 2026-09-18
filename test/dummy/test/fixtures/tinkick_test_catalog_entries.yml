@@ -1,0 +1,31 @@
+<%
+require "faker"
+previous_random = Faker::Config.random
+begin
+  Faker::Config.random = Random.new(314159)
+  entries = Array.new(128) do |index|
+    { key: "background_#{index}", id: index + 1,
+      title: ["Cooking seasonal vegetables", "Database backup handbook", "Walking holidays", "Regional poetry"].fetch(index % 4),
+      creator_name: Faker::Fantasy::Tolkien.character,
+      group_key: "background_#{index}", collection_id: index.even? ? 1 : 2 }
+  end
+ensure
+  Faker::Config.random = previous_random
+end
+entries += [
+  { key: "hobbit", id: 1001, title: "The Hobbit", creator_name: "J R R Tolkien", group_key: "hobbit", collection_id: 1, status: 2, approved_levels: [3, 4], has_verified_identifier: true, has_image: true, has_creator: true, popularity: 12 },
+  { key: "enriched", id: 1002, title: "The Hobbit illustrated edition", creator_name: "J R R Tolkien", normalized_title: "the hobbit", group_key: "hobbit", collection_id: 1, status: 1, pending_levels: [4], has_extended_metadata: true },
+  { key: "foreign", id: 1003, title: "The Hobbit", creator_name: "J R R Tolkien", group_key: "hobbit", collection_id: 2, status: 0, pending_levels: [3], has_extended_metadata: true, popularity: 100 },
+  { key: "guide", id: 1004, title: "The Hobbit reading guide", creator_name: "Bilbo Baggins", group_key: "guide", collection_id: 1, status: 3, rejected_levels: [4], has_image: true, popularity: 100000 },
+  { key: "unsafe", id: 1005, title: "The Hobbit parody", creator_name: "Orc chronicler", group_key: "parody", collection_id: 1, status: 0, restricted_content: true, pending_levels: [] },
+  { key: "age", id: 1006, title: "The Hobbit collectors catalogue", creator_name: "Archive keeper", group_key: "catalogue", collection_id: 1, status: 0, minimum_age: -1 },
+  { key: "unicode", id: 1007, title: "Le château de Númenor", creator_name: "Éowyn", group_key: "numenor", collection_id: 1, status: 2 },
+  { key: "alternate", id: 1008, title: "The Fellowship of the Ring La Communauté de l’Anneau", creator_name: "J R R Tolkien", normalized_title: "the fellowship of the ring", group_key: "fellowship", collection_id: 1, status: 2 },
+]
+%>
+<% entries.each do |entry| %>
+<%= entry.fetch(:key) %>:
+<% entry.except(:key).merge(normalized_title: entry.fetch(:normalized_title, entry.fetch(:title).downcase)).each do |key, value| %>
+  <%= key %>: <%= value.to_json %>
+<% end %>
+<% end %>
