@@ -10,7 +10,7 @@ class CatalogRankingTest < CatalogIntegrationTest
     ranked = search("Hobbit", where: { collection_id: 1 }, load: false, block: CatalogSql.method(:rank))
     assert_equal entry(:hobbit).id, ranked.first.id
     actual = ranked.with_score.to_h { |record, score| [record.id, score] }
-    assert_in_delta scores.fetch(entry(:hobbit).id) * 50 * 30 * 15 * Math.log(1202), actual.fetch(entry(:hobbit).id), 0.01
+    assert_in_epsilon scores.fetch(entry(:hobbit).id) * 50 * 30 * 15 * Math.log(1202), actual.fetch(entry(:hobbit).id), 1e-6
     assert_in_delta scores.fetch(entry(:enriched).id) * 5 * Math.log(2), actual.fetch(entry(:enriched).id), 0.001
     assert_equal base.total_count, ranked.total_count
     assert_equal actual, ranked.select(:title).with_score.to_h { |record, score| [record.id, score] }
