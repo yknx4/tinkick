@@ -1,0 +1,397 @@
+{
+  "captured_at": "2026-09-18T04:11:29Z",
+  "database": "tinkick_test",
+  "documents": 268,
+  "postgres": "18.6 (Debian 18.6-1.pgdg13+2)",
+  "tin": "1.0.2",
+  "command": "direnv exec . bundle exec ruby script/explain_multi_column.rb",
+  "method": "Read-only queries over existing fixtures. One warm EXPLAIN ANALYZE BUFFERS per shape; small-corpus observations, not a production benchmark. matching_ids comes from the same unscored predicate.",
+  "cases": [
+    {
+      "name": "document_or",
+      "scoring": "score",
+      "sql": "SELECT id, tin.score(ctid) AS score FROM tinkick_test_documents WHERE title ==> '(Moria AND Balrog)^1.5' OR body ==> 'Moria AND Balrog' ORDER BY score DESC LIMIT 10",
+      "matching_ids": [
+        1008
+      ],
+      "results": [
+        {
+          "id": 1008,
+          "score": 19.279022
+        }
+      ],
+      "explain": [
+        "Limit  (cost=24.70..24.71 rows=1 width=12) (actual time=0.059..0.061 rows=1.00 loops=1)",
+        "  Buffers: shared hit=72",
+        "  ->  Sort  (cost=24.70..24.71 rows=1 width=12) (actual time=0.058..0.059 rows=1.00 loops=1)",
+        "        Sort Key: (tin.score(ctid, '0.1'::real, NULL::real, NULL::real, NULL::text[], NULL::text[])) DESC",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=72",
+        "        ->  Custom Scan (Projector)  (cost=23.63..24.69 rows=1 width=12) (actual time=0.050..0.052 rows=1.00 loops=1)",
+        "              Buffers: shared hit=72",
+        "              ->  Custom Scan (Tin Multi-Index Scan) on tinkick_test_documents  (cost=23.63..23.63 rows=1 width=12) (actual time=0.045..0.046 rows=1.00 loops=1)",
+        "                    Indexes: index_tinkick_test_documents_on_title, index_tinkick_test_documents_on_body",
+        "                    Strategy: Global Top-K",
+        "                    Top K: 10",
+        "                    Probe 0: index_tinkick_test_documents_on_title: (AND(moria, balrog))^1.5",
+        "                    Probe 1: index_tinkick_test_documents_on_body: AND(moria, balrog)",
+        "                    Source Cursors: 1",
+        "                    Positive Probes: 2",
+        "                    Score Contributions: 2",
+        "                    Pages Solved: 1",
+        "                    Root Pages: 1",
+        "                    Root TIDs: 1",
+        "                    Root Documents Scored: 1",
+        "                    Heap Pages Probed: 1",
+        "                    Top-K Bound Checks: 2",
+        "                    Top-K Candidate Batches: 1",
+        "                    Top-K Candidate Pages Decoded: 0",
+        "                    Top-K Candidate TIDs: 1",
+        "                    Top-K Exact Candidates: 1",
+        "                    Top-K Exact Batches: 1",
+        "                    Top-K Exact Pages Decoded: 0",
+        "                    Top-K Threshold Updates: 0",
+        "                    Top-K Sources Pruned: 0",
+        "                    Page Read Touches: logical page touches: total=560 (~4.4 MiB); metadata=19, termmap=18, mutable=523",
+        "                    Buffers: shared hit=71",
+        "Planning:",
+        "  Buffers: shared hit=391",
+        "Planning Time: 1.219 ms",
+        "Execution Time: 1.327 ms"
+      ]
+    },
+    {
+      "name": "document_or",
+      "scoring": "full_score",
+      "sql": "SELECT id, tin.full_score(ctid) AS score FROM tinkick_test_documents WHERE title ==> '(Moria AND Balrog)^1.5' OR body ==> 'Moria AND Balrog' ORDER BY score DESC LIMIT 10",
+      "matching_ids": [
+        1008
+      ],
+      "results": [
+        {
+          "id": 1008,
+          "score": 19.279022
+        }
+      ],
+      "explain": [
+        "Limit  (cost=24.70..24.71 rows=1 width=12) (actual time=0.066..0.068 rows=1.00 loops=1)",
+        "  Buffers: shared hit=72",
+        "  ->  Sort  (cost=24.70..24.71 rows=1 width=12) (actual time=0.065..0.066 rows=1.00 loops=1)",
+        "        Sort Key: (tin.full_score(ctid)) DESC",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=72",
+        "        ->  Custom Scan (Projector)  (cost=23.63..24.69 rows=1 width=12) (actual time=0.057..0.059 rows=1.00 loops=1)",
+        "              Buffers: shared hit=72",
+        "              ->  Custom Scan (Tin Multi-Index Scan) on tinkick_test_documents  (cost=23.63..23.63 rows=1 width=12) (actual time=0.051..0.053 rows=1.00 loops=1)",
+        "                    Indexes: index_tinkick_test_documents_on_title, index_tinkick_test_documents_on_body",
+        "                    Strategy: Global Top-K",
+        "                    Top K: 10",
+        "                    Probe 0: index_tinkick_test_documents_on_title: (AND(moria, balrog))^1.5",
+        "                    Probe 1: index_tinkick_test_documents_on_body: AND(moria, balrog)",
+        "                    Source Cursors: 1",
+        "                    Positive Probes: 2",
+        "                    Score Contributions: 2",
+        "                    Pages Solved: 1",
+        "                    Root Pages: 1",
+        "                    Root TIDs: 1",
+        "                    Root Documents Scored: 1",
+        "                    Heap Pages Probed: 1",
+        "                    Top-K Bound Checks: 2",
+        "                    Top-K Candidate Batches: 1",
+        "                    Top-K Candidate Pages Decoded: 0",
+        "                    Top-K Candidate TIDs: 1",
+        "                    Top-K Exact Candidates: 1",
+        "                    Top-K Exact Batches: 1",
+        "                    Top-K Exact Pages Decoded: 0",
+        "                    Top-K Threshold Updates: 0",
+        "                    Top-K Sources Pruned: 0",
+        "                    Page Read Touches: logical page touches: total=560 (~4.4 MiB); metadata=19, termmap=18, mutable=523",
+        "                    Buffers: shared hit=71",
+        "Planning:",
+        "  Buffers: shared hit=391",
+        "Planning Time: 1.225 ms",
+        "Execution Time: 1.403 ms"
+      ]
+    },
+    {
+      "name": "document_and",
+      "scoring": "score",
+      "sql": "SELECT id, tin.score(ctid) AS score FROM tinkick_test_documents WHERE title ==> 'Moria^1.5' AND body ==> 'Balrog' ORDER BY score DESC LIMIT 10",
+      "matching_ids": [
+        1009
+      ],
+      "results": [
+        {
+          "id": 1009,
+          "score": 21.93864
+        }
+      ],
+      "explain": [
+        "Limit  (cost=21.59..21.60 rows=1 width=12) (actual time=0.285..0.287 rows=1.00 loops=1)",
+        "  Buffers: shared hit=187",
+        "  ->  Sort  (cost=21.59..21.60 rows=1 width=12) (actual time=0.283..0.285 rows=1.00 loops=1)",
+        "        Sort Key: (tin.score(ctid, '0.1'::real, NULL::real, NULL::real, NULL::text[], NULL::text[])) DESC",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=187",
+        "        ->  Custom Scan (Projector)  (cost=20.52..21.58 rows=1 width=12) (actual time=0.275..0.277 rows=1.00 loops=1)",
+        "              Buffers: shared hit=187",
+        "              ->  Custom Scan (Tin Multi-Index Scan) on tinkick_test_documents  (cost=20.52..20.52 rows=1 width=12) (actual time=0.267..0.269 rows=1.00 loops=1)",
+        "                    Indexes: index_tinkick_test_documents_on_title, index_tinkick_test_documents_on_body",
+        "                    Strategy: Sparse Drive (Probe 1)",
+        "                    Probe 0: index_tinkick_test_documents_on_title: moria^1.5",
+        "                    Probe 1: index_tinkick_test_documents_on_body: balrog",
+        "                    Source Cursors: 2",
+        "                    Positive Probes: 2",
+        "                    Score Contributions: 2",
+        "                    Coverage Windows: 9",
+        "                    Coverage Windows Rejected: 8",
+        "                    Posting Pages Decoded: 4",
+        "                    Posting Pages Unioned: 3",
+        "                    Sparse Targets: 2",
+        "                    Stripes Solved: 0",
+        "                    Stripe Candidate Pages: 0",
+        "                    Stripe Exact Root Pages: 0",
+        "                    Exact Score Batches: 1",
+        "                    Exact Score Candidates: 1",
+        "                    Exact Score Immutable Pages Decoded: 0",
+        "                    Pages Solved: 2",
+        "                    Root Pages: 1",
+        "                    Root TIDs: 1",
+        "                    Root Documents Scored: 1",
+        "                    Heap Pages Probed: 0",
+        "                    Page Read Touches: logical page touches: total=497 (~3.9 MiB); metadata=19, termmap=15, postings_footer=6, liveness=6, mutable=451",
+        "                    Buffers: shared hit=186",
+        "Planning:",
+        "  Buffers: shared hit=241",
+        "Planning Time: 0.987 ms",
+        "Execution Time: 0.738 ms"
+      ]
+    },
+    {
+      "name": "document_and",
+      "scoring": "full_score",
+      "sql": "SELECT id, tin.full_score(ctid) AS score FROM tinkick_test_documents WHERE title ==> 'Moria^1.5' AND body ==> 'Balrog' ORDER BY score DESC LIMIT 10",
+      "matching_ids": [
+        1009
+      ],
+      "results": [
+        {
+          "id": 1009,
+          "score": 21.93864
+        }
+      ],
+      "explain": [
+        "Limit  (cost=21.59..21.60 rows=1 width=12) (actual time=0.250..0.252 rows=1.00 loops=1)",
+        "  Buffers: shared hit=187",
+        "  ->  Sort  (cost=21.59..21.60 rows=1 width=12) (actual time=0.249..0.250 rows=1.00 loops=1)",
+        "        Sort Key: (tin.full_score(ctid)) DESC",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=187",
+        "        ->  Custom Scan (Projector)  (cost=20.52..21.58 rows=1 width=12) (actual time=0.240..0.242 rows=1.00 loops=1)",
+        "              Buffers: shared hit=187",
+        "              ->  Custom Scan (Tin Multi-Index Scan) on tinkick_test_documents  (cost=20.52..20.52 rows=1 width=12) (actual time=0.233..0.235 rows=1.00 loops=1)",
+        "                    Indexes: index_tinkick_test_documents_on_title, index_tinkick_test_documents_on_body",
+        "                    Strategy: Sparse Drive (Probe 1)",
+        "                    Probe 0: index_tinkick_test_documents_on_title: moria^1.5",
+        "                    Probe 1: index_tinkick_test_documents_on_body: balrog",
+        "                    Source Cursors: 2",
+        "                    Positive Probes: 2",
+        "                    Score Contributions: 2",
+        "                    Coverage Windows: 9",
+        "                    Coverage Windows Rejected: 8",
+        "                    Posting Pages Decoded: 4",
+        "                    Posting Pages Unioned: 3",
+        "                    Sparse Targets: 2",
+        "                    Stripes Solved: 0",
+        "                    Stripe Candidate Pages: 0",
+        "                    Stripe Exact Root Pages: 0",
+        "                    Exact Score Batches: 1",
+        "                    Exact Score Candidates: 1",
+        "                    Exact Score Immutable Pages Decoded: 0",
+        "                    Pages Solved: 2",
+        "                    Root Pages: 1",
+        "                    Root TIDs: 1",
+        "                    Root Documents Scored: 1",
+        "                    Heap Pages Probed: 0",
+        "                    Page Read Touches: logical page touches: total=497 (~3.9 MiB); metadata=19, termmap=15, postings_footer=6, liveness=6, mutable=451",
+        "                    Buffers: shared hit=186",
+        "Planning:",
+        "  Buffers: shared hit=241",
+        "Planning Time: 0.944 ms",
+        "Execution Time: 0.816 ms"
+      ]
+    },
+    {
+      "name": "dense_product_or",
+      "scoring": "score",
+      "sql": "SELECT id, tin.score(ctid) AS score FROM tinkick_test_products WHERE name ==> 'apple OR ripe' OR description ==> 'apple OR ripe' ORDER BY score DESC LIMIT 10",
+      "matching_ids": [
+        226141372,
+        538084384
+      ],
+      "results": [
+        {
+          "id": 226141372,
+          "score": 3.064504
+        },
+        {
+          "id": 538084384,
+          "score": 0.0
+        }
+      ],
+      "explain": [
+        "Limit  (cost=18.98..18.98 rows=1 width=12) (actual time=0.464..0.467 rows=2.00 loops=1)",
+        "  Buffers: shared hit=261",
+        "  ->  Sort  (cost=18.98..18.98 rows=1 width=12) (actual time=0.463..0.465 rows=2.00 loops=1)",
+        "        Sort Key: (tin.score(ctid, '0.1'::real, NULL::real, NULL::real, NULL::text[], NULL::text[])) DESC",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=261",
+        "        ->  Custom Scan (Projector)  (cost=17.91..18.97 rows=1 width=12) (actual time=0.448..0.457 rows=2.00 loops=1)",
+        "              Buffers: shared hit=261",
+        "              ->  Custom Scan (Tin Multi-Index Scan) on tinkick_test_products  (cost=17.91..17.91 rows=1 width=12) (actual time=0.429..0.438 rows=67.00 loops=1)",
+        "                    Indexes: index_tinkick_test_products_on_name, index_tinkick_test_products_on_description",
+        "                    Strategy: Stripe Solve",
+        "                    Probe 0: index_tinkick_test_products_on_name: OR(apple, ripe)",
+        "                    Probe 1: index_tinkick_test_products_on_description: OR(apple, ripe)",
+        "                    Source Cursors: 2",
+        "                    Positive Probes: 2",
+        "                    Score Contributions: 2",
+        "                    Coverage Windows: 3",
+        "                    Coverage Windows Rejected: 2",
+        "                    Posting Pages Decoded: 2",
+        "                    Posting Pages Unioned: 2",
+        "                    Sparse Targets: 0",
+        "                    Stripes Solved: 1",
+        "                    Stripe Candidate Pages: 1",
+        "                    Stripe Exact Root Pages: 1",
+        "                    Exact Score Batches: 1",
+        "                    Exact Score Candidates: 67",
+        "                    Exact Score Immutable Pages Decoded: 0",
+        "                    Pages Solved: 1",
+        "                    Root Pages: 1",
+        "                    Root TIDs: 67",
+        "                    Root Documents Scored: 67",
+        "                    Heap Pages Probed: 0",
+        "                    Page Read Touches: logical page touches: total=481 (~3.8 MiB); metadata=16, termmap=6, postings_footer=2, liveness=6, mutable=451",
+        "                    Buffers: shared hit=260",
+        "Planning:",
+        "  Buffers: shared hit=179",
+        "Planning Time: 1.029 ms",
+        "Execution Time: 0.930 ms"
+      ]
+    },
+    {
+      "name": "dense_product_or",
+      "scoring": "full_score",
+      "sql": "SELECT id, tin.full_score(ctid) AS score FROM tinkick_test_products WHERE name ==> 'apple OR ripe' OR description ==> 'apple OR ripe' ORDER BY score DESC LIMIT 10",
+      "matching_ids": [
+        226141372,
+        538084384
+      ],
+      "results": [
+        {
+          "id": 538084384,
+          "score": 3.4543505
+        },
+        {
+          "id": 226141372,
+          "score": 3.064504
+        }
+      ],
+      "explain": [
+        "Limit  (cost=18.98..18.98 rows=1 width=12) (actual time=0.389..0.391 rows=2.00 loops=1)",
+        "  Buffers: shared hit=231",
+        "  ->  Sort  (cost=18.98..18.98 rows=1 width=12) (actual time=0.388..0.389 rows=2.00 loops=1)",
+        "        Sort Key: (tin.full_score(ctid)) DESC",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=231",
+        "        ->  Custom Scan (Projector)  (cost=17.91..18.97 rows=1 width=12) (actual time=0.371..0.381 rows=2.00 loops=1)",
+        "              Buffers: shared hit=231",
+        "              ->  Custom Scan (Tin Multi-Index Scan) on tinkick_test_products  (cost=17.91..17.91 rows=1 width=12) (actual time=0.352..0.361 rows=67.00 loops=1)",
+        "                    Indexes: index_tinkick_test_products_on_name, index_tinkick_test_products_on_description",
+        "                    Strategy: Stripe Solve",
+        "                    Probe 0: index_tinkick_test_products_on_name: OR(apple, ripe)",
+        "                    Probe 1: index_tinkick_test_products_on_description: OR(apple, ripe)",
+        "                    Source Cursors: 2",
+        "                    Positive Probes: 2",
+        "                    Score Contributions: 2",
+        "                    Coverage Windows: 3",
+        "                    Coverage Windows Rejected: 2",
+        "                    Posting Pages Decoded: 2",
+        "                    Posting Pages Unioned: 2",
+        "                    Sparse Targets: 0",
+        "                    Stripes Solved: 1",
+        "                    Stripe Candidate Pages: 1",
+        "                    Stripe Exact Root Pages: 1",
+        "                    Exact Score Batches: 1",
+        "                    Exact Score Candidates: 67",
+        "                    Exact Score Immutable Pages Decoded: 0",
+        "                    Pages Solved: 1",
+        "                    Root Pages: 1",
+        "                    Root TIDs: 67",
+        "                    Root Documents Scored: 67",
+        "                    Heap Pages Probed: 0",
+        "                    Page Read Touches: logical page touches: total=451 (~3.5 MiB); metadata=16, termmap=6, postings_footer=3, liveness=6, mutable=420",
+        "                    Buffers: shared hit=230",
+        "Planning:",
+        "  Buffers: shared hit=179",
+        "Planning Time: 0.923 ms",
+        "Execution Time: 0.858 ms"
+      ]
+    },
+    {
+      "name": "tinkick_weighted_columns",
+      "sql": "SELECT \"tinkick_test_documents\".*, tin.score(\"tinkick_test_documents\".ctid) AS _tinkick_score FROM \"tinkick_test_documents\" WHERE (TRUE) AND ((\"tinkick_test_documents\".\"title\" ==> $1) OR (\"tinkick_test_documents\".\"body\" ==> $2)) ORDER BY _tinkick_score DESC LIMIT $3",
+      "binds": [
+        "(\"moria\" AND \"balrog\")^1.5",
+        "\"moria\" AND \"balrog\"",
+        10
+      ],
+      "results": [
+        {
+          "id": 1008,
+          "score": 19.279022
+        }
+      ],
+      "explain": [
+        "Limit  (cost=24.70..24.71 rows=1 width=404) (actual time=0.059..0.061 rows=1.00 loops=1)",
+        "  Buffers: shared hit=72",
+        "  ->  Sort  (cost=24.70..24.71 rows=1 width=404) (actual time=0.058..0.059 rows=1.00 loops=1)",
+        "        Sort Key: (tin.score(ctid, '0.1'::real, NULL::real, NULL::real, NULL::text[], NULL::text[])) DESC",
+        "        Sort Method: quicksort  Memory: 25kB",
+        "        Buffers: shared hit=72",
+        "        ->  Custom Scan (Projector)  (cost=23.63..24.69 rows=1 width=404) (actual time=0.051..0.053 rows=1.00 loops=1)",
+        "              Buffers: shared hit=72",
+        "              ->  Custom Scan (Tin Multi-Index Scan) on tinkick_test_documents  (cost=23.63..23.63 rows=1 width=404) (actual time=0.046..0.047 rows=1.00 loops=1)",
+        "                    Indexes: index_tinkick_test_documents_on_title, index_tinkick_test_documents_on_body",
+        "                    Strategy: Global Top-K",
+        "                    Top K: 10",
+        "                    Probe 0: index_tinkick_test_documents_on_title: (AND(moria, balrog))^1.5",
+        "                    Probe 1: index_tinkick_test_documents_on_body: AND(moria, balrog)",
+        "                    Source Cursors: 1",
+        "                    Positive Probes: 2",
+        "                    Score Contributions: 2",
+        "                    Pages Solved: 1",
+        "                    Root Pages: 1",
+        "                    Root TIDs: 1",
+        "                    Root Documents Scored: 1",
+        "                    Heap Pages Probed: 1",
+        "                    Top-K Bound Checks: 2",
+        "                    Top-K Candidate Batches: 1",
+        "                    Top-K Candidate Pages Decoded: 0",
+        "                    Top-K Candidate TIDs: 1",
+        "                    Top-K Exact Candidates: 1",
+        "                    Top-K Exact Batches: 1",
+        "                    Top-K Exact Pages Decoded: 0",
+        "                    Top-K Threshold Updates: 0",
+        "                    Top-K Sources Pruned: 0",
+        "                    Page Read Touches: logical page touches: total=560 (~4.4 MiB); metadata=19, termmap=18, mutable=523",
+        "                    Buffers: shared hit=71",
+        "Planning:",
+        "  Buffers: shared hit=391",
+        "Planning Time: 1.098 ms",
+        "Execution Time: 1.306 ms"
+      ]
+    }
+  ]
+}
