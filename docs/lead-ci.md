@@ -68,10 +68,15 @@ its test container and volumes when the job ends.
 
 Lead is not a substitute for production TIN performance validation. Its lossy
 bitmap scan and heap rechecks do not implement production TIN's custom scan or
-top-k execution. Ten tests therefore stop immediately before their
+top-k execution. Eleven tests therefore stop immediately before their
 production-specific plan assertions when `TINKICK_TEST_BACKEND=lead`; preceding
-portable assertions still run. All ten passed against real TIN, with 77
-assertions and no skips.
+portable assertions still run. The original ten passed against real TIN, with 77
+assertions and no skips. The additional TINQL test verifies boosted proximity
+retains production top-k; see the [captured plan](tinql.md#query-plans).
+
+The TINQL, Rails HTTP, and JSONB search checks pass on Lead: 34 tests, 187
+assertions, no failures or errors, and two production-plan skips. No TINQL
+functional tests were added to the exclusion list.
 
 The first complete Lead run at the pinned revision reported 915 tests,
 5,259 assertions, 24 failures, seven errors, and ten plan skips. The user

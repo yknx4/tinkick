@@ -60,9 +60,11 @@ Product.where("name ==> ?", 'apple AND NOT "apple pie"')
 ```
 
 These return ActiveRecord projections, not `Tinkick::Relation` metadata. Missing
-projected attributes remain missing. TINQL supports proximity, spans, regex,
-wildcards, term ranges, minimum-match groups, and boosts beyond the current public
-compiler. Consult [TINQL](https://planetscale.com/docs/postgres/search/tinql),
+projected attributes remain missing. For Tinkick results and metadata, use the
+[TINQL expression API](../tinql.md): proximity, spans, positions, regex,
+wildcards, term ranges, minimum-match groups, and boosts are available through
+`tinql:` and `.tinql(...)`. These extensions may have no Searchkick equivalent.
+Consult [TINQL](https://planetscale.com/docs/postgres/search/tinql),
 [operator behavior](https://planetscale.com/docs/postgres/search/reference/operator),
 and [supported SQL shapes](https://planetscale.com/docs/postgres/search/reference/sql-shapes).
 Keep identifiers application-controlled and bind values. SQL binding alone does

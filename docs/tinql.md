@@ -121,3 +121,25 @@ the pinned Lead backend both treat `IN WORDS 1 TO 1` as the first token and
 `0 TO 0` as no match. Prefer `in_first` / `in_last` for portable word counts;
 Tinkick does not adjust native coordinates. Each positional constraint accepts
 any nested expression in place of the literal string.
+
+## Query plans
+
+Expressions use the existing `==>` query and native scoring path. Broad wildcard,
+regex, range, or span queries can still do substantial work: bound the page and
+inspect your actual workload rather than assuming every expression is cheap.
+Existing warnings for multi-field ranking, custom SQL ordering, and offsets apply.
+
+```ruby
+search = Product.search(tinql: {
+  boost: { near: ["coffee", "beans"], distance: 1 }, factor: 2
+}, limit: 20)
+sql = search.to_relation.to_sql
+Product.connection.execute("EXPLAIN (ANALYZE, BUFFERS) #{sql}")
+```
+
+The [captured plan](benchmarks/2026-09-18-tinql-plan.json) uses the same shape with
+`mithril` / `lantern`, limit 2, and the 268-document Tolkien corpus. On TIN 1.0.2
+it returned the two expected top records through `Text Search Scan`, `Top K: 2`,
+with **no Sort node**. The single run reported 3.310 ms planning and 4.972 ms
+execution, with 290 shared buffer hits and no reads. This is small-corpus plan
+evidence, not a production latency estimate; timings exclude Rails and network time.

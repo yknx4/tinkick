@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add composable `tinql:` / `.tinql(...)` expressions for all documented native
+  TINQL operator families, with real TIN/Lead and Rails HTTP coverage. These
+  extensions may have no Searchkick equivalent; ordinary search calls are unchanged.
+
 - Keep matching and date bucketing native to TIN/PostgreSQL; remove custom Lucene
   regex, fuzzy-distance, highlight-span, and Elasticsearch date-parser emulation.
 - Accept PostgreSQL string regex patterns directly and report unsupported backend

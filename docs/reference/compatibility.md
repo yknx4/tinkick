@@ -29,7 +29,7 @@ The public search accepts `fields`, `where`, `order`, `limit`, `offset`, `page`,
 `per_page`, `padding`, `match`, `operator`, `misspellings`, `load`, `total_entries`,
 `countless`, `keyset`, `after`, `aggs`, `smart_aggs`, `includes`,
 `model_includes`, `scope_results`, `block`, `exclude`, `select`, `highlight`,
-`boost_by`, `boost_where`, `boost`, `boost_by_recency`,
+`boost_by`, `boost_where`, `boost`, `boost_by_recency`, `tinql`,
 `conversions`, `conversions_v1`, `conversions_v2`, and `conversions_term`.
 Use the [guide and topic references](../../README.md#reference) for their limits.
 Unknown keywords or methods are not compatibility no-ops.
@@ -70,6 +70,7 @@ The following reference maps less common upstream options to their current statu
 | Index refresh, clean/promote/store/remove, queue inspection | Excluded external-index lifecycle. |
 | Global search | Available with an explicit `model:`; preserves generic search-method ownership. |
 | `Tinkick::Reranking.rrf` | Available for bounded ordered lists; see [rank fusion](../reranking.md). |
+| `tinql:` / `.tinql(...)` | Available as [TINQL-exclusive extensions](../tinql.md), with no promise of Searchkick equivalents. |
 | `multi_search`, `models`, model boosts | Not implemented; separate queries or explicit SQL combination. |
 | Scroll/deep-paging configuration | Excluded backend APIs; use bounded column cursors or SQL batches. |
 | BigDecimal serialization rules | No JSON document conversion: PostgreSQL column types govern stored precision. |

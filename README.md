@@ -113,6 +113,21 @@ Token partial matching uses TIN wildcards and requires misspellings off.
 use `:text_start`, `:text_middle`, or `:text_end`; these use SQL and may need
 `unaccent`. [All match modes and analysis settings →](docs/reference/matching.md)
 
+### TINQL extensions
+
+Use `tinql:` or `.tinql(...)` for **TINQL-specific features that may have no
+Searchkick equivalent**:
+
+```ruby
+Product.search(tinql: { near: ["coffee", "beans"], distance: 2 })
+Product.search(tinql: { at_least: ["coffee", "beans", "roasted"], count: 2 })
+Product.search("coffee").tinql(in_first: "beans", words: 20)
+```
+
+Compose literal strings and expression hashes. Phrase gaps, alternatives,
+proximity, spans, positions, token patterns, ranges, and expression boosts run
+natively in TIN. [Complete API and examples →](docs/tinql.md)
+
 ## Filtering
 
 Combine filters with a search. Keyword and fluent forms are equivalent:
