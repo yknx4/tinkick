@@ -102,6 +102,18 @@ RBS uses the maintained `ruby/gem_rbs_collection` signatures pinned in
 Concrete library signatures belong under `sig/`; neither missing framework
 types nor type errors should be suppressed as a workaround.
 
+## Concern organization
+
+`Aggregations` keeps option validation, dispatch, and shared SQL value handling.
+Its private aggregation implementations live in `Terms`, `Metrics`, `Ranges`,
+`NumericHistograms`, and `DateHistograms` concerns. `Tinql::Expressions` owns
+compound expression serialization; `Model::Declaration` owns model declaration
+and validation. These use `ActiveSupport::Concern` without callbacks or new
+configuration. `Tinkick::Model` retains its existing extension mechanism.
+
+See the [refactor measurements and verification](refactoring.md) for the
+behavior-preservation checks and before/after Flog and Flay results.
+
 ## Verified environment
 
 Core search checkpoint (2026-09-17, code through `80e223d`): Ruby 4.0.1 with
