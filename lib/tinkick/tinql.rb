@@ -1,8 +1,12 @@
 # frozen_string_literal: true
 
+require_relative "tinql/expressions"
+
 module Tinkick
   # Serializes explicit TINQL expressions; PostgreSQL owns parsing and execution.
   class Tinql
+    include Expressions
+
     OPTIONS = {
       raw: nil, and: nil, or: nil, and_not: nil,
       near: [:distance], then: [:distance], within: [:words], phrase: [:slop],
@@ -34,10 +38,7 @@ module Tinkick
         string(value)
       when :encloses, :not_encloses, :enclosed_by, :not_enclosed_by,
         :overlapping, :not_overlapping, :before, :after
-        operands = list(value)
-        raise ArgumentError, "tinql #{operator} requires two expressions" unless operands.length == 2
-
-        "(#{compile(operands.fetch(0))}) #{operator.to_s.tr('_', ' ').upcase} (#{compile(operands.fetch(1))})"
+        compile_span(operator, value)
       when :in_first, :in_last, :in_middle
         "(#{compile(value)}) #{operator.to_s.tr('_', ' ').upcase} #{position_size(expression)}"
       when :in_words
@@ -53,87 +54,29 @@ module Tinkick
       when :wildcard
         "CONTAINS #{token(value)}"
       when :matches
-        pattern = string(value)
-        if pattern.gsub(/\\./m, "").match?(/\s/)
-          raise ArgumentError, "tinql matches requires a native pattern with escaped whitespace"
-        end
-        "MATCHES #{pattern}"
+        compile_pattern(value)
       when :range
-        bounds = list(value)
-        raise ArgumentError, "tinql range requires two bounds; use nil for an open bound" unless bounds.length == 2
-
-        bounds.map { |bound| bound.nil? ? "*" : token(bound) }.join(" TO ")
+        compile_range(value)
       when :fuzzy
         "CONTAINS #{token(value)}~#{integer(expression.fetch(:prefix, 1))}:#{integer(expression.fetch(:distance, 1))}"
       when :boost
-        factor = expression[:factor]
-        unless (factor.is_a?(Integer) || factor.is_a?(Float)) && factor.finite? && factor.between?(0, 10_000)
-          raise ArgumentError, "tinql boost factor must be a finite number between 0 and 10000"
-        end
-        "(#{compile(value)})^#{factor}"
+        compile_boost(value, expression)
       when :any_of, :all_of, :at_least
-        alternatives = list(value).map { |item| "(#{compile(item)})" }.join(" ")
-        prefix = if operator == :at_least
-          minimum_match(expression)
-        elsif operator == :all_of
-          "ALL OF "
-        else
-          ""
-        end
-        "#{prefix}[#{alternatives}]"
+        compile_group(operator, value, expression)
       when :near, :then
-        operands = list(value)
-        raise ArgumentError, "tinql #{operator} requires two expressions" unless operands.length == 2
-
-        gap = integer(expression[:distance])
-        "(#{compile(operands.fetch(0))}) #{operator.to_s.upcase}/#{gap} (#{compile(operands.fetch(1))})"
+        compile_proximity(operator, value, expression)
       when :within
         "(#{compile(value)}) WITHIN #{integer(expression[:words], minimum: 1)}"
       when :phrase
-        text = if value.is_a?(String)
-          literal(value)
-        else
-          parts = list(value).map { |part| phrase_part(part) }
-          "\"#{parts.join(' ')}\""
-        end
-        expression.key?(:slop) ? "#{text}~#{integer(expression[:slop])}" : text
+        compile_phrase(value, expression)
       when :and, :or, :and_not
-        operands = list(value)
-        if operator == :and_not && operands.length != 2
-          raise ArgumentError, "tinql and_not requires two expressions"
-        end
-        separator = { and: " AND ", or: " OR ", and_not: " AND NOT " }.fetch(operator)
-        operands.map { |operand| "(#{compile(operand)})" }.join(separator)
+        compile_boolean(operator, value)
       else
         raise ArgumentError, "Unknown tinql operator: #{operator.inspect}"
       end
     end
 
     private
-
-    def position_size(expression)
-      if expression.key?(:words) == expression.key?(:percent)
-        raise ArgumentError, "tinql position requires exactly one of words or percent"
-      end
-      return "#{integer(expression[:words], minimum: 1)} WORDS" if expression.key?(:words)
-
-      percent = integer(expression[:percent], minimum: 1)
-      raise ArgumentError, "tinql percent cannot exceed 100" if percent > 100
-
-      "#{percent}%"
-    end
-
-    def minimum_match(expression)
-      if expression.key?(:count) == expression.key?(:percent)
-        raise ArgumentError, "tinql at_least requires exactly one of count or percent"
-      end
-      return "AT LEAST #{integer(expression[:count], minimum: 1)} OF " if expression.key?(:count)
-
-      percent = integer(expression[:percent], minimum: 1)
-      raise ArgumentError, "tinql percent cannot exceed 100" if percent > 100
-
-      "AT LEAST #{percent}% OF "
-    end
 
     def token(value)
       text = string(value)
