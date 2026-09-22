@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Exact failures reproduced against Lead 0e29dbe; see docs/lead-ci.md.
+# Exact failures reproduced against Lead 1abf2364 (PR #13); see docs/lead-ci.md.
 # Keep these tests enabled on production TIN and recheck when updating Lead.
 module TinkickLeadFailures
   FAILURES = {
@@ -25,7 +25,6 @@ module TinkickLeadFailures
     "Lead scores only one selected field expression" => %w[
       MultiColumnSearchTest#test_a_match_in_both_columns_ranks_above_each_single_column_match
       MultiColumnSearchTest#test_decimal_field_boosts_add_each_matching_columns_native_score
-      FieldBoostTest#test_wildcard_boost_does_not_leak_into_an_independently_requested_concrete_field
       FieldBoostTest#test_field_weights_reverse_ranking_in_a_varied_corpus
       FieldBoostTest#test_fluent_fields_apply_boosts_without_mutating_the_original_relation
       FieldBoostTest#test_model_default_fields_apply_boosts_without_treating_them_as_schema_columns
@@ -34,29 +33,10 @@ module TinkickLeadFailures
     "Lead does not score fuzzy term expansions" => %w[
       FieldBoostTest#test_native_two_edit_matching_keeps_its_field_boost
     ],
-    "Lead cannot bind full_score in these weighted SQL query shapes" => %w[
-      NumericBoostSearchTest#test_sql_field_scores_and_large_native_weights_compose_with_numeric_functions
-      SqlFieldBoostTest#test_large_weights_preserve_hidden_highlight_inputs_and_column_cursors_without_implicit_count
-      SqlFieldBoostTest#test_weighted_branches_preserve_filters_and_exclusions
-      SqlFieldBoostTest#test_large_weights_keep_native_two_edit_matches
-      SqlFieldBoostTest#test_large_native_weight_scales_scores_beyond_the_tinql_limit
-      SqlFieldBoostTest#test_sql_weights_warn_once_for_cached_results_and_native_boosts_keep_the_fast_path
-    ],
     "Lead elides common terms when scoring this small visible-row corpus" => %w[
       ProjectionTest#test_raw_source_projection_fetches_only_requested_columns_and_keeps_identity
       HitsTest#test_hits_expose_durable_identity_and_native_scores_without_counting
       RawValuesTest#test_raw_results_deserialize_postgresql_arrays_and_json_without_model_instantiation
-    ],
-    "Lead cannot bind tin.score in these scoped and CTE query shapes" => %w[
-      ActiveRecordCompositionTest#test_native_relation_supports_sql_arel_joins_and_ctes
-      CatalogCollapseTest#test_collapse_precedes_pagination_and_keeps_complete_pages
-      CatalogCollapseTest#test_enriched_and_cover_filters_apply_before_edition_selection
-      CatalogCollapseTest#test_preferred_enriched_edition_retains_best_group_score_and_tenant_filter
-      CatalogCollapseTest#test_without_enriched_the_best_scoring_edition_is_returned
-      CatalogRankingTest#test_exact_title_bonus_is_added_after_capped_sum_and_logarithmic_popularity
-      CatalogRankingTest#test_exact_title_parameter_is_bound_and_metadata_only_omits_its_own_boost
-      CatalogRankingTest#test_multiplicative_flags_and_popularity_keep_native_relevance
-      QueryBlockTest#test_cte_hook_counts_rows_after_grouping_and_before_pagination
     ],
   }.freeze
 

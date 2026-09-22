@@ -20,7 +20,7 @@ RUN cargo install cargo-pgrx --version 0.19.1 --locked \
     && cargo pgrx init --pg18=/usr/lib/postgresql/18/bin/pg_config
 
 WORKDIR /build/lead
-ARG LEAD_COMMIT=0e29dbe5177bb64d027d6afeaa20eb0b46536be6
+ARG LEAD_COMMIT=1abf2364b6407c330ac6986e595a92c373c9a1f6
 RUN git init . \
     && git remote add origin https://github.com/planetscale/lead.git \
     && git fetch --depth 1 origin "${LEAD_COMMIT}" \

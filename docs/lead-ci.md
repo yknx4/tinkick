@@ -9,7 +9,7 @@ database secrets are required. Local `.envrc` and `dev.ejson` remain unchanged.
 
 [`docker/lead/Dockerfile`](../docker/lead/Dockerfile) pins PostgreSQL 18.6 and
 Rust 1.96.0 images by digest, cargo-pgrx 0.19.1, and Lead commit
-`0e29dbe5177bb64d027d6afeaa20eb0b46536be6`. PostgreSQL is a prebuilt official
+`1abf2364b6407c330ac6986e595a92c373c9a1f6` from [Lead PR #13](https://github.com/planetscale/lead/pull/13). PostgreSQL is a prebuilt official
 image: even a cold build does **not** compile PostgreSQL. Its matching server
 headers and explicit `pg_config` let cargo-pgrx compile the Lead extension.
 Only the packaged extension and license are copied into the runtime image.
@@ -74,55 +74,67 @@ portable assertions still run. The original ten passed against real TIN, with 77
 assertions and no skips. The additional TINQL test verifies boosted proximity
 retains production top-k; see the [captured plan](tinql.md#query-plans).
 
-The TINQL, Rails HTTP, and JSONB search checks pass on Lead: 34 tests, 187
-assertions, no failures or errors, and two production-plan skips. No TINQL
-functional tests were added to the exclusion list.
+On 2026-09-22, all 42 previously excluded tests were run against a fresh
+PostgreSQL 18.6 / Lead PR #13 database with `TINKICK_TEST_BACKEND` unset:
+**42 tests, 147 assertions, 25 failures, one error, no skips**. Sixteen tests
+passed and were removed from the exact exclusion list:
 
-The first complete Lead run at the pinned revision reported 915 tests,
-5,259 assertions, 24 failures, seven errors, and ten plan skips. The user
-approved temporarily excluding the **31 exact failing tests**, without changing
-gem behavior to accommodate Lead. The complete method names and per-test
-reasons are in [`test/support/lead_failures.rb`](../test/support/lead_failures.rb).
-No class, feature, or future test is excluded by pattern.
+- All six weighted SQL `tin.full_score()` binding tests.
+- All nine scoped/CTE composition and catalog ranking/grouping binding tests.
+- The wildcard field-boost isolation test.
 
-The multi-column recheck added two reproduced failures under the existing
-single-field score-binding limitation, bringing the exact exclusions at that point to
-**33**. Lead gave the both-column hit the same score as one single-column hit
-(`6.101565` each), and returned `0.0` where a title boost required `7.467025`.
-These are the two named `MultiColumnSearchTest` ranking methods in the list;
-matching, counts, highlights and cursor tests remain enabled. Both ranking
-checks pass on real TIN. No gem execution path changes to accommodate Lead.
+The remaining **26 exact exclusions** are listed with their reasons in
+[`test/support/lead_failures.rb`](../test/support/lead_failures.rb). No gem
+behavior or test assertions were changed to accommodate Lead.
 
-The scoped-relation and catalog recipe checks reproduced nine additional
-`tin.score() requires a tin index scan` errors, for **42 exact exclusions**
-currently. All nine pass on PlanetScale TIN. The new HTTP, timeout, cache,
-native matching/filtering and other block tests pass on Lead. The precise
-planner rewrite behind these nine failures has not been isolated.
-
-| Verified difference at the pinned Lead revision | Exact tests excluded |
+| Reproduced difference at the pinned Lead revision | Exact tests excluded |
 | --- | ---: |
-| Operator heap rechecks use default analysis instead of custom index case/accent/tokenizer/long-token settings; this also prevents a truncated-token highlight test from finding its row | 16 |
-| Multi-field scores bind only one indexed field expression | 7 |
-| Fuzzy score collection uses the input token rather than its matching expansion | 1 |
-| `tin.full_score()` fails to bind in the single-branch weighted CTE query shapes | 6 |
-| `tin.score()` fails to bind in nine scoped/CTE composition and catalog ranking/grouping tests | 9 |
-| Lead's common-term elision returns zero for the small visible-row corpus used by three raw-result score tests | 3 |
+| Custom index case/accent/tokenizer/long-token settings are not respected during operator rechecks | 16 |
+| Multi-field scoring does not reproduce the expected combined field scores | 6 |
+| Fuzzy field-boost scoring does not reproduce the expected ranking | 1 |
+| Small visible-row corpora return zero scores for common terms | 3 |
 
-Source evidence is in Lead's pinned
-[operator recheck](https://github.com/planetscale/lead/blob/0e29dbe5177bb64d027d6afeaa20eb0b46536be6/postgres/src/operator.rs),
-[scoring and planner binding](https://github.com/planetscale/lead/blob/0e29dbe5177bb64d027d6afeaa20eb0b46536be6/postgres/src/score.rs), and
-[common-term scoring policy](https://github.com/planetscale/lead/blob/0e29dbe5177bb64d027d6afeaa20eb0b46536be6/postgres/src/bm25.rs).
-The weighted CTE errors are reproduced; the precise planner rewrite responsible
-has not been isolated. Passing multi-branch weighted tests remain enabled.
+The custom long-token fuzzy test still raises an invalid-query error; the other
+25 exclusions fail assertions. Production scan/top-k exclusions remain because
+Lead does not implement those production execution paths. These local tests
+establish correctness coverage, not production performance.
 
 The exclusions apply only when `TINKICK_TEST_BACKEND=lead`. Running the same
 suite against the existing PlanetScale connection without that variable retains
-every assertion. All 31 excluded tests passed against PlanetScale TIN 1.0.2:
+every assertion. The original 31 exclusions passed against PlanetScale TIN 1.0.2:
 211 assertions, no failures, errors, or skips. When updating Lead, run its full coverage suite with
 `TINKICK_TEST_BACKEND` unset to revisit both the known failures and production
 plan differences. Remove each resolved failure from the list; do not extend it
 without reproducing and explaining the new failure. Ordinary application
 behavior and the 90% library coverage requirement remain checked in CI.
+
+## Local verification, 2026-09-22
+
+Ruby 4.0.1 / Rails 8.1.3.1 / PostgreSQL 18.6 / Lead `1abf2364`:
+**1,002 tests, 5,694 assertions, no failures or errors, 37 skips**.
+The skips are 26 exact functional limitations and 11 production-plan checks.
+Line coverage is **98.02% (2,773 / 2,829)**. Rails 8.0 and remote CI were not
+rerun for this local check.
+
+After building the pinned image, the full verification command used the
+disposable database on port 55433:
+
+```sh
+direnv exec . env PGHOST=127.0.0.1 PGPORT=55433 PGUSER=postgres \
+  PGPASSWORD=tinkick-ci-only PGSSLMODE=disable TINKICK_TEST_BACKEND=lead \
+  bundle exec rake coverage TESTOPTS='--fail-fast --seed=2091'
+direnv exec . bundle exec rubocop -A test/support/lead_failures.rb
+direnv exec . bundle exec rubocop test/support/lead_failures.rb
+direnv exec . bundle exec rake rbs:format rbs:quality steep
+```
+
+RuboCop and RBS formatting/validation passed. Steep exited zero and reported
+no type errors, but also logged internal `RuntimeError` exceptions while
+checking the unchanged `lib/tinkick/aggregations.rb`; that is a type-checking
+coverage gap, not a clean Steep result. No library code or signatures changed.
+The generated coverage artifact is `coverage/index.html` (ignored by Git).
+No production performance measurement or EXPLAIN ANALYZE was performed;
+this change updates only the test backend pin and its verified exclusions.
 
 ## Local verification, 2026-09-17
 
