@@ -350,6 +350,28 @@ class AggregationsTest < TinkickIntegrationTest
     assert_includes error.message, "format applies only to date"
   end
 
+  def test_option_validation_preserves_error_messages_and_precedence
+    cases = [
+      [{ typo: true, avg: {}, sum: {} }, "Unknown aggregation options: typo"],
+      [{ avg: {}, sum: {}, ranges: [{}] }, "Each aggregation must select only one metric"],
+      [{ ranges: [{}], histogram: {}, include: [] }, "Each aggregation must select only one range kind, histogram, or metric"],
+      [{ avg: {}, include: [], missing: 0 }, "include and exclude apply only to terms aggregations"],
+      [{ histogram: {}, missing: 0, keyed: true }, "Top-level missing applies only to terms and ranges; put metric or histogram defaults inside their options hash"],
+      [{ keyed: true, time_zone: "UTC" }, "keyed applies only to range aggregations"],
+      [{ time_zone: "UTC", format: "epoch_millis" }, "time_zone applies only to date aggregations"],
+      [{ format: "epoch_millis" }, "format applies only to date aggregations"],
+      [{ histogram: nil, field: :id }, "Histogram settings must be inside histogram:; only where: may accompany it (unsupported outer options: field)"],
+      [{ date_histogram: nil, field: :id }, "Date histogram settings must be inside date_histogram:; only where: may accompany it"],
+      [{ histogram: nil }, "histogram must be an options hash"],
+      [{ date_histogram: nil }, "date_histogram must be an options hash"],
+      [{ avg: { typo: true } }, "Metric options must be a hash containing field and/or missing"],
+    ]
+    cases.each do |options, message|
+      error = assert_raises(ArgumentError) { aggregate(id: options) }
+      assert_equal message, error.message
+    end
+  end
+
   private
 
   def create_date_values

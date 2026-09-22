@@ -1,0 +1,23 @@
+module Tinkick
+  class Aggregations
+    module Terms
+      extend ActiveSupport::Concern
+
+      @model: singleton(ActiveRecord::Base)
+
+      @unscoped: ActiveRecord::Relation
+
+      @scope: ActiveRecord::Relation
+
+      @dictionary_scope: ActiveRecord::Relation
+
+      private
+
+      def terms: (String field, aggregation_options options) -> aggregation_terms
+
+      def term_filter: (ActiveRecord::Relation query, aggregation_term_filter value, exclude: bool) -> ActiveRecord::Relation
+
+      def bucket: (result_value value, Integer count) -> aggregation_bucket
+    end
+  end
+end

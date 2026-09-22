@@ -2,13 +2,13 @@ module Tinkick
   type tinql_value = String | Integer | Float | bool | nil | Array[tinql_value] | Hash[Symbol, tinql_value]
 
   class Tinql
+    include Expressions
+
     OPTIONS: Hash[Symbol, Array[Symbol]?]
     def compile: (tinql_value expression) -> String
 
     private
 
-    def position_size: (Hash[Symbol, tinql_value] expression) -> String
-    def minimum_match: (Hash[Symbol, tinql_value] expression) -> String
     def token: (tinql_value value) -> String
     def string: (tinql_value value) -> String
     def literal: (String value) -> String

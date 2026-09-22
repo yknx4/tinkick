@@ -1,0 +1,33 @@
+module Tinkick
+  class Tinql
+    module Expressions
+      extend ActiveSupport::Concern
+
+      private
+
+      def quantity: (Hash[Symbol, tinql_value] expression, Symbol option, String context) -> String
+
+      def compile_span: (Symbol operator, tinql_value value) -> String
+
+      def compile_pattern: (tinql_value value) -> String
+
+      def compile_range: (tinql_value value) -> String
+
+      def compile_boost: (tinql_value value, Hash[Symbol, tinql_value] expression) -> String
+
+      def compile_group: (Symbol operator, tinql_value value, Hash[Symbol, tinql_value] expression) -> String
+
+      def compile_proximity: (Symbol operator, tinql_value value, Hash[Symbol, tinql_value] expression) -> String
+
+      def compile_phrase: (tinql_value value, Hash[Symbol, tinql_value] expression) -> String
+
+      def compile_boolean: (Symbol operator, tinql_value value) -> String
+
+      def position_size: (Hash[Symbol, tinql_value] expression) -> String
+
+      def minimum_match: (Hash[Symbol, tinql_value] expression) -> String
+
+      def percentage: (tinql_value value) -> Integer
+    end
+  end
+end

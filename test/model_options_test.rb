@@ -45,4 +45,29 @@ class ModelOptionsTest < Minitest::Test
       assert_raises(ArgumentError) { Class.new(ActiveRecord::Base).tinkick(stem: value) }
     end
   end
+
+  def test_conversion_declarations_preserve_order_alias_precedence_and_disabled_values
+    model = Class.new(ActiveRecord::Base)
+    model.tinkick(conversions: :ignored, conversions_v1: [:clicks, "clicks", :views], conversions_v2: false)
+
+    assert_equal ["clicks", "views"], model.tinkick_options.fetch(:conversions)
+    assert_equal [], model.tinkick_options.fetch(:conversions_v2)
+  end
+
+  def test_declaration_validation_order_does_not_leave_partial_options
+    cases = [
+      [{ stem: nil, typo: true }, "stem must be true or false"],
+      [{ conversions: [1], highlight: true }, "conversions must name JSONB columns with a string, symbol, or array; false or nil disables them"],
+      [{ conversions: :clicks, conversions_v2: "clicks", highlight: true }, "A conversion column cannot be declared in both conversions and conversions_v2"],
+      [{ highlight: true, word_start: false }, "highlight must be an array of field names, false, or nil"],
+      [{ filterable: true, word_start: false }, "filterable must be an array of field names, false, or nil"],
+      [{ word_start: false }, "Partial match declarations must be arrays of field names"],
+    ]
+    cases.each do |options, message|
+      model = Class.new(ActiveRecord::Base)
+      error = assert_raises(ArgumentError) { model.tinkick(**options) }
+      assert_equal message, error.message
+      assert_nil model.tinkick_options
+    end
+  end
 end

@@ -1,0 +1,25 @@
+module Tinkick
+  module Model
+    module Declaration
+      extend ActiveSupport::Concern
+
+      @tinkick_options: model_options?
+
+      def tinkick: (?conversions: conversion_fields, ?conversions_v1: conversion_fields, ?conversions_v2: conversion_fields, ?stem_conversions: bool?, ?searchable: model_fields?, ?default_fields: model_fields?, ?match: Symbol, ?stem: bool, ?case_sensitive: bool?, ?special_characters: bool?, ?highlight: Array[String | Symbol] | false | nil, ?filterable: Array[String | Symbol] | false | nil, ?word_start: Array[String | Symbol]?, ?word_middle: Array[String | Symbol]?, ?word_end: Array[String | Symbol]?, ?text_start: Array[String | Symbol]?, ?text_middle: Array[String | Symbol]?, ?text_end: Array[String | Symbol]?, **Object? options) -> void
+
+      def tinkick_options: () -> model_options?
+
+      private
+
+      def tinkick_field_names?: (Object? fields) -> bool
+
+      def tinkick_validate_stemming: (bool stem, Hash[Symbol, Object?] options) -> void
+
+      def tinkick_conversion_columns: (conversion_fields conversions, conversion_fields conversions_v2) -> Array[Array[String]]
+
+      def tinkick_validate_declarations: (Array[String | Symbol] | false | nil highlight, Array[String | Symbol] | false | nil filterable, Array[Array[String | Symbol]?] partial_fields) -> void
+
+      def tinkick_analysis_flag: (Object? value, Symbol option) -> bool?
+    end
+  end
+end

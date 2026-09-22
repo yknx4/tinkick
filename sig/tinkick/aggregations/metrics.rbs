@@ -1,0 +1,19 @@
+module Tinkick
+  class Aggregations
+    module Metrics
+      extend ActiveSupport::Concern
+
+      @model: singleton(ActiveRecord::Base)
+
+      @unscoped: ActiveRecord::Relation
+
+      @scope: ActiveRecord::Relation
+
+      @dictionary_scope: ActiveRecord::Relation
+
+      private
+
+      def calculate_metric: (aggregation_metric_name metric, String field, filter_conditions? conditions, ?missing: filter_scalar) -> aggregation_metric
+    end
+  end
+end

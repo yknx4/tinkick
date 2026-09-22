@@ -1,0 +1,33 @@
+module Tinkick
+  class Aggregations
+    module DateHistograms
+      extend ActiveSupport::Concern
+
+      @model: singleton(ActiveRecord::Base)
+
+      @unscoped: ActiveRecord::Relation
+
+      @scope: ActiveRecord::Relation
+
+      private
+
+      def keyed_date_buckets: (Array[aggregation_date_histogram_bucket] buckets) -> Hash[String, aggregation_date_histogram_bucket]
+
+      def histogram_zone: (AggregationDate formatter, String | Integer | Float | nil time_zone) -> String
+
+      def date_histogram_query: (ActiveRecord::Relation counts, Integer minimum, Time? lower_date, Time? upper_date, String step, String series_zone) -> ActiveRecord::Relation
+
+      def date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions) -> aggregation_date_histogram
+
+      def zoned_date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions, AggregationDate formatter, String? unit, String step, Integer bucket_offset, Integer minimum) -> aggregation_date_histogram
+
+      def zoned_rounding_sql: (String value, unit: String?) -> String
+
+      def zoned_histogram_bounds: (aggregation_date_histogram_options options, AggregationDate formatter, Hash[Symbol, String] binds, unit: String?) -> [ Time?, Time?, Time?, Time? ]
+
+      def date_histogram_offset: (String | Integer | Float value) -> Integer
+
+      def fixed_interval_milliseconds: (String | Symbol value, ?allow_zero: bool) -> Integer
+    end
+  end
+end

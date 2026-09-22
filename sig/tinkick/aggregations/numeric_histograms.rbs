@@ -1,0 +1,23 @@
+module Tinkick
+  class Aggregations
+    module NumericHistograms
+      extend ActiveSupport::Concern
+
+      @model: singleton(ActiveRecord::Base)
+
+      @unscoped: ActiveRecord::Relation
+
+      @scope: ActiveRecord::Relation
+
+      private
+
+      def keyed_numeric_buckets: (Array[aggregation_histogram_bucket] buckets) -> Hash[String, aggregation_histogram_bucket]
+
+      def numeric_histogram_query: (ActiveRecord::Relation counts, Integer minimum, Float interval, Float offset, Float? extended_min, Float? extended_max) -> ActiveRecord::Relation
+
+      def numeric_histogram: (String field, aggregation_histogram_options options, filter_conditions? conditions) -> aggregation_histogram
+
+      def histogram_bounds: (aggregation_histogram_bounds bounds) -> [ Float?, Float? ]
+    end
+  end
+end
