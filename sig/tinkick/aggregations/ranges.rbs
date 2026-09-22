@@ -1,0 +1,21 @@
+module Tinkick
+  class Aggregations
+    module Ranges
+      extend ActiveSupport::Concern
+
+      @model: singleton(ActiveRecord::Base)
+
+      @unscoped: ActiveRecord::Relation
+
+      @scope: ActiveRecord::Relation
+
+      private
+
+      def range_buckets: (Array[aggregation_range_options] ranges, AggregationDate? date_values) -> Array[aggregation_range_bucket]
+
+      def keyed_range_bucket: (aggregation_range_bucket entry) -> aggregation_keyed_range_bucket
+
+      def range_aggregation: (String field, Array[aggregation_range_options] ranges, aggregation_options options, ?dates: bool) -> aggregation_ranges
+    end
+  end
+end

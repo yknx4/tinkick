@@ -45,7 +45,23 @@ module Tinkick
 
   type aggregation_result = aggregation_terms | aggregation_metric | aggregation_ranges | aggregation_histogram | aggregation_date_histogram
 
+  type aggregation_term_row = { "_tinkick_key" => result_value, "_tinkick_count" => Integer, "_tinkick_total" => Integer | BigDecimal }
+
+  type aggregation_histogram_row = { "_tinkick_key" => Float, "_tinkick_count" => Integer }
+
+  type aggregation_date_histogram_row = { "_tinkick_key" => Integer, "_tinkick_count" => Integer, "_tinkick_offset" => Integer }
+
   class Aggregations
+    include Metrics
+
+    include Terms
+
+    include Ranges
+
+    include NumericHistograms
+
+    include DateHistograms
+
     @model: singleton(ActiveRecord::Base)
     @unscoped: ActiveRecord::Relation
     @scope: ActiveRecord::Relation
@@ -57,29 +73,9 @@ module Tinkick
 
     private
 
-    def date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions) -> aggregation_date_histogram
+    def validate_options: (aggregation_options options) -> Array[aggregation_metric_name]
 
-    def zoned_date_histogram: (String field, aggregation_date_histogram_options options, filter_conditions? conditions, AggregationDate formatter, String? unit, String step, Integer bucket_offset, Integer minimum) -> aggregation_date_histogram
-
-    def zoned_rounding_sql: (String value, unit: String?) -> String
-
-    def zoned_histogram_bounds: (aggregation_date_histogram_options options, AggregationDate formatter, Hash[Symbol, String] binds, unit: String?) -> [ Time?, Time?, Time?, Time? ]
-
-    def date_histogram_offset: (String | Integer | Float value) -> Integer
-
-    def fixed_interval_milliseconds: (String | Symbol value, ?allow_zero: bool) -> Integer
-
-    def numeric_histogram: (String field, aggregation_histogram_options options, filter_conditions? conditions) -> aggregation_histogram
-
-    def histogram_bounds: (aggregation_histogram_bounds bounds) -> [ Float?, Float? ]
-
-    def terms: (String field, aggregation_options options) -> aggregation_terms
-
-    def term_filter: (ActiveRecord::Relation query, aggregation_term_filter value, exclude: bool) -> ActiveRecord::Relation
-
-    def calculate_metric: (aggregation_metric_name metric, String field, filter_conditions? conditions, ?missing: filter_scalar) -> aggregation_metric
-
-    def range_aggregation: (String field, Array[aggregation_range_options] ranges, aggregation_options options, ?dates: bool) -> aggregation_ranges
+    def aggregate: (String | Symbol name, aggregation_options options, Array[aggregation_metric_name] metrics) -> aggregation_result
 
     def numeric_bound: (aggregation_range_bound value) -> Float?
 
@@ -88,7 +84,5 @@ module Tinkick
     def values_relation: (ActiveRecord::Relation scope, String field, ?unique: bool, ?missing: filter_scalar) -> ActiveRecord::Relation
 
     def order_sql: (aggregation_order order) -> String
-
-    def bucket: (result_value value, Integer count) -> aggregation_bucket
   end
 end
