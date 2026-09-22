@@ -12,13 +12,11 @@ module Tinkick
   type model_schema = { columns: Hash[String, ActiveRecord::ConnectionAdapters::Column], pool: ActiveRecord::ConnectionAdapters::ConnectionPool, data_fields: Array[String], index_fields: Array[String], index_expressions: Array[String], index_configurations: Array[index_configuration], analysis: Hash[String, Hash[String, String]] }
 
   module Model
+    include Declaration
+
     @tinkick_options: model_options?
 
     @tinkick_schema: model_schema?
-
-    def tinkick: (?conversions: conversion_fields, ?conversions_v1: conversion_fields, ?conversions_v2: conversion_fields, ?stem_conversions: bool?, ?searchable: model_fields?, ?default_fields: model_fields?, ?match: Symbol, ?stem: bool, ?case_sensitive: bool?, ?special_characters: bool?, ?highlight: Array[String | Symbol] | false | nil, ?filterable: Array[String | Symbol] | false | nil, ?word_start: Array[String | Symbol]?, ?word_middle: Array[String | Symbol]?, ?word_end: Array[String | Symbol]?, ?text_start: Array[String | Symbol]?, ?text_middle: Array[String | Symbol]?, ?text_end: Array[String | Symbol]?, **Object? options) -> void
-
-    def tinkick_options: () -> model_options?
 
     def tinkick_search: (?Object? term, ?fields: model_fields?, ?misspellings: QueryText::misspellings, ?where: filter_conditions, ?order: query_order?, ?limit: relation_number, ?offset: relation_number, ?page: relation_number, ?per_page: relation_number, ?padding: relation_number, ?match: Symbol?, ?operator: String | Symbol, ?load: bool?, ?total_entries: Integer?, ?countless: bool, ?keyset: bool, ?after: String?, ?aggs: aggregation_spec?, ?smart_aggs: bool, ?includes: association_spec?, ?model_includes: model_associations?, ?scope_results: result_scope?, ?exclude: exclusion_phrases, ?select: source_selection?, ?highlight: highlight_options, ?boost_by: numeric_boost_spec, ?boost_where: where_boosts, ?boost: legacy_boost, ?boost_by_recency: recency_boost_spec, ?conversions: conversion_fields, ?conversions_v2: conversion_v2, ?conversions_term: conversion_term, ?conversions_v1: conversion_fields, ?tinql: tinql_value, ?block: result_scope?) ?{ (ActiveRecord::Relation) -> ActiveRecord::Relation } -> Relation
 
@@ -29,8 +27,6 @@ module Tinkick
     alias search tinkick_search
 
     private
-
-    def tinkick_analysis_flag: (Object? value, Symbol option) -> bool?
 
     def tinkick_validate_analysis: (String field_name, Hash[String, String] analysis) -> void
 
