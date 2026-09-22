@@ -68,6 +68,28 @@ unloaded production files. Reports are written to ignored `coverage/`. Targeted
 test commands run without the global coverage threshold; use the full coverage
 task for the final gate.
 
+### Complexity and duplication
+
+```sh
+direnv exec . bundle exec rake quality
+direnv exec . bundle exec rake flog
+direnv exec . bundle exec rake flay
+```
+
+Flog reports complexity and Flay reports structural duplication in `lib/`, using
+their default scoring and reporting settings. These are advisory reports run
+on demand, without arbitrary score gates in CI. Tests and fixtures are outside
+the analysis scope. Both gems are development tools, not runtime dependencies
+of the published gem.
+
+The [Ruby Sadist page](https://ruby.sadi.st/Ruby_Sadist.html) also lists Heckle.
+It is not installed: Heckle requires ParseTree, whose
+[upstream documentation](https://github.com/seattlerb/parsetree) marks it
+end-of-life because it relies on MRI 1.8 internals. It cannot run on this
+project's Ruby 4.0. Mutation testing is therefore not configured.
+
+### Targeted checks and types
+
 For a targeted integration test, pass its actual path to Ruby with `-Itest` and
 `--fail-fast`. Run the touched files through `rubocop -A`, then RuboCop without
 autofix, followed by `rake rbs:format rbs:quality steep` for final verification.

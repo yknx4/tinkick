@@ -46,6 +46,19 @@ task :rubocop do
   sh "bundle", "exec", "rubocop"
 end
 
+desc "Report library complexity with Flog"
+task :flog do
+  sh "bundle", "exec", "flog", "lib"
+end
+
+desc "Report library duplication with Flay"
+task :flay do
+  sh "bundle", "exec", "flay", "lib"
+end
+
+desc "Report library complexity and duplication"
+task quality: [:flog, :flay]
+
 desc "Build the gem in pkg/"
 task :build do
   mkdir_p "pkg"
