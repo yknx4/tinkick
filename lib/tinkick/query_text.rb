@@ -134,7 +134,8 @@ module Tinkick
       folded_keycap = ["*", "#"].include?(word) && analysis.fetch("accent_folding", "fold") == "fold"
       surface = folded_keycap ? "#{word}\uFE0F\u20E3" : word
       surface = "CONTAINS #{surface}" if surface != surface.downcase
-      "#{surface}~#{prefix}:#{distance}"
+      # Without prefix_length, TIN's native fuzzy syntax keeps its stable prefix default.
+      prefix ? "#{surface}~#{prefix}:#{distance}" : "#{surface}~#{distance}"
     end
 
     def fuzzy_settings(options)
@@ -150,9 +151,9 @@ module Tinkick
       raise ArgumentError, "Unsupported misspellings options: #{unknown.join(', ')}" unless unknown.empty?
 
       distance = options.fetch(:edit_distance, options.fetch(:distance, 1))
-      prefix = options.fetch(:prefix_length, 0)
+      prefix = options[:prefix_length]
       transpositions = options.fetch(:transpositions, false)
-      unless distance.is_a?(Integer) && distance >= 0 && prefix.is_a?(Integer) && prefix >= 0
+      unless distance.is_a?(Integer) && distance >= 0 && (prefix.nil? || (prefix.is_a?(Integer) && prefix >= 0))
         raise ArgumentError, "Misspellings distance and prefix_length must be nonnegative integers"
       end
       unless transpositions == true || transpositions == false

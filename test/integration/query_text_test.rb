@@ -216,9 +216,11 @@ class QueryTextTest < TinkickIntegrationTest
     tinkick_test_products(:green_pear).update!(name: "#️⃣")
 
     [true, { transpositions: false }].each do |options|
-      assert_equal(["#️⃣", "*️⃣"], names("*️⃣", misspellings: options).sort)
-      assert_equal(["#️⃣", "*️⃣"], names("#️⃣", misspellings: options).sort)
+      assert_equal(["*️⃣"], names("*️⃣", misspellings: options))
+      assert_equal(["#️⃣"], names("#️⃣", misspellings: options))
     end
+    assert_equal(["#️⃣", "*️⃣"], names("*️⃣", misspellings: { prefix_length: 0 }).sort)
+    assert_equal(["#️⃣", "*️⃣"], names("#️⃣", misspellings: { prefix_length: 0 }).sort)
   end
 
   def test_fuzzy_keycaps_honor_prefix_and_zero_distance_controls
@@ -249,7 +251,7 @@ class QueryTextTest < TinkickIntegrationTest
     query = compile("apple", misspellings: { transpositions: false })
     matches = SearchProduct.where("name ==> ?", query)
       .order(:name).pluck(:name, Arel.sql("tin.score(ctid)"))
-    native_matches = SearchProduct.where("name ==> ?", "apple~0:1")
+    native_matches = SearchProduct.where("name ==> ?", "apple~1")
       .order(:name).pluck(:name, Arel.sql("tin.score(ctid)"))
 
     assert_equal(["Apple", "Apples"], matches.map(&:first))

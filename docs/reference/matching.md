@@ -22,7 +22,11 @@ as literal user input; underscores do not become positional wildcards.
 
 ### Misspellings
 
-Public searches use native TIN Levenshtein distance one and prefix length zero:
+Public searches use native TIN fuzzy terms (`term~1`): Levenshtein distance one
+with TIN's default stable prefix of one codepoint. The first character must
+match, which bounds dictionary expansion (13x faster than prefix zero in the
+[measurements](../native-tinql-plans.md)). Pass `prefix_length: 0` to also
+correct first-character typos, at a higher cost on large indexes:
 
 ```ruby
 Product.search("appl")

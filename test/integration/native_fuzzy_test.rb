@@ -9,7 +9,7 @@ class NativeFuzzyTest < TinkickIntegrationTest
     compiler = Tinkick::QueryText.new(SearchProduct.connection)
     %w[applf applle appel].each do |term|
       actual = SearchProduct.where("name ==> ?", compiler.compile(term, misspellings: true)).order(:id).pluck(:id)
-      native = SearchProduct.where("name ==> ?", "#{term}~0:1").order(:id).pluck(:id)
+      native = SearchProduct.where("name ==> ?", "#{term}~1").order(:id).pluck(:id)
       assert_equal(native, actual, term)
     end
   end
@@ -17,7 +17,8 @@ class NativeFuzzyTest < TinkickIntegrationTest
   def test_native_two_edit_distance_and_fixed_prefix_are_available
     compiler = Tinkick::QueryText.new(SearchProduct.connection)
     actual = compiler.compile("papel", misspellings: { edit_distance: 2 })
-    assert_equal(SearchProduct.where("name ==> ?", "papel~0:2").pluck(:id), SearchProduct.where("name ==> ?", actual).pluck(:id))
+    assert_equal("papel~2", actual)
+    assert_equal(SearchProduct.where("name ==> ?", "papel~2").pluck(:id), SearchProduct.where("name ==> ?", actual).pluck(:id))
     assert_equal("apple~3:2", compiler.compile("apple", misspellings: { edit_distance: 2, prefix_length: 3 }))
   end
 
@@ -27,7 +28,7 @@ class NativeFuzzyTest < TinkickIntegrationTest
       compiler.compile("appel", misspellings: { transpositions: true })
     end
     assert_includes(error.message, "TIN")
-    assert_equal("appel~0:1", compiler.compile("appel", misspellings: { transpositions: false }))
+    assert_equal("appel~1", compiler.compile("appel", misspellings: { transpositions: false }))
   end
 
   def test_explicit_elasticsearch_expansion_caps_are_rejected

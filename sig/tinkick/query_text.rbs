@@ -34,8 +34,8 @@ module Tinkick
 
     def partial: (String word, Symbol match, Hash[String, String] analysis) -> String
 
-    def fuzzy: (String word, Integer distance, Integer prefix, Hash[String, String] analysis) -> String
+    def fuzzy: (String word, Integer distance, Integer? prefix, Hash[String, String] analysis) -> String
 
-    def fuzzy_settings: (misspellings options) -> [ Integer, Integer ]?
+    def fuzzy_settings: (misspellings options) -> [ Integer, Integer? ]?
   end
 end

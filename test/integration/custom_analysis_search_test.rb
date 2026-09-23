@@ -125,10 +125,10 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
       @first.update!(name: term)
       @second.update!(name: "Z#{term[1..]}")
 
-      assert_equal([@first.id, @second.id].sort, search(term, misspellings: true).map(&:id).sort, term)
+      assert_equal([@first.id], search(term, misspellings: true).map(&:id), term)
+      assert_equal([@first.id, @second.id].sort, search(term, misspellings: { prefix_length: 0 }).map(&:id).sort, term)
       assert_equal([@first.id], search(term, misspellings: { prefix_length: 1 }).map(&:id), term)
-      assert_equal([@first.id, @second.id].sort,
-        search(term, misspellings: { transpositions: false }).map(&:id).sort, term)
+      assert_equal([@first.id], search(term, misspellings: { transpositions: false }).map(&:id), term)
     end
   end
 
@@ -164,10 +164,11 @@ class CustomAnalysisSearchTest < TinkickIntegrationTest
     @first.update!(name: term)
     @second.update!(name: "Z#{term[1..]}")
 
-    assert_equal([@first.id, @second.id].sort, search(term, misspellings: true).map(&:id).sort)
+    assert_equal([@first.id], search(term, misspellings: true).map(&:id))
+    assert_equal([@first.id, @second.id].sort, search(term, misspellings: { prefix_length: 0 }).map(&:id).sort)
     assert_equal([@first.id], search(term, misspellings: { prefix_length: 1 }).map(&:id))
-    assert_equal([@second.id], search(term, misspellings: true, exclude: term).map(&:id))
-    assert_equal(1, search(term, misspellings: true, exclude: term).total_count)
+    assert_equal([@second.id], search(term, misspellings: { prefix_length: 0 }, exclude: term).map(&:id))
+    assert_equal(1, search(term, misspellings: { prefix_length: 0 }, exclude: term).total_count)
     assert_empty(search(term.downcase, misspellings: true))
   end
 
