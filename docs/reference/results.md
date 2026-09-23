@@ -65,7 +65,7 @@ strings, in original page order. Calling it loads and caches that page without
 requesting a count or filling its gaps; ordinary and raw results return `[]`.
 
 `took` returns cached integer milliseconds of client elapsed time for resolving
-and fetching the bounded page. It includes query compilation, tokenization, and
+and fetching the bounded page. It includes query compilation, any tokenization query, and
 any required `misspellings: {below: ...}` decision count. It excludes separately
 requested totals/aggregations, association preloads, and `scope_results` loading;
 it is not a PostgreSQL server-only execution metric. `error` fetches the same page

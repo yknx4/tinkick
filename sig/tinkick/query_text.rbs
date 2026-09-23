@@ -4,23 +4,35 @@ module Tinkick
 
     ANALYSIS_DEFAULTS: Hash[String, String]
 
+    NATIVE_WORD: Regexp
+
+    EDGE_PUNCTUATION: Regexp
+
+    RANGE_PAD: String
+
+    WILDCARD_UNSAFE: Regexp
+
     @connection: ActiveRecord::ConnectionAdapters::AbstractAdapter
 
     def initialize: (ActiveRecord::ConnectionAdapters::AbstractAdapter connection) -> void
 
     def compile: (String term, ?operator: String, ?match: Symbol, ?misspellings: misspellings, ?analysis: Hash[String, String]) -> String
 
-    def exclusion: (String term, words: Array[String], match: Symbol) -> String
+    def exclusion: (String term, words: Array[String], match: Symbol, ?analysis: Hash[String, String]) -> String
+
+    def words: (String term, ?analysis: Hash[String, String]) -> Array[String]
 
     def tokens: (String term, ?analysis: Hash[String, String]) -> Array[String]
 
     private
 
+    def native_words: (String term, Hash[String, String] analysis) -> Array[String]?
+
     def quote: (String term) -> String
 
     def literal: (String word) -> String
 
-    def partial: (String word, Symbol match) -> String
+    def partial: (String word, Symbol match, Hash[String, String] analysis) -> String
 
     def fuzzy: (String word, Integer distance, Integer prefix, Hash[String, String] analysis) -> String
 

@@ -447,7 +447,7 @@ module Tinkick
 
         analysis = @model.tinkick_index_analysis(name, field)
         phrases = @exclude.map do |phrase|
-          compiler.exclusion(phrase, words: compiler.tokens(phrase, analysis: analysis), match: mode)
+          compiler.exclusion(phrase, words: compiler.words(phrase, analysis: analysis), match: mode, analysis: analysis)
         end.reject(&:empty?)
         next if phrases.empty?
 

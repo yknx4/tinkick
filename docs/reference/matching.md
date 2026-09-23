@@ -91,7 +91,7 @@ fuzzy matching without interpreting their analyzed punctuation as match-all. See
 | --- | --- | --- |
 | `:word` | Available | Disable misspellings for exact token matching. |
 | `:phrase` | Available | Ordered adjacent tokens. |
-| `:word_start`, `:word_middle`, `:word_end` | Available without misspellings | Native token wildcards. |
+| `:word_start`, `:word_middle`, `:word_end` | Available without misspellings | `word_start` uses native term-dictionary ranges; middle/end use token wildcards. See [measurements](../native-tinql-plans.md). |
 | `:text_start`, `:text_middle`, `:text_end` | Available without misspellings | Whole-field PostgreSQL `LIKE`; requires `unaccent` for accent folding. |
 | `:exact` | Available globally and per field | Case-sensitive, accent-sensitive whole-field SQL equality; ignores misspellings. |
 | Mixed per-field match modes | Available | Each field keeps its own mode; SQL/TIN branches are combined and deduplicated in PostgreSQL. |
@@ -168,6 +168,14 @@ and connection pool; after rebuilding an index with changed tokenization, call
 `Product.reset_column_information` or restart application processes to refresh
 it. Multiple indexes for the same source must agree on analysis.
 See [TIN index options](https://planetscale.com/docs/postgres/search/reference/indexes).
+
+**Performance:** on the default `unicode` tokenizer, a term made of plain
+Latin, Greek, Cyrillic, or digit words (surrounding punctuation is ignored) is
+passed directly to TINQL. TIN folds its case and accents in the same query.
+Other input, such as inner punctuation (`wi-fi`, `don't`), emoji, CJK or Thai
+text, or custom tokenizers, first runs one `tin.tokenize` query per selected
+field so that native segmentation decides the tokens. On a remote database each
+query adds a network round trip.
 
 ### Stemming and language
 

@@ -256,6 +256,37 @@ class QueryTextTest < TinkickIntegrationTest
     assert_equal(native_matches, matches)
   end
 
+  def test_plain_words_use_native_analysis_without_tokenize_round_trips
+    tinkick_test_products(:red_apple).update!(name: "Jalapeño Wi-Fi foo_bar NASA Apple")
+    statements = capture_statements do
+      assert_equal(["Jalapeño Wi-Fi foo_bar NASA Apple"], names("JALAPENO, (nasa) apple!", misspellings: false))
+      assert_equal(["Jalapeño Wi-Fi foo_bar NASA Apple"], names("Jalapenos NASA", misspellings: true))
+      assert_equal(["Jalapeño Wi-Fi foo_bar NASA Apple"], names("JALA FOO_", match: :word_start))
+      assert_equal(["Jalapeño Wi-Fi foo_bar NASA Apple"], names("LAP _BA", match: :word_middle))
+      assert_equal(["Jalapeño Wi-Fi foo_bar NASA Apple"], names("PEÑO _BAR", match: :word_end))
+      assert_equal(["Green Pear"], names("pear AND NOT", operator: "or", misspellings: true))
+      assert_empty(names("apple TO", misspellings: true))
+      assert_empty(names("!!! _", misspellings: true))
+    end
+
+    assert_empty(statements.grep(/tin\.tokenize/))
+  end
+
+  def test_word_start_uses_native_term_ranges_for_every_completion
+    tinkick_test_products(:red_apple).update!(name: "Toé tò𐐨𐐨 tom\u{1F189} to\u{1FBF9}x ANDES")
+
+    assert_match(/\Ato TO to\u{1FBF9}+\z/, compile("to", match: :word_start))
+    refute_match(/[*]|MATCHES/, compile("TO AND", match: :word_start))
+    assert_equal([tinkick_test_products(:red_apple).name], names("TO AND", match: :word_start))
+    assert_equal([tinkick_test_products(:red_apple).name], names("tò", match: :word_start))
+    assert_empty(names("toez", match: :word_start))
+  end
+
+  def test_keycap_literals_use_native_phrases
+    refute_includes(compile("*️⃣ #️⃣"), "MATCHES")
+    refute_includes(compile("*️⃣", match: :word_start), "MATCHES")
+  end
+
   def test_invalid_native_fuzzy_options_fail
     [
       { edit_distance: -1 }, { edit_distance: "1" }, { distance: 1.5 },
@@ -272,6 +303,13 @@ class QueryTextTest < TinkickIntegrationTest
 
   def compile(term, **options)
     Tinkick::QueryText.new(SearchProduct.connection).compile(term, **options)
+  end
+
+  def capture_statements
+    statements = []
+    callback = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    statements
   end
 
   def names(term, **options)
