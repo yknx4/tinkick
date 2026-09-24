@@ -1,0 +1,610 @@
+{
+  "captured_at": "2026-09-23",
+  "database": "tinkick_development",
+  "postgres": "18.6 (Debian 18.6-1.pgdg13+2)",
+  "tin": "1.0.2",
+  "corpus": "200,000 synthetic documents, 30 words each, drawn with a cubic skew from a 300,000-word pseudo-word vocabulary (16-letter alphabet, 3-10 characters); a few real words planted every 97th document. 48 MB TIN index on body.",
+  "method": "Server-reported EXPLAIN (ANALYZE, FORMAT JSON) Execution Time; median of 7 (forms, fuzzy) or 21 (prefix ranges, keycaps) interleaved warm runs per form, for a top-k query (tin.score DESC LIMIT 20) and COUNT(*). Excludes Ruby and network time. Not a production latency claim.",
+  "top_k_sql": "SELECT id, tin.score(ctid) AS s FROM tinkick_experiment_docs WHERE body ==> $1 ORDER BY s DESC LIMIT 20",
+  "count_sql": "SELECT count(*) FROM tinkick_experiment_docs WHERE body ==> $1",
+  "runs": {
+    "experiment1": [
+      {
+        "group": "word_start app",
+        "label": "wildcard",
+        "tinql": "app*",
+        "count": 1919,
+        "topk_median": 3.201,
+        "count_median": 0.985
+      },
+      {
+        "group": "word_start app",
+        "label": "contains wildcard",
+        "tinql": "CONTAINS app*",
+        "count": 1919,
+        "topk_median": 3.163,
+        "count_median": 0.992
+      },
+      {
+        "group": "word_start app",
+        "label": "regex",
+        "tinql": "MATCHES app.*",
+        "count": 1919,
+        "topk_median": 3.187,
+        "count_median": 0.972
+      },
+      {
+        "group": "word_start app",
+        "label": "range U+10FFFF",
+        "tinql": "app TO app􏿿",
+        "count": 242,
+        "topk_median": 0.7,
+        "count_median": 0.135
+      },
+      {
+        "group": "word_start app",
+        "label": "range U+FFFF",
+        "tinql": "app TO app￿",
+        "count": 242,
+        "topk_median": 0.687,
+        "count_median": 0.132
+      },
+      {
+        "group": "word_start ab (broad)",
+        "label": "wildcard",
+        "tinql": "ab*",
+        "count": 21589,
+        "topk_median": 39.278,
+        "count_median": 9.405
+      },
+      {
+        "group": "word_start ab (broad)",
+        "label": "regex",
+        "tinql": "MATCHES ab.*",
+        "count": 21589,
+        "topk_median": 38.651,
+        "count_median": 9.488
+      },
+      {
+        "group": "word_start ab (broad)",
+        "label": "range U+10FFFF",
+        "tinql": "ab TO ab􏿿",
+        "count": 0,
+        "topk_median": 0.142,
+        "count_median": 0.084
+      },
+      {
+        "group": "word_start kbnf (narrow)",
+        "label": "wildcard",
+        "tinql": "kbnf*",
+        "count": 120,
+        "topk_median": 1.35,
+        "count_median": 0.425
+      },
+      {
+        "group": "word_start kbnf (narrow)",
+        "label": "regex",
+        "tinql": "MATCHES kbnf.*",
+        "count": 120,
+        "topk_median": 1.384,
+        "count_median": 0.421
+      },
+      {
+        "group": "word_start kbnf (narrow)",
+        "label": "range U+10FFFF",
+        "tinql": "kbnf TO kbnf􏿿",
+        "count": 0,
+        "topk_median": 0.183,
+        "count_median": 0.085
+      },
+      {
+        "group": "word_middle ppl",
+        "label": "wildcard",
+        "tinql": "*ppl*",
+        "count": 6640,
+        "topk_median": 115.587,
+        "count_median": 55.543
+      },
+      {
+        "group": "word_middle ppl",
+        "label": "regex",
+        "tinql": "MATCHES .*ppl.*",
+        "count": 6640,
+        "topk_median": 115.803,
+        "count_median": 55.55
+      },
+      {
+        "group": "word_middle bcd",
+        "label": "wildcard",
+        "tinql": "*bcd*",
+        "count": 5900,
+        "topk_median": 115.277,
+        "count_median": 55.594
+      },
+      {
+        "group": "word_middle bcd",
+        "label": "regex",
+        "tinql": "MATCHES .*bcd.*",
+        "count": 5900,
+        "topk_median": 114.923,
+        "count_median": 55.981
+      },
+      {
+        "group": "word_end ple",
+        "label": "wildcard",
+        "tinql": "*ple",
+        "count": 4617,
+        "topk_median": 105.367,
+        "count_median": 51.872
+      },
+      {
+        "group": "word_end ple",
+        "label": "regex",
+        "tinql": "MATCHES .*ple",
+        "count": 4617,
+        "topk_median": 105.255,
+        "count_median": 51.863
+      },
+      {
+        "group": "word_end dcjb",
+        "label": "wildcard",
+        "tinql": "*dcjb",
+        "count": 101,
+        "topk_median": 102.144,
+        "count_median": 50.677
+      },
+      {
+        "group": "word_end dcjb",
+        "label": "regex",
+        "tinql": "MATCHES .*dcjb",
+        "count": 101,
+        "topk_median": 102.891,
+        "count_median": 50.73
+      },
+      {
+        "group": "fuzzy appl d1",
+        "label": "native ~1",
+        "tinql": "appl~1",
+        "count": 992,
+        "topk_median": 11.822,
+        "count_median": 5.845
+      },
+      {
+        "group": "fuzzy appl d1",
+        "label": "prefix 0",
+        "tinql": "appl~0:1",
+        "count": 1413,
+        "topk_median": 149.045,
+        "count_median": 74.827
+      },
+      {
+        "group": "fuzzy appl d1",
+        "label": "prefix 2",
+        "tinql": "appl~2:1",
+        "count": 954,
+        "topk_median": 1.917,
+        "count_median": 0.755
+      },
+      {
+        "group": "fuzzy kbnfdcjc d1",
+        "label": "native ~1",
+        "tinql": "kbnfdcjc~1",
+        "count": 16,
+        "topk_median": 11.313,
+        "count_median": 5.555
+      },
+      {
+        "group": "fuzzy kbnfdcjc d1",
+        "label": "prefix 0",
+        "tinql": "kbnfdcjc~0:1",
+        "count": 16,
+        "topk_median": 158.776,
+        "count_median": 79.596
+      },
+      {
+        "group": "fuzzy kbnfdcjc d1",
+        "label": "prefix 2",
+        "tinql": "kbnfdcjc~2:1",
+        "count": 16,
+        "topk_median": 1.187,
+        "count_median": 0.526
+      },
+      {
+        "group": "fuzzy kbnfdcjc d1",
+        "label": "prefix 3",
+        "tinql": "kbnfdcjc~3:1",
+        "count": 16,
+        "topk_median": 0.546,
+        "count_median": 0.201
+      },
+      {
+        "group": "fuzzy kbnfdcjc d2",
+        "label": "native ~2",
+        "tinql": "kbnfdcjc~2",
+        "count": 16,
+        "topk_median": 12.515,
+        "count_median": 6.24
+      },
+      {
+        "group": "fuzzy kbnfdcjc d2",
+        "label": "prefix 0",
+        "tinql": "kbnfdcjc~0:2",
+        "count": 16,
+        "topk_median": 182.251,
+        "count_median": 91.595
+      },
+      {
+        "group": "fuzzy kbnfdcjc d2",
+        "label": "prefix 2",
+        "tinql": "kbnfdcjc~2:2",
+        "count": 16,
+        "topk_median": 1.23,
+        "count_median": 0.556
+      },
+      {
+        "group": "literal apple",
+        "label": "bare",
+        "tinql": "apple",
+        "count": 217,
+        "topk_median": 0.683,
+        "count_median": 0.129
+      },
+      {
+        "group": "literal apple",
+        "label": "quoted",
+        "tinql": "\"apple\"",
+        "count": 217,
+        "topk_median": 0.723,
+        "count_median": 0.122
+      },
+      {
+        "group": "literal apple",
+        "label": "contains",
+        "tinql": "CONTAINS apple",
+        "count": 217,
+        "topk_median": 0.685,
+        "count_median": 0.13
+      },
+      {
+        "group": "literal common ion",
+        "label": "bare",
+        "tinql": "ion",
+        "count": 174,
+        "topk_median": 0.688,
+        "count_median": 0.131
+      },
+      {
+        "group": "literal common ion",
+        "label": "quoted",
+        "tinql": "\"ion\"",
+        "count": 174,
+        "topk_median": 0.674,
+        "count_median": 0.127
+      },
+      {
+        "group": "literal common ion",
+        "label": "contains",
+        "tinql": "CONTAINS ion",
+        "count": 174,
+        "topk_median": 0.684,
+        "count_median": 0.13
+      },
+      {
+        "group": "and ion eph",
+        "label": "quoted AND",
+        "tinql": "\"ion\" AND \"eph\"",
+        "count": 1,
+        "topk_median": 0.328,
+        "count_median": 0.208
+      },
+      {
+        "group": "and ion eph",
+        "label": "bare AND",
+        "tinql": "ion AND eph",
+        "count": 1,
+        "topk_median": 0.324,
+        "count_median": 0.215
+      },
+      {
+        "group": "and ion eph",
+        "label": "implicit",
+        "tinql": "ion eph",
+        "count": 1,
+        "topk_median": 0.329,
+        "count_median": 0.213
+      },
+      {
+        "group": "and ion eph",
+        "label": "ALL OF",
+        "tinql": "ALL OF [ion eph]",
+        "count": 1,
+        "topk_median": 0.361,
+        "count_median": 0.23
+      },
+      {
+        "group": "or ion eph",
+        "label": "quoted OR",
+        "tinql": "\"ion\" OR \"eph\"",
+        "count": 390,
+        "topk_median": 1.309,
+        "count_median": 0.229
+      },
+      {
+        "group": "or ion eph",
+        "label": "bare OR",
+        "tinql": "ion OR eph",
+        "count": 390,
+        "topk_median": 1.359,
+        "count_median": 0.223
+      },
+      {
+        "group": "or ion eph",
+        "label": "alternatives",
+        "tinql": "[ion eph]",
+        "count": 390,
+        "topk_median": 1.349,
+        "count_median": 0.266
+      },
+      {
+        "group": "keycap *",
+        "label": "regex",
+        "tinql": "MATCHES \\*",
+        "count": 0,
+        "topk_median": 0.252,
+        "count_median": 0.141
+      },
+      {
+        "group": "keycap *",
+        "label": "quoted emoji",
+        "tinql": "\"*️⃣\"",
+        "count": 0,
+        "topk_median": 0.138,
+        "count_median": 0.097
+      },
+      {
+        "group": "keycap *",
+        "label": "bare emoji",
+        "tinql": "*️⃣",
+        "count": 0,
+        "topk_median": 7.592,
+        "count_median": 7.546
+      },
+      {
+        "group": "prefix don't",
+        "label": "regex",
+        "tinql": "MATCHES don't.*",
+        "count": 108,
+        "topk_median": 1.022,
+        "count_median": 0.41
+      },
+      {
+        "group": "prefix don't",
+        "label": "contains wildcard",
+        "tinql": "CONTAINS don't*",
+        "count": 108,
+        "topk_median": 1.052,
+        "count_median": 0.408
+      },
+      {
+        "group": "prefix don't",
+        "label": "range",
+        "tinql": "don't TO don't􏿿",
+        "count": 108,
+        "topk_median": 0.633,
+        "count_median": 0.192
+      },
+      {
+        "group": "prefix 3.14",
+        "label": "regex",
+        "tinql": "MATCHES 3\\.14.*",
+        "count": 108,
+        "topk_median": 0.979,
+        "count_median": 0.358
+      },
+      {
+        "group": "prefix 3.14",
+        "label": "wildcard",
+        "tinql": "3.14*",
+        "count": 108,
+        "topk_median": 1.016,
+        "count_median": 0.359
+      },
+      {
+        "group": "prefix 3.14",
+        "label": "range",
+        "tinql": "3.14 TO 3.14􏿿",
+        "count": 108,
+        "topk_median": 0.585,
+        "count_median": 0.133
+      }
+    ],
+    "experiment3": [
+      {
+        "group": "word_start app",
+        "label": "wildcard",
+        "tinql": "app*",
+        "count": 1919,
+        "topk_median": 3.333,
+        "count_median": 1.032
+      },
+      {
+        "group": "word_start app",
+        "label": "contains wildcard",
+        "tinql": "CONTAINS app*",
+        "count": 1919,
+        "topk_median": 3.326,
+        "count_median": 1.04
+      },
+      {
+        "group": "word_start app",
+        "label": "range adlam",
+        "tinql": "app TO app𞥃",
+        "count": 1919,
+        "topk_median": 2.927,
+        "count_median": 0.805
+      },
+      {
+        "group": "word_start ab (broad)",
+        "label": "wildcard",
+        "tinql": "ab*",
+        "count": 21589,
+        "topk_median": 40.158,
+        "count_median": 10.292
+      },
+      {
+        "group": "word_start ab (broad)",
+        "label": "range adlam",
+        "tinql": "ab TO ab𞥃",
+        "count": 21589,
+        "topk_median": 39.497,
+        "count_median": 10.03
+      },
+      {
+        "group": "word_start abc",
+        "label": "wildcard",
+        "tinql": "abc*",
+        "count": 1174,
+        "topk_median": 2.756,
+        "count_median": 0.906
+      },
+      {
+        "group": "word_start abc",
+        "label": "range adlam",
+        "tinql": "abc TO abc𞥃",
+        "count": 1174,
+        "topk_median": 2.375,
+        "count_median": 0.675
+      },
+      {
+        "group": "word_start kbnf (narrow)",
+        "label": "wildcard",
+        "tinql": "kbnf*",
+        "count": 120,
+        "topk_median": 1.426,
+        "count_median": 0.463
+      },
+      {
+        "group": "word_start kbnf (narrow)",
+        "label": "range adlam",
+        "tinql": "kbnf TO kbnf𞥃",
+        "count": 120,
+        "topk_median": 0.998,
+        "count_median": 0.217
+      },
+      {
+        "group": "2-word start app kbn",
+        "label": "wildcard",
+        "tinql": "app* AND kbn*",
+        "count": 16,
+        "topk_median": 3.306,
+        "count_median": 1.823
+      },
+      {
+        "group": "2-word start app kbn",
+        "label": "range adlam",
+        "tinql": "(app TO app𞥃) AND (kbn TO kbn𞥃)",
+        "count": 16,
+        "topk_median": 2.679,
+        "count_median": 1.458
+      }
+    ],
+    "experiment4": [
+      {
+        "group": "word_start app",
+        "label": "wildcard",
+        "tinql": "app*",
+        "count": 1919,
+        "topk_median": 3.419,
+        "count_median": 1.188
+      },
+      {
+        "group": "word_start app",
+        "label": "range long",
+        "tinql": "app TO app🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹",
+        "count": 1919,
+        "topk_median": 3.072,
+        "count_median": 0.984
+      },
+      {
+        "group": "word_start ab (broad)",
+        "label": "wildcard",
+        "tinql": "ab*",
+        "count": 21589,
+        "topk_median": 37.592,
+        "count_median": 9.967
+      },
+      {
+        "group": "word_start ab (broad)",
+        "label": "range long",
+        "tinql": "ab TO ab🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹",
+        "count": 21589,
+        "topk_median": 37.008,
+        "count_median": 9.788
+      },
+      {
+        "group": "word_start abc",
+        "label": "wildcard",
+        "tinql": "abc*",
+        "count": 1174,
+        "topk_median": 2.803,
+        "count_median": 1.014
+      },
+      {
+        "group": "word_start abc",
+        "label": "range long",
+        "tinql": "abc TO abc🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹",
+        "count": 1174,
+        "topk_median": 2.474,
+        "count_median": 0.813
+      },
+      {
+        "group": "word_start kbnf",
+        "label": "wildcard",
+        "tinql": "kbnf*",
+        "count": 120,
+        "topk_median": 1.557,
+        "count_median": 0.596
+      },
+      {
+        "group": "word_start kbnf",
+        "label": "range long",
+        "tinql": "kbnf TO kbnf🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹",
+        "count": 120,
+        "topk_median": 1.207,
+        "count_median": 0.39
+      },
+      {
+        "group": "2-word app kbn",
+        "label": "wildcard",
+        "tinql": "app* AND kbn*",
+        "count": 16,
+        "topk_median": 3.529,
+        "count_median": 1.955
+      },
+      {
+        "group": "2-word app kbn",
+        "label": "range long",
+        "tinql": "(app TO app🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹) AND (kbn TO kbn🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹🯹)",
+        "count": 16,
+        "topk_median": 2.975,
+        "count_median": 1.658
+      },
+      {
+        "group": "keycap",
+        "label": "regex",
+        "tinql": "MATCHES \\*",
+        "count": 1,
+        "topk_median": 0.473,
+        "count_median": 0.277
+      },
+      {
+        "group": "keycap",
+        "label": "quoted emoji",
+        "tinql": "\"*️⃣\"",
+        "count": 1,
+        "topk_median": 0.248,
+        "count_median": 0.124
+      }
+    ]
+  }
+}

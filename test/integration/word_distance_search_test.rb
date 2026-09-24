@@ -47,7 +47,8 @@ class WordDistanceSearchTest < TinkickIntegrationTest
     query = "xb#{"c" * 180}dx"
     tinkick_test_products(:red_apple).update!(name: word)
     statements = capture_queries do
-      assert_equal([word], search(query).map(&:name))
+      assert_equal([word], search(query, misspellings: { edit_distance: 2, prefix_length: 0 }).map(&:name))
+      assert_empty(search(query))
     end
     statement = statements.find { |entry| entry[:sql].include?(" AS _tinkick_score") }
 
